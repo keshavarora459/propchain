@@ -1,0 +1,110 @@
+# ==============================================================================
+# PropChain Root .gitignore
+# ==============================================================================
+
+# Operating System & IDE Files
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+.antigravity/
+
+# Environment Variables & Secrets (NEVER COMMIT REAL SECRETS)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.pkcs12
+*.pfx
+*.keystore
+id_rsa
+id_ecdsa
+id_ed25519
+mnemonic.txt
+secrets.json
+
+# Python & Virtual Environments
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+/lib/
+/lib64/
+!frontend/src/lib/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+.coverage.*
+
+# Node.js & Frontend
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+.pnpm-debug.log*
+frontend/dist/
+frontend/dist-ssr/
+frontend/.cache/
+
+# Blockchain & Hardhat
+blockchain/artifacts/
+blockchain/cache/
+blockchain/typechain/
+blockchain/typechain-types/
+hardhat.log
+
+# AI Model Weights & Cache
+ai/models/*.pkl
+ai/models/*.joblib
+ai/models/*.onnx
+ai/models/*.pt
+ai/models/*.pth
+ai/models/*.h5
+ai/models/*.bin
+ai/models/*.tar.gz
+ai/models/*.zip
+!ai/models/.gitkeep
+
+# Local Storage & Uploads
+storage/uploads/*
+storage/processed/*
+storage/temporary/*
+!storage/uploads/.gitkeep
+!storage/processed/.gitkeep
+!storage/temporary/.gitkeep
+
+# Logs & Temporary Files
+logs/
+*.log
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+
