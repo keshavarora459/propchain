@@ -1,0 +1,1599 @@
+{
+  "network": "localhost",
+  "chainId": 31337,
+  "deployedAt": "2026-10-30T08:56:57.621Z",
+  "deployer": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+  "contracts": {
+    "PropertyRegistry": {
+      "address": "0x5FbDB2315678afecb367f032d93F642f64180aa3",
+      "abi": [
+        {
+          "type": "constructor",
+          "stateMutability": "undefined",
+          "payable": false,
+          "inputs": [
+            {
+              "type": "address",
+              "name": "admin"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "AccessControlBadConfirmation",
+          "inputs": []
+        },
+        {
+          "type": "error",
+          "name": "AccessControlUnauthorizedAccount",
+          "inputs": [
+            {
+              "type": "address",
+              "name": "account"
+            },
+            {
+              "type": "bytes32",
+              "name": "neededRole"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "EmptyIdentifier",
+          "inputs": []
+        },
+        {
+          "type": "error",
+          "name": "InvalidZeroAddress",
+          "inputs": []
+        },
+        {
+          "type": "error",
+          "name": "PropertyAlreadyRegistered",
+          "inputs": [
+            {
+              "type": "string",
+              "name": "propertyId"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "PropertyNotFound",
+          "inputs": [
+            {
+              "type": "string",
+              "name": "propertyId"
+            }
+          ]
+        },
+        {
+          "type": "event",
+          "anonymous": false,
+          "name": "PropertyDocumentUpdated",
+          "inputs": [
+            {
+              "type": "string",
+              "name": "propertyId",
+              "indexed": true
+            },
+            {
+              "type": "bytes32",
+              "name": "newDocumentHash",
+              "indexed": false
+            },
+            {
+              "type": "uint256",
+              "name": "timestamp",
+              "indexed": false
+            }
+          ]
+        },
+        {
+          "type": "event",
+          "anonymous": false,
+          "name": "PropertyRegistered",
+          "inputs": [
+            {
+              "type": "string",
+              "name": "propertyId",
+              "indexed": true
+            },
+            {
+              "type": "address",
+              "name": "ownerWallet",
+              "indexed": true
+            },
+            {
+              "type": "bytes32",
+              "name": "documentHash",
+              "indexed": false
+            },
+            {
+              "type": "uint256",
+              "name": "timestamp",
+              "indexed": false
+            }
+          ]
+        },
+        {
+          "type": "event",
+          "anonymous": false,
+          "name": "PropertyStateChanged",
+          "inputs": [
+            {
+              "type": "string",
+              "name": "propertyId",
+              "indexed": true
+            },
+            {
+              "type": "uint8",
+              "name": "newState",
+              "indexed": false
+            },
+            {
+              "type": "uint256",
+              "name": "timestamp",
+              "indexed": false
+            }
+          ]
+        },
+        {
+          "type": "event",
+          "anonymous": false,
+          "name": "RoleAdminChanged",
+          "inputs": [
+            {
+              "type": "bytes32",
+              "name": "role",
+              "indexed": true
+            },
+            {
+              "type": "bytes32",
+              "name": "previousAdminRole",
+              "indexed": true
+            },
+            {
+              "type": "bytes32",
+              "name": "newAdminRole",
+              "indexed": true
+            }
+          ]
+        },
+        {
+          "type": "event",
+          "anonymous": false,
+          "name": "RoleGranted",
+          "inputs": [
+            {
+              "type": "bytes32",
+              "name": "role",
+              "indexed": true
+            },
+            {
+              "type": "address",
+              "name": "account",
+              "indexed": true
+            },
+            {
+              "type": "address",
+              "name": "sender",
+              "indexed": true
+            }
+          ]
+        },
+        {
+          "type": "event",
+          "anonymous": false,
+          "name": "RoleRevoked",
+          "inputs": [
+            {
+              "type": "bytes32",
+              "name": "role",
+              "indexed": true
+            },
+            {
+              "type": "address",
+              "name": "account",
+              "indexed": true
+            },
+            {
+              "type": "address",
+              "name": "sender",
+              "indexed": true
+            }
+          ]
+        },
+        {
+          "type": "function",
+          "name": "DEFAULT_ADMIN_ROLE",
+          "constant": true,
+          "stateMutability": "view",
+          "payable": false,
+          "inputs": [],
+          "outputs": [
+            {
+              "type": "bytes32",
+              "name": ""
+            }
+          ]
+        },
+        {
+          "type": "function",
+          "name": "REGISTRAR_ROLE",
+          "constant": true,
+          "stateMutability": "view",
+          "payable": false,
+          "inputs": [],
+          "outputs": [
+            {
+              "type": "bytes32",
+              "name": ""
+            }
+          ]
+        },
+        {
+          "type": "function",
+          "name": "VERIFIER_ROLE",
+          "constant": true,
+          "stateMutability": "view",
+          "payable": false,
+          "inputs": [],
+          "outputs": [
+            {
+              "type": "bytes32",
+              "name": ""
+            }
+          ]
+        },
+        {
+          "type": "function",
+          "name": "getProperty",
+          "constant": true,
+          "stateMutability": "view",
+          "payable": false,
+          "inputs": [
+            {
+              "type": "string",
+              "name": "propertyId"
+            }
+          ],
+          "outputs": [
+            {
+              "type": "address",
+              "name": "currentOwner"
+            },
+            {
+              "type": "bytes32",
+              "name": "documentHash"
+            },
+            {
+              "type": "uint8",
+              "name": "state"
+            },
+            {
+              "type": "uint256",
+              "name": "registeredAt"
+            },
+            {
+              "type": "uint256",
+              "name": "updatedAt"
+            },
+            {
+              "type": "bool",
+              "name": "exists"
+            }
+          ]
+        },
+        {
+          "type": "function",
+          "name": "getRoleAdmin",
+          "constant": true,
+          "stateMutability": "view",
+          "payable": false,
+          "inputs": [
+            {
+              "type": "bytes32",
+              "name": "role"
+            }
+          ],
+          "outputs": [
+            {
+              "type": "bytes32",
+              "name": ""
+            }
+          ]
+        },
+        {
+          "type": "function",
+          "name": "grantRole",
+          "constant": false,
+          "payable": false,
+          "inputs": [
+            {
+              "type": "bytes32",
+              "name": "role"
+            },
+            {
+              "type": "address",
+              "name": "account"
+            }
+          ],
+          "outputs": []
+        },
+        {
+          "type": "function",
+          "name": "hasRole",
+          "constant": true,
+          "stateMutability": "view",
+          "payable": false,
+          "inputs": [
+            {
+              "type": "bytes32",
+              "name": "role"
+            },
+            {
+              "type": "address",
+              "name": "account"
+            }
+          ],
+          "outputs": [
+            {
+              "type": "bool",
+              "name": ""
+            }
+          ]
+        },
+        {
+          "type": "function",
+          "name": "registerProperty",
+          "constant": false,
+          "payable": false,
+          "inputs": [
+            {
+              "type": "string",
+              "name": "propertyId"
+            },
+            {
+              "type": "address",
+              "name": "ownerWallet"
+            },
+            {
+              "type": "bytes32",
+              "name": "documentHash"
+            }
+          ],
+          "outputs": []
+        },
+        {
+          "type": "function",
+          "name": "renounceRole",
+          "constant": false,
+          "payable": false,
+          "inputs": [
+            {
+              "type": "bytes32",
+              "name": "role"
+            },
+            {
+              "type": "address",
+              "name": "callerConfirmation"
+            }
+          ],
+          "outputs": []
+        },
+        {
+          "type": "function",
+          "name": "revokeRole",
+          "constant": false,
+          "payable": false,
+          "inputs": [
+            {
+              "type": "bytes32",
+              "name": "role"
+            },
+            {
+              "type": "address",
+              "name": "account"
+            }
+          ],
+          "outputs": []
+        },
+        {
+          "type": "function",
+          "name": "setPropertyState",
+          "constant": false,
+          "payable": false,
+          "inputs": [
+            {
+              "type": "string",
+              "name": "propertyId"
+            },
+            {
+              "type": "uint8",
+              "name": "newState"
+            }
+          ],
+          "outputs": []
+        },
+        {
+          "type": "function",
+          "name": "supportsInterface",
+          "constant": true,
+          "stateMutability": "view",
+          "payable": false,
+          "inputs": [
+            {
+              "type": "bytes4",
+              "name": "interfaceId"
+            }
+          ],
+          "outputs": [
+            {
+              "type": "bool",
+              "name": ""
+            }
+          ]
+        },
+        {
+          "type": "function",
+          "name": "totalProperties",
+          "constant": true,
+          "stateMutability": "view",
+          "payable": false,
+          "inputs": [],
+          "outputs": [
+            {
+              "type": "uint256",
+              "name": ""
+            }
+          ]
+        },
+        {
+          "type": "function",
+          "name": "updateDocumentHash",
+          "constant": false,
+          "payable": false,
+          "inputs": [
+            {
+              "type": "string",
+              "name": "propertyId"
+            },
+            {
+              "type": "bytes32",
+              "name": "newDocumentHash"
+            }
+          ],
+          "outputs": []
+        },
+        {
+          "type": "function",
+          "name": "updateOwner",
+          "constant": false,
+          "payable": false,
+          "inputs": [
+            {
+              "type": "string",
+              "name": "propertyId"
+            },
+            {
+              "type": "address",
+              "name": "newOwner"
+            }
+          ],
+          "outputs": []
+        }
+      ]
+    },
+    "OwnershipRegistry": {
+      "address": "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512",
+      "abi": [
+        {
+          "type": "constructor",
+          "stateMutability": "undefined",
+          "payable": false,
+          "inputs": [
+            {
+              "type": "address",
+              "name": "admin"
+            },
+            {
+              "type": "address",
+              "name": "_propertyRegistry"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "AccessControlBadConfirmation",
+          "inputs": []
+        },
+        {
+          "type": "error",
+          "name": "AccessControlUnauthorizedAccount",
+          "inputs": [
+            {
+              "type": "address",
+              "name": "account"
+            },
+            {
+              "type": "bytes32",
+              "name": "neededRole"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "EmptyIdentifier",
+          "inputs": []
+        },
+        {
+          "type": "error",
+          "name": "InitialOwnershipAlreadyRecorded",
+          "inputs": [
+            {
+              "type": "string",
+              "name": "propertyId"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "InvalidZeroAddress",
+          "inputs": []
+        },
+        {
+          "type": "error",
+          "name": "OwnershipMismatch",
+          "inputs": [
+            {
+              "type": "address",
+              "name": "expected"
+            },
+            {
+              "type": "address",
+              "name": "actual"
+            }
+          ]
+        },
+        {
+          "type": "event",
+          "anonymous": false,
+          "name": "InitialOwnershipRecorded",
+          "inputs": [
+            {
+              "type": "string",
+              "name": "propertyId",
+              "indexed": true
+            },
+            {
+              "type": "address",
+              "name": "initialOwner",
+              "indexed": true
+            },
+            {
+              "type": "uint256",
+              "name": "timestamp",
+              "indexed": false
+            }
+          ]
+        },
+        {
+          "type": "event",
+          "anonymous": false,
+          "name": "OwnershipTransferred",
+          "inputs": [
+            {
+              "type": "string",
+              "name": "propertyId",
+              "indexed": true
+            },
+            {
+              "type": "address",
+              "name": "previousOwner",
+              "indexed": true
+            },
+            {
+              "type": "address",
+              "name": "newOwner",
+              "indexed": true
+            },
+            {
+              "type": "string",
+              "name": "transactionId",
+              "indexed": false
+            },
+            {
+              "type": "uint256",
+              "name": "timestamp",
+              "indexed": false
+            }
+          ]
+        },
+        {
+          "type": "event",
+          "anonymous": false,
+          "name": "RoleAdminChanged",
+          "inputs": [
+            {
+              "type": "bytes32",
+              "name": "role",
+              "indexed": true
+            },
+            {
+              "type": "bytes32",
+              "name": "previousAdminRole",
+              "indexed": true
+            },
+            {
+              "type": "bytes32",
+              "name": "newAdminRole",
+              "indexed": true
+            }
+          ]
+        },
+        {
+          "type": "event",
+          "anonymous": false,
+          "name": "RoleGranted",
+          "inputs": [
+            {
+              "type": "bytes32",
+              "name": "role",
+              "indexed": true
+            },
+            {
+              "type": "address",
+              "name": "account",
+              "indexed": true
+            },
+            {
+              "type": "address",
+              "name": "sender",
+              "indexed": true
+            }
+          ]
+        },
+        {
+          "type": "event",
+          "anonymous": false,
+          "name": "RoleRevoked",
+          "inputs": [
+            {
+              "type": "bytes32",
+              "name": "role",
+              "indexed": true
+            },
+            {
+              "type": "address",
+              "name": "account",
+              "indexed": true
+            },
+            {
+              "type": "address",
+              "name": "sender",
+              "indexed": true
+            }
+          ]
+        },
+        {
+          "type": "function",
+          "name": "DEFAULT_ADMIN_ROLE",
+          "constant": true,
+          "stateMutability": "view",
+          "payable": false,
+          "inputs": [],
+          "outputs": [
+            {
+              "type": "bytes32",
+              "name": ""
+            }
+          ]
+        },
+        {
+          "type": "function",
+          "name": "TRANSFER_ROLE",
+          "constant": true,
+          "stateMutability": "view",
+          "payable": false,
+          "inputs": [],
+          "outputs": [
+            {
+              "type": "bytes32",
+              "name": ""
+            }
+          ]
+        },
+        {
+          "type": "function",
+          "name": "getCurrentOwner",
+          "constant": true,
+          "stateMutability": "view",
+          "payable": false,
+          "inputs": [
+            {
+              "type": "string",
+              "name": "propertyId"
+            }
+          ],
+          "outputs": [
+            {
+              "type": "address",
+              "name": ""
+            }
+          ]
+        },
+        {
+          "type": "function",
+          "name": "getOwnershipHistory",
+          "constant": true,
+          "stateMutability": "view",
+          "payable": false,
+          "inputs": [
+            {
+              "type": "string",
+              "name": "propertyId"
+            }
+          ],
+          "outputs": [
+            {
+              "type": "tuple[]",
+              "name": "",
+              "components": [
+                {
+                  "type": "address",
+                  "name": "previousOwner"
+                },
+                {
+                  "type": "address",
+                  "name": "newOwner"
+                },
+                {
+                  "type": "string",
+                  "name": "transactionId"
+                },
+                {
+                  "type": "uint256",
+                  "name": "timestamp"
+                },
+                {
+                  "type": "uint256",
+                  "name": "blockNumber"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "function",
+          "name": "getRoleAdmin",
+          "constant": true,
+          "stateMutability": "view",
+          "payable": false,
+          "inputs": [
+            {
+              "type": "bytes32",
+              "name": "role"
+            }
+          ],
+          "outputs": [
+            {
+              "type": "bytes32",
+              "name": ""
+            }
+          ]
+        },
+        {
+          "type": "function",
+          "name": "getTransferCount",
+          "constant": true,
+          "stateMutability": "view",
+          "payable": false,
+          "inputs": [
+            {
+              "type": "string",
+              "name": "propertyId"
+            }
+          ],
+          "outputs": [
+            {
+              "type": "uint256",
+              "name": ""
+            }
+          ]
+        },
+        {
+          "type": "function",
+          "name": "grantRole",
+          "constant": false,
+          "payable": false,
+          "inputs": [
+            {
+              "type": "bytes32",
+              "name": "role"
+            },
+            {
+              "type": "address",
+              "name": "account"
+            }
+          ],
+          "outputs": []
+        },
+        {
+          "type": "function",
+          "name": "hasRole",
+          "constant": true,
+          "stateMutability": "view",
+          "payable": false,
+          "inputs": [
+            {
+              "type": "bytes32",
+              "name": "role"
+            },
+            {
+              "type": "address",
+              "name": "account"
+            }
+          ],
+          "outputs": [
+            {
+              "type": "bool",
+              "name": ""
+            }
+          ]
+        },
+        {
+          "type": "function",
+          "name": "propertyRegistry",
+          "constant": true,
+          "stateMutability": "view",
+          "payable": false,
+          "inputs": [],
+          "outputs": [
+            {
+              "type": "address",
+              "name": ""
+            }
+          ]
+        },
+        {
+          "type": "function",
+          "name": "recordInitialOwnership",
+          "constant": false,
+          "payable": false,
+          "inputs": [
+            {
+              "type": "string",
+              "name": "propertyId"
+            },
+            {
+              "type": "address",
+              "name": "ownerWallet"
+            }
+          ],
+          "outputs": []
+        },
+        {
+          "type": "function",
+          "name": "recordOwnershipTransfer",
+          "constant": false,
+          "payable": false,
+          "inputs": [
+            {
+              "type": "string",
+              "name": "propertyId"
+            },
+            {
+              "type": "address",
+              "name": "previousOwner"
+            },
+            {
+              "type": "address",
+              "name": "newOwner"
+            },
+            {
+              "type": "string",
+              "name": "transactionId"
+            }
+          ],
+          "outputs": []
+        },
+        {
+          "type": "function",
+          "name": "renounceRole",
+          "constant": false,
+          "payable": false,
+          "inputs": [
+            {
+              "type": "bytes32",
+              "name": "role"
+            },
+            {
+              "type": "address",
+              "name": "callerConfirmation"
+            }
+          ],
+          "outputs": []
+        },
+        {
+          "type": "function",
+          "name": "revokeRole",
+          "constant": false,
+          "payable": false,
+          "inputs": [
+            {
+              "type": "bytes32",
+              "name": "role"
+            },
+            {
+              "type": "address",
+              "name": "account"
+            }
+          ],
+          "outputs": []
+        },
+        {
+          "type": "function",
+          "name": "supportsInterface",
+          "constant": true,
+          "stateMutability": "view",
+          "payable": false,
+          "inputs": [
+            {
+              "type": "bytes4",
+              "name": "interfaceId"
+            }
+          ],
+          "outputs": [
+            {
+              "type": "bool",
+              "name": ""
+            }
+          ]
+        }
+      ]
+    },
+    "TransactionManager": {
+      "address": "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9",
+      "abi": [
+        {
+          "type": "constructor",
+          "stateMutability": "undefined",
+          "payable": false,
+          "inputs": [
+            {
+              "type": "address",
+              "name": "admin"
+            },
+            {
+              "type": "address",
+              "name": "_ownershipRegistry"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "AccessControlBadConfirmation",
+          "inputs": []
+        },
+        {
+          "type": "error",
+          "name": "AccessControlUnauthorizedAccount",
+          "inputs": [
+            {
+              "type": "address",
+              "name": "account"
+            },
+            {
+              "type": "bytes32",
+              "name": "neededRole"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "EmptyIdentifier",
+          "inputs": []
+        },
+        {
+          "type": "error",
+          "name": "InvalidStateTransition",
+          "inputs": []
+        },
+        {
+          "type": "error",
+          "name": "InvalidZeroAddress",
+          "inputs": []
+        },
+        {
+          "type": "error",
+          "name": "PrerequisitesNotMet",
+          "inputs": []
+        },
+        {
+          "type": "error",
+          "name": "ReentrancyGuardReentrantCall",
+          "inputs": []
+        },
+        {
+          "type": "error",
+          "name": "TransactionAlreadyExists",
+          "inputs": [
+            {
+              "type": "string",
+              "name": "transactionId"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "TransactionNotFound",
+          "inputs": [
+            {
+              "type": "string",
+              "name": "transactionId"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "UnauthorizedCaller",
+          "inputs": []
+        },
+        {
+          "type": "event",
+          "anonymous": false,
+          "name": "RoleAdminChanged",
+          "inputs": [
+            {
+              "type": "bytes32",
+              "name": "role",
+              "indexed": true
+            },
+            {
+              "type": "bytes32",
+              "name": "previousAdminRole",
+              "indexed": true
+            },
+            {
+              "type": "bytes32",
+              "name": "newAdminRole",
+              "indexed": true
+            }
+          ]
+        },
+        {
+          "type": "event",
+          "anonymous": false,
+          "name": "RoleGranted",
+          "inputs": [
+            {
+              "type": "bytes32",
+              "name": "role",
+              "indexed": true
+            },
+            {
+              "type": "address",
+              "name": "account",
+              "indexed": true
+            },
+            {
+              "type": "address",
+              "name": "sender",
+              "indexed": true
+            }
+          ]
+        },
+        {
+          "type": "event",
+          "anonymous": false,
+          "name": "RoleRevoked",
+          "inputs": [
+            {
+              "type": "bytes32",
+              "name": "role",
+              "indexed": true
+            },
+            {
+              "type": "address",
+              "name": "account",
+              "indexed": true
+            },
+            {
+              "type": "address",
+              "name": "sender",
+              "indexed": true
+            }
+          ]
+        },
+        {
+          "type": "event",
+          "anonymous": false,
+          "name": "TransactionAccepted",
+          "inputs": [
+            {
+              "type": "string",
+              "name": "transactionId",
+              "indexed": true
+            },
+            {
+              "type": "address",
+              "name": "seller",
+              "indexed": true
+            },
+            {
+              "type": "uint256",
+              "name": "timestamp",
+              "indexed": false
+            }
+          ]
+        },
+        {
+          "type": "event",
+          "anonymous": false,
+          "name": "TransactionCancelled",
+          "inputs": [
+            {
+              "type": "string",
+              "name": "transactionId",
+              "indexed": true
+            },
+            {
+              "type": "string",
+              "name": "reason",
+              "indexed": false
+            },
+            {
+              "type": "uint256",
+              "name": "timestamp",
+              "indexed": false
+            }
+          ]
+        },
+        {
+          "type": "event",
+          "anonymous": false,
+          "name": "TransactionCompleted",
+          "inputs": [
+            {
+              "type": "string",
+              "name": "transactionId",
+              "indexed": true
+            },
+            {
+              "type": "string",
+              "name": "propertyId",
+              "indexed": true
+            },
+            {
+              "type": "address",
+              "name": "newOwner",
+              "indexed": false
+            },
+            {
+              "type": "uint256",
+              "name": "timestamp",
+              "indexed": false
+            }
+          ]
+        },
+        {
+          "type": "event",
+          "anonymous": false,
+          "name": "TransactionCreated",
+          "inputs": [
+            {
+              "type": "string",
+              "name": "transactionId",
+              "indexed": true
+            },
+            {
+              "type": "string",
+              "name": "propertyId",
+              "indexed": true
+            },
+            {
+              "type": "address",
+              "name": "buyer",
+              "indexed": true
+            },
+            {
+              "type": "address",
+              "name": "seller",
+              "indexed": false
+            },
+            {
+              "type": "uint256",
+              "name": "amount",
+              "indexed": false
+            },
+            {
+              "type": "uint256",
+              "name": "timestamp",
+              "indexed": false
+            }
+          ]
+        },
+        {
+          "type": "event",
+          "anonymous": false,
+          "name": "TransactionDocumentsVerified",
+          "inputs": [
+            {
+              "type": "string",
+              "name": "transactionId",
+              "indexed": true
+            },
+            {
+              "type": "address",
+              "name": "verifier",
+              "indexed": true
+            },
+            {
+              "type": "uint256",
+              "name": "timestamp",
+              "indexed": false
+            }
+          ]
+        },
+        {
+          "type": "event",
+          "anonymous": false,
+          "name": "TransactionLegallyConfirmed",
+          "inputs": [
+            {
+              "type": "string",
+              "name": "transactionId",
+              "indexed": true
+            },
+            {
+              "type": "address",
+              "name": "legalAuthority",
+              "indexed": true
+            },
+            {
+              "type": "uint256",
+              "name": "timestamp",
+              "indexed": false
+            }
+          ]
+        },
+        {
+          "type": "function",
+          "name": "DEFAULT_ADMIN_ROLE",
+          "constant": true,
+          "stateMutability": "view",
+          "payable": false,
+          "inputs": [],
+          "outputs": [
+            {
+              "type": "bytes32",
+              "name": ""
+            }
+          ]
+        },
+        {
+          "type": "function",
+          "name": "LEGAL_AUTHORITY_ROLE",
+          "constant": true,
+          "stateMutability": "view",
+          "payable": false,
+          "inputs": [],
+          "outputs": [
+            {
+              "type": "bytes32",
+              "name": ""
+            }
+          ]
+        },
+        {
+          "type": "function",
+          "name": "OPERATOR_ROLE",
+          "constant": true,
+          "stateMutability": "view",
+          "payable": false,
+          "inputs": [],
+          "outputs": [
+            {
+              "type": "bytes32",
+              "name": ""
+            }
+          ]
+        },
+        {
+          "type": "function",
+          "name": "VERIFIER_ROLE",
+          "constant": true,
+          "stateMutability": "view",
+          "payable": false,
+          "inputs": [],
+          "outputs": [
+            {
+              "type": "bytes32",
+              "name": ""
+            }
+          ]
+        },
+        {
+          "type": "function",
+          "name": "acceptTransaction",
+          "constant": false,
+          "payable": false,
+          "inputs": [
+            {
+              "type": "string",
+              "name": "transactionId"
+            }
+          ],
+          "outputs": []
+        },
+        {
+          "type": "function",
+          "name": "approveDocuments",
+          "constant": false,
+          "payable": false,
+          "inputs": [
+            {
+              "type": "string",
+              "name": "transactionId"
+            }
+          ],
+          "outputs": []
+        },
+        {
+          "type": "function",
+          "name": "cancelTransaction",
+          "constant": false,
+          "payable": false,
+          "inputs": [
+            {
+              "type": "string",
+              "name": "transactionId"
+            },
+            {
+              "type": "string",
+              "name": "reason"
+            }
+          ],
+          "outputs": []
+        },
+        {
+          "type": "function",
+          "name": "completeTransfer",
+          "constant": false,
+          "payable": false,
+          "inputs": [
+            {
+              "type": "string",
+              "name": "transactionId"
+            }
+          ],
+          "outputs": []
+        },
+        {
+          "type": "function",
+          "name": "confirmLegalRegistration",
+          "constant": false,
+          "payable": false,
+          "inputs": [
+            {
+              "type": "string",
+              "name": "transactionId"
+            }
+          ],
+          "outputs": []
+        },
+        {
+          "type": "function",
+          "name": "createTransaction",
+          "constant": false,
+          "payable": false,
+          "inputs": [
+            {
+              "type": "string",
+              "name": "transactionId"
+            },
+            {
+              "type": "string",
+              "name": "propertyId"
+            },
+            {
+              "type": "address",
+              "name": "buyer"
+            },
+            {
+              "type": "address",
+              "name": "seller"
+            },
+            {
+              "type": "uint256",
+              "name": "amount"
+            }
+          ],
+          "outputs": []
+        },
+        {
+          "type": "function",
+          "name": "getRoleAdmin",
+          "constant": true,
+          "stateMutability": "view",
+          "payable": false,
+          "inputs": [
+            {
+              "type": "bytes32",
+              "name": "role"
+            }
+          ],
+          "outputs": [
+            {
+              "type": "bytes32",
+              "name": ""
+            }
+          ]
+        },
+        {
+          "type": "function",
+          "name": "getTransaction",
+          "constant": true,
+          "stateMutability": "view",
+          "payable": false,
+          "inputs": [
+            {
+              "type": "string",
+              "name": "transactionId"
+            }
+          ],
+          "outputs": [
+            {
+              "type": "string",
+              "name": "propertyId"
+            },
+            {
+              "type": "address",
+              "name": "buyer"
+            },
+            {
+              "type": "address",
+              "name": "seller"
+            },
+            {
+              "type": "uint256",
+              "name": "amount"
+            },
+            {
+              "type": "uint8",
+              "name": "status"
+            },
+            {
+              "type": "bool",
+              "name": "sellerAccepted"
+            },
+            {
+              "type": "bool",
+              "name": "documentsVerified"
+            },
+            {
+              "type": "bool",
+              "name": "legallyConfirmed"
+            },
+            {
+              "type": "uint256",
+              "name": "createdAt"
+            },
+            {
+              "type": "uint256",
+              "name": "completedAt"
+            }
+          ]
+        },
+        {
+          "type": "function",
+          "name": "grantRole",
+          "constant": false,
+          "payable": false,
+          "inputs": [
+            {
+              "type": "bytes32",
+              "name": "role"
+            },
+            {
+              "type": "address",
+              "name": "account"
+            }
+          ],
+          "outputs": []
+        },
+        {
+          "type": "function",
+          "name": "hasRole",
+          "constant": true,
+          "stateMutability": "view",
+          "payable": false,
+          "inputs": [
+            {
+              "type": "bytes32",
+              "name": "role"
+            },
+            {
+              "type": "address",
+              "name": "account"
+            }
+          ],
+          "outputs": [
+            {
+              "type": "bool",
+              "name": ""
+            }
+          ]
+        },
+        {
+          "type": "function",
+          "name": "ownershipRegistry",
+          "constant": true,
+          "stateMutability": "view",
+          "payable": false,
+          "inputs": [],
+          "outputs": [
+            {
+              "type": "address",
+              "name": ""
+            }
+          ]
+        },
+        {
+          "type": "function",
+          "name": "renounceRole",
+          "constant": false,
+          "payable": false,
+          "inputs": [
+            {
+              "type": "bytes32",
+              "name": "role"
+            },
+            {
+              "type": "address",
+              "name": "callerConfirmation"
+            }
+          ],
+          "outputs": []
+        },
+        {
+          "type": "function",
+          "name": "revokeRole",
+          "constant": false,
+          "payable": false,
+          "inputs": [
+            {
+              "type": "bytes32",
+              "name": "role"
+            },
+            {
+              "type": "address",
+              "name": "account"
+            }
+          ],
+          "outputs": []
+        },
+        {
+          "type": "function",
+          "name": "supportsInterface",
+          "constant": true,
+          "stateMutability": "view",
+          "payable": false,
+          "inputs": [
+            {
+              "type": "bytes4",
+              "name": "interfaceId"
+            }
+          ],
+          "outputs": [
+            {
+              "type": "bool",
+              "name": ""
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -37,11 +37,39 @@ class ResourceNotFoundException(PropChainException):
         super().__init__(message=message, status_code=status.HTTP_404_NOT_FOUND)
 
 
+class NotFoundError(ResourceNotFoundException):
+    """Alias for resource not found."""
+    pass
+
+
+class ForbiddenError(PropChainException):
+    """Raised when user lacks permissions for an operation."""
+    def __init__(self, message: str = "Access forbidden."):
+        super().__init__(message=message, status_code=status.HTTP_403_FORBIDDEN)
+
+
+class ConflictError(PropChainException):
+    """Raised when an operation conflicts with existing state (e.g. duplicate)."""
+    def __init__(self, message: str = "Resource conflict."):
+        super().__init__(message=message, status_code=status.HTTP_409_CONFLICT)
+
+
+class BadRequestError(PropChainException):
+    """Raised for malformed client requests."""
+    def __init__(self, message: str = "Bad request."):
+        super().__init__(message=message, status_code=status.HTTP_400_BAD_REQUEST)
+
+
 class ValidationException(PropChainException):
     """Raised for custom validation failures."""
     def __init__(self, message: str = "Validation failed.", details: Optional[List[ErrorDetail]] = None):
         super().__init__(message=message, status_code=status.HTTP_422_UNPROCESSABLE_ENTITY)
         self.details = details or []
+
+
+class ValidationError(ValidationException):
+    """Alias for validation exception."""
+    pass
 
 
 def register_exception_handlers(app: FastAPI) -> None:

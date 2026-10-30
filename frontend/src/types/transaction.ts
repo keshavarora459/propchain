@@ -1,23 +1,51 @@
-export type TransactionStatus = 'Pending' | 'In Escrow' | 'Completed' | 'Disputed' | 'Cancelled'
-export type TransactionType = 'Sale' | 'Transfer' | 'Mortgage Lien' | 'Title Deed Release'
+export type TransactionStatus =
+  | 'Pending'
+  | 'In Escrow'
+  | 'Completed'
+  | 'Disputed'
+  | 'Cancelled'
+  | 'DRAFT'
+  | 'INITIATED'
+  | 'PENDING_SELLER_ACCEPTANCE'
+  | 'PENDING_DOCUMENT_VERIFICATION'
+  | 'PENDING_APPROVALS'
+  | 'READY_FOR_LEGAL_CONFIRMATION'
+  | 'LEGALLY_REGISTERED'
+  | 'READY_FOR_BLOCKCHAIN_EXECUTION'
+  | 'BLOCKCHAIN_PENDING'
+  | 'COMPLETED'
+  | 'REJECTED'
+  | 'CANCELLED'
+  | 'FAILED'
+  | string
+
+export type TransactionType = 'Sale' | 'Transfer' | 'Mortgage Lien' | 'Title Deed Release' | 'SALE' | 'LEASE' | string
 
 export interface Transaction {
   id: string
   transactionId: string // e.g. "TXN-9021"
+  transaction_number?: string
   propertyId: string
+  property_id?: string
   propertyTitle: string
+  property_title?: string
   buyerName: string
+  buyer_name?: string
   buyerWallet: string
   sellerName: string
+  seller_name?: string
   sellerWallet: string
   amount: number
-  currency: 'USD' | 'ETH' | 'USDC'
+  proposed_amount?: number | string
+  currency: 'USD' | 'ETH' | 'USDC' | 'INR' | string
   status: TransactionStatus
   type: TransactionType
-  escrowStatus: 'Awaiting Deposit' | 'Funded' | 'Released' | 'Refunded'
+  transaction_type?: string
+  escrowStatus: 'Awaiting Deposit' | 'Funded' | 'Released' | 'Refunded' | string
   initiatedAt: string
+  created_at?: string
   completedAt?: string
   blockchainTxHash?: string
+  blockchain_tx_hash?: string
   blockNumber?: number
 }
-

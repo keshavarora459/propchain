@@ -3,6 +3,7 @@ import { BrowserRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { UIProvider } from '@/context/UIContext'
 import { AuthProvider } from '@/context/AuthContext'
+import { WalletProvider } from '@/context/WalletContext'
 import { AppRoutes } from '@/routes/AppRoutes'
 import './index.css'
 
@@ -22,11 +23,13 @@ export function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <UIProvider>
-          <BrowserRouter>
-            <AppRoutes />
-          </BrowserRouter>
-        </UIProvider>
+        <WalletProvider>
+          <UIProvider>
+            <BrowserRouter>
+              <AppRoutes />
+            </BrowserRouter>
+          </UIProvider>
+        </WalletProvider>
       </AuthProvider>
     </QueryClientProvider>
   )

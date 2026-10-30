@@ -11,20 +11,26 @@ import {
 } from 'lucide-react'
 import { useUI } from '@/hooks/useUI'
 import { useAuth } from '@/hooks/useAuth'
+import { useWallet } from '@/context/WalletContext'
 import { Button } from '@/components/ui/Button'
 import { truncateHash } from '@/lib/utils'
 
 export const Header: React.FC = () => {
   const {
     setMobileSidebarOpen,
-    walletConnected,
-    walletAddress,
-    connectWallet,
-    disconnectWallet,
     notificationsCount,
     clearNotifications,
   } = useUI()
   const { user, logout } = useAuth()
+  const {
+    account,
+    isConnected,
+    isConnecting,
+    isVerified,
+    connectWallet,
+    disconnectWallet,
+    linkWalletWithBackend,
+  } = useWallet()
 
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
@@ -62,13 +68,22 @@ export const Header: React.FC = () => {
 
       {/* Right side: Wallet, Notifications, Profile */}
       <div className="flex items-center gap-2.5 sm:gap-4">
-        {/* Web3 Wallet Connection Placeholder (Phase 2 UI Foundation) */}
-        {walletConnected && walletAddress ? (
+        {/* Web3 Wallet Connection (Milestone 3 Live MetaMask) */}
+        {isConnected && account ? (
           <div className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs">
-            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+            <span className={`h-2 w-2 rounded-full ${isVerified ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'}`} />
             <span className="font-mono font-medium text-slate-700">
-              {truncateHash(walletAddress, 6, 4)}
+              {truncateHash(account, 6, 4)}
             </span>
+            {!isVerified && (
+              <button
+                onClick={() => linkWalletWithBackend()}
+                className="ml-1 text-[11px] font-semibold text-blue-600 hover:underline cursor-pointer"
+                title="Sign Challenge to Link Wallet with PropChain Account"
+              >
+                Verify
+              </button>
+            )}
             <button
               onClick={disconnectWallet}
               className="ml-1 text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
@@ -81,7 +96,8 @@ export const Header: React.FC = () => {
           <Button
             size="sm"
             variant="outline"
-            onClick={connectWallet}
+            onClick={() => connectWallet()}
+            isLoading={isConnecting}
             leftIcon={<Wallet className="h-3.5 w-3.5 text-blue-600" />}
             className="text-xs"
           >
