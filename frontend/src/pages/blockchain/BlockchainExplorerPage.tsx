@@ -121,16 +121,34 @@ export const BlockchainExplorerPage: React.FC = () => {
 
             fetchedBlocks.push({
               blockNumber: block.number,
-              hash: block.hash || `0x${i}`,
-              parentHash: block.parentHash || '0x0000000000000000000000000000000000000000000000000000000000000000',
+              hash: block.hash || '',
+              parentHash: block.parentHash || '',
               timestamp: blockDate,
               transactionsCount: block.transactions.length,
               gasUsed: `${Number(block.gasUsed).toLocaleString()} gas`,
               miner: block.miner,
             })
 
-            // Extract and decode real transactions from block
-            for (const tx of block.prefetchedTransactions) {
+            // Extract real transactions from prefetched transactions or query hashes
+            const rawTxs: any[] = []
+            if (block.prefetchedTransactions && block.prefetchedTransactions.length > 0) {
+              rawTxs.push(...block.prefetchedTransactions)
+            } else if (block.transactions && block.transactions.length > 0) {
+              for (const t of block.transactions) {
+                if (typeof t === 'string') {
+                  try {
+                    const txObj = await provider.getTransaction(t)
+                    if (txObj) rawTxs.push(txObj)
+                  } catch (txErr) {
+                    console.warn(`Could not fetch tx ${t}:`, txErr)
+                  }
+                } else if (t && typeof t === 'object') {
+                  rawTxs.push(t)
+                }
+              }
+            }
+
+            for (const tx of rawTxs) {
               let eventName = tx.to ? 'Smart Contract Call' : 'Contract Deployed'
               let propertyId: string | undefined = undefined
               let documentHash: string | undefined = undefined
@@ -371,7 +389,7 @@ export const BlockchainExplorerPage: React.FC = () => {
                   propertyId: typeof propertyId === 'string' ? propertyId : 'PROP-ON-CHAIN',
                   documentHash: evArgs.documentHash,
                   details: `Cryptographic SHA-256 Title Deed anchored in Block #${ev.blockNumber}`,
-                  gasUsed: receipt ? `${Number(receipt.gasUsed).toLocaleString()} gas` : '211,555 gas',
+                  gasUsed: receipt ? `${Number(receipt.gasUsed).toLocaleString()} gas` : '0 gas',
                   status: 'Confirmed',
                 },
               })
