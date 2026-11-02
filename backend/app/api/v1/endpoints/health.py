@@ -91,3 +91,31 @@ async def get_mongodb_health(response: Response):
         "details": details,
     }
 
+
+@router.post(
+    "/mongodb/sync",
+    summary="Trigger On-Demand MongoDB Atlas Hydration",
+    description="Forces immediate hydration of all properties and collections from MongoDB Atlas into cache.",
+)
+async def trigger_mongodb_sync(response: Response):
+    from app.core.database import get_session_factory
+    from app.core.mongo import check_mongo_connection, hydrate_all_from_mongo
+
+    is_connected, message, details = check_mongo_connection()
+    if not is_connected:
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+        return {
+            "status": "failed",
+            "message": f"Cannot sync: {message}",
+        }
+
+    session_factory = get_session_factory()
+    with session_factory() as session:
+        hydrated = hydrate_all_from_mongo(session)
+    return {
+        "status": "success",
+        "message": "Hydrated successfully from MongoDB Atlas",
+        "hydrated_counts": hydrated,
+    }
+
+
