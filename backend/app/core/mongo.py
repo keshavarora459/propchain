@@ -49,13 +49,22 @@ def get_mongo_client() -> MongoClient:
             logger.warning("No MONGODB_URI configured in environment.")
             return None
         logger.info("Initializing MongoDB client...")
-        _mongo_client = MongoClient(
-            uri,
-            serverSelectionTimeoutMS=5000,
-            connectTimeoutMS=5000,
-            socketTimeoutMS=10000,
-            maxPoolSize=20,
-        )
+        try:
+            import certifi
+            ca_file = certifi.where()
+        except Exception:
+            ca_file = None
+
+        client_kwargs = {
+            "serverSelectionTimeoutMS": 5000,
+            "connectTimeoutMS": 5000,
+            "socketTimeoutMS": 10000,
+            "maxPoolSize": 20,
+        }
+        if ca_file:
+            client_kwargs["tlsCAFile"] = ca_file
+
+        _mongo_client = MongoClient(uri, **client_kwargs)
     return _mongo_client
 
 
