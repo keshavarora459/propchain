@@ -271,6 +271,16 @@ export const DashboardPage: React.FC = () => {
                   <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" /> Synchronized
                 </span>
               </div>
+              <div className="pt-2 border-t border-slate-100">
+                <Link
+                  to="/blockchain-explorer"
+                  className="flex items-center justify-center gap-1.5 w-full rounded-md bg-blue-50 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-100 transition-colors"
+                >
+                  <Cpu className="h-3.5 w-3.5" />
+                  View Decentralized Ledger Explorer
+                  <ArrowRight className="h-3.5 w-3.5 ml-1" />
+                </Link>
+              </div>
             </CardContent>
           </Card>
         </div>
