@@ -8,14 +8,34 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts'
-import { MOCK_REGISTRATION_TRENDS } from '@/mock-data/metrics'
 
-export const RegistrationTrendChart: React.FC = () => {
+interface TrendItem {
+  month: string
+  registered: number
+  verified: number
+}
+
+interface RegistrationTrendChartProps {
+  data?: TrendItem[]
+}
+
+const DEFAULT_MONTHS: TrendItem[] = [
+  { month: 'Jun', registered: 0, verified: 0 },
+  { month: 'Jul', registered: 0, verified: 0 },
+  { month: 'Aug', registered: 0, verified: 0 },
+  { month: 'Sep', registered: 0, verified: 0 },
+  { month: 'Oct', registered: 0, verified: 0 },
+  { month: 'Nov', registered: 0, verified: 0 },
+]
+
+export const RegistrationTrendChart: React.FC<RegistrationTrendChartProps> = ({ data }) => {
+  const chartData = data && data.length > 0 ? data : DEFAULT_MONTHS
+
   return (
     <div className="h-64 w-full">
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart
-          data={MOCK_REGISTRATION_TRENDS}
+          data={chartData}
           margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
         >
           <defs>
@@ -64,3 +84,4 @@ export const RegistrationTrendChart: React.FC = () => {
   )
 }
 
+export default RegistrationTrendChart

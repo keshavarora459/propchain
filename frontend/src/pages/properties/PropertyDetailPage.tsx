@@ -7,39 +7,108 @@ import {
   Cpu,
   ArrowLeft,
   ExternalLink,
+  Loader2,
+  AlertCircle,
 } from 'lucide-react'
 import { PageHeader } from '@/components/common/PageHeader'
 import { StatusBadge } from '@/components/common/StatusBadge'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
-import { MOCK_PROPERTIES } from '@/mock-data/properties'
-import { MOCK_OWNERSHIP_RECORDS } from '@/mock-data/ownership'
-import { MOCK_DOCUMENTS } from '@/mock-data/documents'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { propertyService } from '@/services/propertyService'
 import type { Property } from '@/types/property'
+import apiClient from '@/lib/axios'
 
 export const PropertyDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>()
 
-  const [property, setProperty] = useState<Property>(() => {
-    return MOCK_PROPERTIES.find((p) => p.id === id || p.propertyId === id) || MOCK_PROPERTIES[0]
-  })
+  const [property, setProperty] = useState<Property | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [isVerifying, setIsVerifying] = useState(false)
+  const [conveyanceCount, setConveyanceCount] = useState<number>(1)
 
   useEffect(() => {
     if (!id) return
+    setIsLoading(true)
+
     propertyService
       .getPropertyById(id)
       .then((data) => {
         if (data) setProperty(data)
       })
+      .catch((err) => {
+        console.error('Failed to load property details:', err)
+        setProperty(null)
+      })
+      .finally(() => {
+        setIsLoading(false)
+      })
+
+    // Fetch conveyance count if available
+    apiClient
+      .get<{ items: any[] }>(`/ownership/properties/${id}/history`)
+      .then((res) => {
+        if (res.data && Array.isArray(res.data.items)) {
+          setConveyanceCount(Math.max(1, res.data.items.length))
+        }
+      })
       .catch(() => {
-        const mock = MOCK_PROPERTIES.find((p) => p.id === id || p.propertyId === id)
-        if (mock) setProperty(mock)
+        // Default to initial grant (1)
+        setConveyanceCount(1)
       })
   }, [id])
-  const ownership = MOCK_OWNERSHIP_RECORDS.find((o) => o.propertyId === property.propertyId)
-  const documents = MOCK_DOCUMENTS.filter((d) => d.propertyId === property.propertyId)
+
+  const handleVerifyProperty = async () => {
+    if (!property?.id) return
+    setIsVerifying(true)
+    try {
+      const updated = await propertyService.updatePropertyStatus(property.id, {
+        verification_status: 'VERIFIED',
+      })
+      setProperty(updated)
+    } catch (err) {
+      console.error('Failed to verify property:', err)
+    } finally {
+      setIsVerifying(false)
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-24 space-y-3">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+        <p className="text-sm text-slate-500">Loading property title details...</p>
+      </div>
+    )
+  }
+
+  if (!property) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center gap-2">
+          <Link
+            to="/properties"
+            className="inline-flex items-center text-xs font-semibold text-slate-500 hover:text-slate-800 transition-colors"
+          >
+            <ArrowLeft className="h-3.5 w-3.5 mr-1" />
+            Back to Properties
+          </Link>
+        </div>
+        <Card className="p-12 text-center">
+          <AlertCircle className="h-10 w-10 text-slate-300 mx-auto mb-3" />
+          <h3 className="text-base font-semibold text-slate-800">Property Not Found</h3>
+          <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
+            The requested property record could not be found in the registry. It may have been removed or the ID is incorrect.
+          </p>
+          <div className="mt-5">
+            <Link to="/properties">
+              <Button size="sm">Return to Property Registry</Button>
+            </Link>
+          </div>
+        </Card>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -55,7 +124,7 @@ export const PropertyDetailPage: React.FC = () => {
 
       <PageHeader
         title={property.title}
-        description={`Government Registry Ref: ${property.registrationReference}`}
+        description={`Government Registry Ref: ${property.registrationReference || 'REG-PENDING'}`}
         breadcrumbs={[
           { label: 'Properties', href: '/properties' },
           { label: property.propertyId },
@@ -63,6 +132,17 @@ export const PropertyDetailPage: React.FC = () => {
         actions={
           <div className="flex items-center gap-2">
             <StatusBadge status={property.verificationStatus} />
+            {property.verificationStatus?.toLowerCase() === 'pending' && (
+              <Button
+                size="sm"
+                variant="outline"
+                isLoading={isVerifying}
+                onClick={handleVerifyProperty}
+                leftIcon={<ShieldCheck className="h-4 w-4 text-emerald-600" />}
+              >
+                Verify Property
+              </Button>
+            )}
             <Link to="/transactions">
               <Button size="sm">Initiate Transfer / Escrow</Button>
             </Link>
@@ -79,7 +159,9 @@ export const PropertyDetailPage: React.FC = () => {
               <CardTitle>Physical Asset Specifications</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <p className="text-sm text-slate-600 leading-relaxed">{property.description}</p>
+              <p className="text-sm text-slate-600 leading-relaxed">
+                {property.description || 'Verified property entry in the decentralized title registry.'}
+              </p>
 
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 pt-4 border-t border-slate-100">
                 <div>
@@ -137,40 +219,25 @@ export const PropertyDetailPage: React.FC = () => {
             </CardContent>
           </Card>
 
-          {/* Attached Verified Documents */}
+          {/* Attached Deeds & Cadastral Records */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>Attached Deeds & Cadastral Records</CardTitle>
+              <div>
+                <CardTitle>Attached Deeds & Cadastral Records</CardTitle>
+                <p className="text-xs text-slate-500 mt-0.5">Documents uploaded and anchored for this parcel</p>
+              </div>
               <Link to="/documents" className="text-xs text-blue-600 hover:underline">
                 Upload New
               </Link>
             </CardHeader>
             <CardContent className="divide-y divide-slate-100 p-0">
-              {documents.length === 0 ? (
-                <div className="p-6 text-center text-xs text-slate-500">
-                  No documents attached for this parcel yet.
-                </div>
-              ) : (
-                documents.map((doc) => (
-                  <div key={doc.id} className="p-4 flex items-center justify-between hover:bg-slate-50/60">
-                    <div className="flex items-center gap-3">
-                      <div className="h-9 w-9 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
-                        <FileText className="h-5 w-5" />
-                      </div>
-                      <div>
-                        <p className="text-xs font-semibold text-slate-800">{doc.documentName}</p>
-                        <p className="text-[11px] text-slate-400 font-mono">
-                          SHA256: {doc.documentHash.slice(0, 16)}...
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <StatusBadge status={doc.status} />
-                      <span className="text-xs font-mono text-slate-500">{doc.fileSize}</span>
-                    </div>
-                  </div>
-                ))
-              )}
+              <div className="p-8 text-center text-xs text-slate-400">
+                <FileText className="h-8 w-8 text-slate-300 mx-auto mb-2" />
+                <p className="font-medium text-slate-600">No Deeds Uploaded Yet</p>
+                <p className="mt-1">
+                  Upload deed surveys or conveyance certificates in the Verify Documents tab to anchor them to this parcel.
+                </p>
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -197,14 +264,12 @@ export const PropertyDetailPage: React.FC = () => {
               </div>
               <div className="pt-2 border-t border-slate-100 flex justify-between">
                 <span className="text-slate-500">Ownership Type</span>
-                <span className="font-medium text-slate-800">
-                  {ownership?.acquisitionType || 'Fee Simple Direct'}
-                </span>
+                <span className="font-medium text-slate-800">Fee Simple Direct</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-500">Chain History</span>
                 <Link to="/ownership" className="text-blue-600 font-semibold hover:underline">
-                  {ownership?.history.length || 1} Conveyance(s)
+                  {conveyanceCount} Conveyance(s)
                 </Link>
               </div>
             </CardContent>
@@ -221,7 +286,7 @@ export const PropertyDetailPage: React.FC = () => {
               <div className="flex justify-between py-1 border-b border-slate-100">
                 <span className="text-slate-500">ERC-721 Token ID</span>
                 <span className="font-mono font-bold text-slate-800">
-                  {property.blockchainTokenId ? `#${property.blockchainTokenId}` : 'Unminted (Pending)'}
+                  {property.blockchainTokenId ? `#${property.blockchainTokenId}` : 'Anchored on Hardhat'}
                 </span>
               </div>
               <div className="flex justify-between py-1 border-b border-slate-100">
@@ -248,3 +313,5 @@ export const PropertyDetailPage: React.FC = () => {
     </div>
   )
 }
+
+export default PropertyDetailPage

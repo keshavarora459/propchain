@@ -9,7 +9,6 @@ import { StatusBadge } from '@/components/common/StatusBadge'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import { Button } from '@/components/ui/Button'
 import { RegisterPropertyModal } from './RegisterPropertyModal'
-import { MOCK_PROPERTIES } from '@/mock-data/properties'
 import { PROPERTY_TYPES, VERIFICATION_STATUSES } from '@/constants/options'
 import { formatCurrency } from '@/lib/utils'
 import type { Property } from '@/types/property'
@@ -17,7 +16,7 @@ import { propertyService } from '@/services/propertyService'
 import { Link } from 'react-router-dom'
 
 export const PropertiesPage: React.FC = () => {
-  const [properties, setProperties] = useState<Property[]>(MOCK_PROPERTIES)
+  const [properties, setProperties] = useState<Property[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [typeFilter, setTypeFilter] = useState('')
@@ -30,19 +29,14 @@ export const PropertiesPage: React.FC = () => {
   const loadProperties = useCallback(async () => {
     try {
       const res = await propertyService.getProperties({ page_size: 100 })
-      if (res && res.items && res.items.length > 0) {
-        // Database properties at the top, followed by any non-colliding mocks
-        const dbIds = new Set(res.items.map((p) => p.propertyId || p.id))
-        const nonCollidingMocks = MOCK_PROPERTIES.filter(
-          (m) => !dbIds.has(m.propertyId) && !dbIds.has(m.id)
-        )
-        setProperties([...res.items, ...nonCollidingMocks])
+      if (res && res.items) {
+        setProperties(res.items)
       } else {
-        setProperties(MOCK_PROPERTIES)
+        setProperties([])
       }
     } catch (err) {
-      console.warn('Could not load properties from API, using fallback data:', err)
-      setProperties(MOCK_PROPERTIES)
+      console.error('Could not load properties from database:', err)
+      setProperties([])
     } finally {
       setIsLoading(false)
     }

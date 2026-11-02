@@ -5,6 +5,7 @@ Aggregates modular endpoint routers for the v1 API namespace.
 from fastapi import APIRouter
 
 from app.api.v1.endpoints import (
+    analytics,
     approvals,
     auth,
     documents,
@@ -17,6 +18,12 @@ from app.api.v1.endpoints import (
 )
 
 api_v1_router = APIRouter()
+
+# Mount analytics router
+api_v1_router.include_router(
+    analytics.router,
+    tags=["Analytics"],
+)
 
 # Mount health diagnostics router
 api_v1_router.include_router(

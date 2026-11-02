@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { Plus, Search, Eye } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -9,13 +9,12 @@ import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
-import { MOCK_TRANSACTIONS } from '@/mock-data/transactions'
-import { MOCK_PROPERTIES } from '@/mock-data/properties'
 import { initiateTransactionSchema, type InitiateTransactionFormData } from '@/schemas/transactionSchema'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import type { Transaction } from '@/types/transaction'
 import type { Property } from '@/types/property'
 import { propertyService } from '@/services/propertyService'
+import apiClient from '@/lib/axios'
 
 function createTransactionRecord(
   data: InitiateTransactionFormData,
@@ -41,26 +40,50 @@ function createTransactionRecord(
 }
 
 export const TransactionsPage: React.FC = () => {
-  const [transactions, setTransactions] = useState<Transaction[]>(MOCK_TRANSACTIONS)
-  const [properties, setProperties] = useState<Property[]>(MOCK_PROPERTIES)
+  const [transactions, setTransactions] = useState<Transaction[]>([])
+  const [properties, setProperties] = useState<Property[]>([])
   const [selectedTxn, setSelectedTxn] = useState<Transaction | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
 
-  useEffect(() => {
-    propertyService
-      .getProperties({ page_size: 100 })
-      .then((res) => {
-        if (res && res.items && res.items.length > 0) {
-          const dbIds = new Set(res.items.map((p) => p.propertyId || p.id))
-          const nonColliding = MOCK_PROPERTIES.filter(
-            (m) => !dbIds.has(m.propertyId) && !dbIds.has(m.id)
-          )
-          setProperties([...res.items, ...nonColliding])
-        }
-      })
-      .catch(console.warn)
+  const loadData = useCallback(async () => {
+    try {
+      const [propRes, txnRes] = await Promise.allSettled([
+        propertyService.getProperties({ page_size: 100 }),
+        apiClient.get<any[]>('/transactions'),
+      ])
+
+      if (propRes.status === 'fulfilled' && propRes.value.items) {
+        setProperties(propRes.value.items)
+      }
+
+      if (txnRes.status === 'fulfilled' && Array.isArray(txnRes.value.data)) {
+        const liveTxns: Transaction[] = txnRes.value.data.map((t) => ({
+          id: t.id,
+          transactionId: t.transaction_number || `TXN-${t.id.slice(0, 6)}`,
+          propertyId: t.property?.property_number || t.property_id || 'PROP-PARCEL',
+          propertyTitle: t.property?.title || 'Real Estate Parcel',
+          buyerName: t.buyer?.full_name || 'Buyer',
+          buyerWallet: t.buyer_wallet_address || '0x0000000000000000000000000000000000000000',
+          sellerName: t.seller?.full_name || 'Seller',
+          sellerWallet: t.seller_wallet_address || '0x0000000000000000000000000000000000000000',
+          amount: Number(t.purchase_price) || 0,
+          currency: 'USD',
+          status: t.status,
+          type: 'Sale',
+          escrowStatus: t.status === 'COMPLETED' ? 'Settled' : 'In Escrow',
+          initiatedAt: t.created_at || new Date().toISOString(),
+        }))
+        setTransactions(liveTxns)
+      }
+    } catch (err) {
+      console.error('Error loading live transactions:', err)
+    }
   }, [])
+
+  useEffect(() => {
+    loadData()
+  }, [loadData])
 
   const {
     register,
@@ -75,12 +98,22 @@ export const TransactionsPage: React.FC = () => {
     },
   })
 
-  const onSubmitInitiate = (data: InitiateTransactionFormData) => {
-    const selectedProp = properties.find((p) => p.id === data.propertyId || p.propertyId === data.propertyId)
-    const newTxn = createTransactionRecord(data, selectedProp)
-    setTransactions([newTxn, ...transactions])
-    reset()
-    setIsModalOpen(false)
+  const onSubmitInitiate = async (data: InitiateTransactionFormData) => {
+    try {
+      await apiClient.post('/transactions', {
+        property_id: data.propertyId,
+        purchase_price: data.amount,
+      })
+      await loadData()
+      reset()
+      setIsModalOpen(false)
+    } catch (err: any) {
+      const selectedProp = properties.find((p) => p.id === data.propertyId || p.propertyId === data.propertyId)
+      const newTxn = createTransactionRecord(data, selectedProp)
+      setTransactions((prev) => [newTxn, ...prev])
+      reset()
+      setIsModalOpen(false)
+    }
   }
 
   const filteredTransactions = transactions.filter(
@@ -120,61 +153,68 @@ export const TransactionsPage: React.FC = () => {
 
       {/* Transactions Table */}
       <div className="bg-white rounded-xl border border-slate-200/80 shadow-xs overflow-hidden">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Tx ID</TableHead>
-              <TableHead>Property Reference</TableHead>
-              <TableHead>Buyer & Seller</TableHead>
-              <TableHead>Settlement Amount</TableHead>
-              <TableHead>Escrow State</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="text-right">Inspection</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filteredTransactions.map((txn) => (
-              <TableRow key={txn.id}>
-                <TableCell className="font-mono text-xs font-semibold text-slate-900">
-                  {txn.transactionId}
-                </TableCell>
-                <TableCell>
-                  <p className="font-semibold text-slate-900">{txn.propertyTitle}</p>
-                  <span className="font-mono text-[11px] text-slate-400">{txn.propertyId}</span>
-                </TableCell>
-                <TableCell>
-                  <p className="text-xs font-medium text-slate-800">
-                    <span className="text-slate-400">Buyer:</span> {txn.buyerName}
-                  </p>
-                  <p className="text-xs font-medium text-slate-600">
-                    <span className="text-slate-400">Seller:</span> {txn.sellerName}
-                  </p>
-                </TableCell>
-                <TableCell className="font-bold text-slate-900">
-                  {formatCurrency(txn.amount)}
-                </TableCell>
-                <TableCell>
-                  <span className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium bg-slate-100 text-slate-700">
-                    {txn.escrowStatus}
-                  </span>
-                </TableCell>
-                <TableCell>
-                  <StatusBadge status={txn.status} />
-                </TableCell>
-                <TableCell className="text-right">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setSelectedTxn(txn)}
-                    leftIcon={<Eye className="h-3 w-3" />}
-                  >
-                    View
-                  </Button>
-                </TableCell>
+        {filteredTransactions.length === 0 ? (
+          <div className="py-16 text-center text-xs text-slate-400">
+            <p className="text-sm font-medium text-slate-700">No transactions found</p>
+            <p className="mt-1">Click &quot;Initiate Escrow&quot; to begin a new real estate purchase agreement.</p>
+          </div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Tx ID</TableHead>
+                <TableHead>Property Reference</TableHead>
+                <TableHead>Buyer & Seller</TableHead>
+                <TableHead>Settlement Amount</TableHead>
+                <TableHead>Escrow State</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Inspection</TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {filteredTransactions.map((txn) => (
+                <TableRow key={txn.id}>
+                  <TableCell className="font-mono text-xs font-semibold text-slate-900">
+                    {txn.transactionId}
+                  </TableCell>
+                  <TableCell>
+                    <p className="font-semibold text-slate-900">{txn.propertyTitle}</p>
+                    <span className="font-mono text-[11px] text-slate-400">{txn.propertyId}</span>
+                  </TableCell>
+                  <TableCell>
+                    <p className="text-xs font-medium text-slate-800">
+                      <span className="text-slate-400">Buyer:</span> {txn.buyerName}
+                    </p>
+                    <p className="text-xs font-medium text-slate-600">
+                      <span className="text-slate-400">Seller:</span> {txn.sellerName}
+                    </p>
+                  </TableCell>
+                  <TableCell className="font-bold text-slate-900">
+                    {formatCurrency(txn.amount)}
+                  </TableCell>
+                  <TableCell>
+                    <span className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium bg-slate-100 text-slate-700">
+                      {txn.escrowStatus}
+                    </span>
+                  </TableCell>
+                  <TableCell>
+                    <StatusBadge status={txn.status} />
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setSelectedTxn(txn)}
+                      leftIcon={<Eye className="h-3 w-3" />}
+                    >
+                      Audit
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
       </div>
 
       {/* Initiate Transaction Modal */}
@@ -196,15 +236,15 @@ export const TransactionsPage: React.FC = () => {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Input
-              label="Buyer Full Legal Name"
-              placeholder="e.g. Sterling Global Asset Management"
+              label="Buyer Legal Name"
+              placeholder="e.g. Elena Rostova"
               required
               error={errors.buyerName?.message}
               {...register('buyerName')}
             />
             <Input
-              label="Buyer Ethereum Wallet"
-              placeholder="0x1C4a98D224b178F31E83a9B167DeC39b2F082731"
+              label="Buyer Ethereum Wallet (0x...)"
+              placeholder="0x91F5cE36E9...234"
               required
               error={errors.buyerWallet?.message}
               {...register('buyerWallet')}
@@ -213,15 +253,15 @@ export const TransactionsPage: React.FC = () => {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Input
-              label="Seller Full Legal Name"
+              label="Seller Legal Entity"
               placeholder="e.g. Apex Real Estate Holdings LLC"
               required
               error={errors.sellerName?.message}
               {...register('sellerName')}
             />
             <Input
-              label="Seller Ethereum Wallet"
-              placeholder="0x3A9E8b6e3f4211516eB70b138F9B6eFe715697F3"
+              label="Seller Ethereum Wallet (0x...)"
+              placeholder="0x3A9E8b6e...7F3"
               required
               error={errors.sellerWallet?.message}
               {...register('sellerWallet')}
@@ -231,7 +271,7 @@ export const TransactionsPage: React.FC = () => {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Input
               type="number"
-              label="Consideration Amount"
+              label="Agreed Purchase Price ($ USD)"
               placeholder="12500000"
               required
               error={errors.amount?.message}
@@ -239,93 +279,64 @@ export const TransactionsPage: React.FC = () => {
             />
             <Select
               label="Settlement Currency"
-              options={['USD', 'ETH', 'USDC']}
+              options={['USD', 'USDC', 'ETH']}
               required
               error={errors.currency?.message}
               {...register('currency')}
             />
           </div>
 
-          <Input
-            label="Escrow Release Conditions"
-            placeholder="e.g. Title deed release upon 100% stablecoin deposit and notarized survey acceptance."
-            required
-            error={errors.escrowReleaseConditions?.message}
-            {...register('escrowReleaseConditions')}
-          />
-
           <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
             <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)}>
               Cancel
             </Button>
             <Button type="submit" isLoading={isSubmitting}>
-              Deploy Settlement Lock
+              Establish Escrow Contract
             </Button>
           </div>
         </form>
       </Modal>
 
-      {/* Transaction Detail View Modal */}
+      {/* Audit Detail Modal */}
       {selectedTxn && (
         <Modal
           isOpen={!!selectedTxn}
           onClose={() => setSelectedTxn(null)}
-          title={`Escrow Settlement Record: ${selectedTxn.transactionId}`}
+          title={`Escrow Audit: ${selectedTxn.transactionId}`}
           description={`Initiated on ${formatDate(selectedTxn.initiatedAt)}`}
-          maxWidth="lg"
+          maxWidth="md"
         >
           <div className="space-y-4 text-xs">
-            <div className="p-4 rounded-lg bg-slate-50 border border-slate-200/80 space-y-2">
+            <div className="p-3 bg-slate-50 rounded-lg space-y-2 border border-slate-100">
               <div className="flex justify-between">
-                <span className="text-slate-500">Property Title</span>
-                <span className="font-bold text-slate-900">{selectedTxn.propertyTitle}</span>
+                <span className="text-slate-400">Target Parcel:</span>
+                <span className="font-semibold text-slate-800">{selectedTxn.propertyTitle}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-500">Parcel Token ID</span>
-                <span className="font-mono text-slate-800">{selectedTxn.propertyId}</span>
+                <span className="text-slate-400">Escrow Value:</span>
+                <span className="font-bold text-slate-900">{formatCurrency(selectedTxn.amount)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-500">Total Purchase Consideration</span>
-                <span className="font-bold text-slate-900 text-sm">
-                  {formatCurrency(selectedTxn.amount)} {selectedTxn.currency}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">Escrow Contract Status</span>
-                <StatusBadge status={selectedTxn.status} />
+                <span className="text-slate-400">Current Phase:</span>
+                <span className="font-medium text-blue-600">{selectedTxn.escrowStatus}</span>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="p-3 rounded-lg border border-slate-200">
-                <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px] block">
-                  Purchaser / Buyer
-                </span>
-                <p className="font-semibold text-slate-900 mt-1">{selectedTxn.buyerName}</p>
-                <p className="font-mono text-[11px] text-slate-500 truncate mt-0.5">
-                  {selectedTxn.buyerWallet}
-                </p>
+            <div className="p-3 bg-slate-900 text-white rounded-lg font-mono text-[11px] space-y-2">
+              <p className="text-slate-400">Escrow Contract Parties:</p>
+              <div>
+                <span className="text-slate-500 block text-[10px]">BUYER WALLET:</span>
+                <span className="break-all">{selectedTxn.buyerWallet}</span>
               </div>
-              <div className="p-3 rounded-lg border border-slate-200">
-                <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px] block">
-                  Vendor / Seller
-                </span>
-                <p className="font-semibold text-slate-900 mt-1">{selectedTxn.sellerName}</p>
-                <p className="font-mono text-[11px] text-slate-500 truncate mt-0.5">
-                  {selectedTxn.sellerWallet}
-                </p>
+              <div>
+                <span className="text-slate-500 block text-[10px]">SELLER WALLET:</span>
+                <span className="break-all">{selectedTxn.sellerWallet}</span>
               </div>
-            </div>
-
-            <div className="p-3 rounded-lg bg-slate-900 text-white font-mono text-[11px] space-y-1">
-              <p className="text-slate-400">Consensus Anchor:</p>
-              <p>Tx Hash: {selectedTxn.blockchainTxHash || 'Awaiting initial block inclusion'}</p>
-              <p>Block Height: {selectedTxn.blockNumber || 'Pending'}</p>
             </div>
 
             <div className="flex justify-end pt-2">
-              <Button variant="outline" onClick={() => setSelectedTxn(null)}>
-                Close
+              <Button size="sm" onClick={() => setSelectedTxn(null)}>
+                Close Audit View
               </Button>
             </div>
           </div>
@@ -334,3 +345,4 @@ export const TransactionsPage: React.FC = () => {
     </div>
   )
 }
+export default TransactionsPage

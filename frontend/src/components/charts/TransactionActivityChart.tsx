@@ -8,14 +8,34 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts'
-import { MOCK_TRANSACTION_ACTIVITY } from '@/mock-data/metrics'
 
-export const TransactionActivityChart: React.FC = () => {
+interface ActivityItem {
+  month: string
+  volumeUSD: number
+  count: number
+}
+
+interface TransactionActivityChartProps {
+  data?: ActivityItem[]
+}
+
+const DEFAULT_ACTIVITY: ActivityItem[] = [
+  { month: 'Jun', volumeUSD: 0, count: 0 },
+  { month: 'Jul', volumeUSD: 0, count: 0 },
+  { month: 'Aug', volumeUSD: 0, count: 0 },
+  { month: 'Sep', volumeUSD: 0, count: 0 },
+  { month: 'Oct', volumeUSD: 0, count: 0 },
+  { month: 'Nov', volumeUSD: 0, count: 0 },
+]
+
+export const TransactionActivityChart: React.FC<TransactionActivityChartProps> = ({ data }) => {
+  const chartData = data && data.length > 0 ? data : DEFAULT_ACTIVITY
+
   return (
     <div className="h-64 w-full">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart
-          data={MOCK_TRANSACTION_ACTIVITY}
+          data={chartData}
           margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
         >
           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
@@ -43,3 +63,4 @@ export const TransactionActivityChart: React.FC = () => {
   )
 }
 
+export default TransactionActivityChart
