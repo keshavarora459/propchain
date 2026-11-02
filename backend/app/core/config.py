@@ -60,10 +60,10 @@ class Settings(BaseSettings):
     DATABASE_POOL_RECYCLE: int = Field(default=1800, ge=60, description="Recycle connections after N seconds")
 
     # MongoDB Atlas Configuration
-    MONGODB_USERNAME: str = Field(default="", description="MongoDB Atlas username")
-    MONGODB_PASSWORD: str = Field(default="", description="MongoDB Atlas password")
+    MONGODB_USERNAME: str = Field(default="keshavarora459_db_user", description="MongoDB Atlas username")
+    MONGODB_PASSWORD: str = Field(default="lpIaurNyXgFmlQmP", description="MongoDB Atlas password")
     MONGODB_URI: str = Field(
-        default="",
+        default="mongodb+srv://keshavarora459_db_user:lpIaurNyXgFmlQmP@cluster0.9egz68d.mongodb.net/?retryWrites=true&w=majority",
         description="MongoDB connection URI",
     )
     MONGODB_DB_NAME: str = Field(default="propchain", description="MongoDB database name")

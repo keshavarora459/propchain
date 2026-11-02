@@ -72,17 +72,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 except Exception as seed_exc:
                     logger.warning("Could not auto-seed demo accounts: %s", seed_exc)
 
-        # Fallback safeguard: Ensure core properties exist so dashboard always has data
-        from app.models.property import Property
-        with session_factory() as session:
-            if session.query(Property).count() == 0:
-                logger.info("Provisioning core demo properties...")
-                try:
-                    from scripts.seed_demo_properties import seed_demo_properties
-                    seed_demo_properties()
-                except Exception as prop_exc:
-                    logger.warning("Could not auto-seed demo properties: %s", prop_exc)
-
         # Setup real-time MongoDB Atlas replication for all mutations
         setup_sqlalchemy_mongo_listener()
 
