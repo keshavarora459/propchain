@@ -68,10 +68,11 @@ def setup_middleware(app: FastAPI) -> None:
     # Correlation ID & Timing Middleware
     app.add_middleware(RequestTrackingMiddleware)
 
-    # CORS Middleware with strict origin control
+    # CORS Middleware with origin control and cloud domain regex
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
+        allow_origin_regex=r"^https://.*(\.onrender\.com|\.vercel\.app)$",
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=[
