@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   Menu,
   Bell,
@@ -8,6 +8,10 @@ import {
   ChevronDown,
   LogOut,
   Shield,
+  AlertCircle,
+  ExternalLink,
+  X,
+  CheckCircle2,
 } from 'lucide-react'
 import { useUI } from '@/hooks/useUI'
 import { useAuth } from '@/hooks/useAuth'
@@ -24,16 +28,58 @@ export const Header: React.FC = () => {
   const { user, logout } = useAuth()
   const {
     account,
+    chainId,
     isConnected,
     isConnecting,
     isVerified,
+    error,
+    clearError,
     connectWallet,
     disconnectWallet,
+    switchNetwork,
     linkWalletWithBackend,
   } = useWallet()
 
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
+  const [isVerifying, setIsVerifying] = useState(false)
+  const [verifySuccess, setVerifySuccess] = useState(false)
+
+  const targetChainId = Number(import.meta.env.VITE_BLOCKCHAIN_CHAIN_ID || 31337)
+
+  // Auto-hide error banner after 6 seconds
+  useEffect(() => {
+    if (!error) return
+    const timer = setTimeout(() => {
+      clearError()
+    }, 6000)
+    return () => clearTimeout(timer)
+  }, [error, clearError])
+
+  const handleConnect = async () => {
+    clearError()
+    await connectWallet()
+  }
+
+  const handleVerify = async () => {
+    clearError()
+    setIsVerifying(true)
+    const success = await linkWalletWithBackend()
+    setIsVerifying(false)
+    if (success) {
+      setVerifySuccess(true)
+      const timer = setTimeout(() => {
+        setVerifySuccess(false)
+      }, 5000)
+      return () => clearTimeout(timer)
+    }
+  }
+
+  const isNotDetected = error && (
+    error.toLowerCase().includes('not detected') ||
+    error.toLowerCase().includes('install metamask') ||
+    (typeof window !== 'undefined' && !window.ethereum)
+  )
 
   const initials = user?.full_name
     ? user.full_name
@@ -68,43 +114,111 @@ export const Header: React.FC = () => {
 
       {/* Right side: Wallet, Notifications, Profile */}
       <div className="flex items-center gap-2.5 sm:gap-4">
-        {/* Web3 Wallet Connection (Milestone 3 Live MetaMask) */}
-        {isConnected && account ? (
-          <div className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs">
-            <span className={`h-2 w-2 rounded-full ${isVerified ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'}`} />
-            <span className="font-mono font-medium text-slate-700">
-              {truncateHash(account, 6, 4)}
-            </span>
-            {!isVerified && (
+        {/* Web3 Wallet Connection (MetaMask) */}
+        <div className="relative">
+          {isConnected && account ? (
+            <div className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs">
+              <span
+                className={`h-2 w-2 rounded-full ${
+                  isVerified ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'
+                }`}
+                title={isVerified ? 'Wallet Verified' : 'Wallet Unverified'}
+              />
+              <span className="font-mono font-medium text-slate-700">
+                {truncateHash(account, 6, 4)}
+              </span>
+
+              {chainId && chainId !== targetChainId && (
+                <button
+                  onClick={() => switchNetwork(targetChainId)}
+                  className="ml-1 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800 hover:bg-amber-200 transition-colors cursor-pointer"
+                  title={`Switch to network ${targetChainId}`}
+                >
+                  Switch Net
+                </button>
+              )}
+
+              {!isVerified && (
+                <button
+                  onClick={handleVerify}
+                  disabled={isVerifying}
+                  className="ml-1 text-[11px] font-semibold text-blue-600 hover:underline cursor-pointer disabled:opacity-50"
+                  title="Sign Challenge to Link Wallet with PropChain Account"
+                >
+                  {isVerifying ? 'Signing...' : 'Verify'}
+                </button>
+              )}
+
               <button
-                onClick={() => linkWalletWithBackend()}
-                className="ml-1 text-[11px] font-semibold text-blue-600 hover:underline cursor-pointer"
-                title="Sign Challenge to Link Wallet with PropChain Account"
+                onClick={disconnectWallet}
+                className="ml-1 text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
+                title="Disconnect Wallet"
               >
-                Verify
+                <LogOut className="h-3.5 w-3.5" />
               </button>
-            )}
-            <button
-              onClick={disconnectWallet}
-              className="ml-1 text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
-              title="Disconnect Wallet"
+            </div>
+          ) : (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleConnect}
+              isLoading={isConnecting}
+              leftIcon={<Wallet className="h-3.5 w-3.5 text-blue-600" />}
+              className="text-xs"
             >
-              <LogOut className="h-3.5 w-3.5" />
-            </button>
-          </div>
-        ) : (
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => connectWallet()}
-            isLoading={isConnecting}
-            leftIcon={<Wallet className="h-3.5 w-3.5 text-blue-600" />}
-            className="text-xs"
-          >
-            <span className="hidden sm:inline">Connect Wallet</span>
-            <span className="sm:hidden">Connect</span>
-          </Button>
-        )}
+              <span className="hidden sm:inline">Connect Wallet</span>
+              <span className="sm:hidden">Connect</span>
+            </Button>
+          )}
+
+          {/* Visible Error Tooltip / Banner */}
+          {error && (
+            <div className="absolute right-0 top-full mt-2 w-72 sm:w-80 rounded-xl border border-rose-200 bg-rose-50/95 p-3 shadow-xl backdrop-blur-sm z-50 text-xs">
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="h-4 w-4 text-rose-600 shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <p className="font-medium text-rose-800 leading-snug">{error}</p>
+                    {isNotDetected && (
+                      <a
+                        href="https://metamask.io/download/"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 font-semibold text-rose-700 underline hover:text-rose-900 transition-colors pt-0.5"
+                      >
+                        <span>Install MetaMask</span>
+                        <ExternalLink className="h-3 w-3" />
+                      </a>
+                    )}
+                  </div>
+                </div>
+                <button
+                  onClick={clearError}
+                  className="rounded p-0.5 text-rose-400 hover:bg-rose-100 hover:text-rose-700 transition-colors cursor-pointer"
+                  aria-label="Dismiss error"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Verification Success Toast */}
+          {verifySuccess && (
+            <div className="absolute right-0 top-full mt-2 w-72 rounded-xl border border-emerald-200 bg-emerald-50/95 p-2.5 shadow-xl backdrop-blur-sm z-50 text-xs text-emerald-900 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                <span className="font-medium">Wallet verified and linked!</span>
+              </div>
+              <button
+                onClick={() => setVerifySuccess(false)}
+                className="text-emerald-500 hover:text-emerald-800 cursor-pointer"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
+        </div>
 
         {/* Notifications Dropdown */}
         <div className="relative">

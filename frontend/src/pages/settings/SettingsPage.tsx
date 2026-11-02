@@ -7,10 +7,10 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { Input } from '@/components/ui/Input'
 import { Button } from '@/components/ui/Button'
 import { userSettingsSchema, type UserSettingsFormData } from '@/schemas/settingsSchema'
-import { useUI } from '@/hooks/useUI'
+import { useWallet } from '@/context/WalletContext'
 
 export const SettingsPage: React.FC = () => {
-  const { walletAddress } = useUI()
+  const { account } = useWallet()
   const [saveSuccess, setSaveSuccess] = useState(false)
 
   const {
@@ -23,7 +23,7 @@ export const SettingsPage: React.FC = () => {
       fullName: 'Alexander Drake',
       email: 'alex.drake@propchain.network',
       organization: 'Department of Real Estate & Cryptographic Land Registry',
-      preferredWallet: walletAddress || '0x3A9E8b6e3f4211516eB70b138F9B6eFe715697F3',
+      preferredWallet: account || '0x3A9E8b6e3f4211516eB70b138F9B6eFe715697F3',
       notifyOnTransactions: true,
       notifyOnFraudAlerts: true,
       notifyOnApprovals: true,

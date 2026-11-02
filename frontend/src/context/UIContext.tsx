@@ -6,8 +6,6 @@ export const UIProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     return localStorage.getItem('propchain_sidebar_collapsed') === 'true'
   })
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState<boolean>(false)
-  const [walletConnected, setWalletConnected] = useState<boolean>(false)
-  const [walletAddress, setWalletAddress] = useState<string | null>(null)
   const [notificationsCount, setNotificationsCount] = useState<number>(5)
 
   useEffect(() => {
@@ -15,17 +13,6 @@ export const UIProvider: React.FC<{ children: React.ReactNode }> = ({ children }
   }, [sidebarCollapsed])
 
   const toggleSidebar = () => setSidebarCollapsed((prev) => !prev)
-
-  const connectWallet = () => {
-    setWalletConnected(true)
-    setWalletAddress('0x3A9E8b6e3f4211516eB70b138F9B6eFe715697F3')
-  }
-
-  const disconnectWallet = () => {
-    setWalletConnected(false)
-    setWalletAddress(null)
-  }
-
   const clearNotifications = () => setNotificationsCount(0)
 
   return (
@@ -35,10 +22,6 @@ export const UIProvider: React.FC<{ children: React.ReactNode }> = ({ children }
         toggleSidebar,
         mobileSidebarOpen,
         setMobileSidebarOpen,
-        walletConnected,
-        walletAddress,
-        connectWallet,
-        disconnectWallet,
         notificationsCount,
         clearNotifications,
       }}
