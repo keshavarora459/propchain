@@ -14,9 +14,7 @@ export const propertyRegistrationSchema = z.object({
   areaUnit: z.enum(['sq ft', 'acres', 'sq m']),
   valuation: z.number().positive('Valuation must be a positive number'),
   ownerName: z.string().min(2, 'Owner full name is required'),
-  ownerWallet: z
-    .string()
-    .regex(/^0x[a-fA-F0-9]{40}$/, 'Must be a valid 42-character Ethereum address (0x...)'),
+  ownerWallet: z.string().optional(),
   registrationReference: z
     .string()
     .min(4, 'Official registry reference number is required'),

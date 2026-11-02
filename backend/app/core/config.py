@@ -59,6 +59,15 @@ class Settings(BaseSettings):
     DATABASE_POOL_TIMEOUT: int = Field(default=30, ge=1, le=120, description="Connection pool timeout in seconds")
     DATABASE_POOL_RECYCLE: int = Field(default=1800, ge=60, description="Recycle connections after N seconds")
 
+    # MongoDB Atlas Configuration
+    MONGODB_USERNAME: str = Field(default="", description="MongoDB Atlas username")
+    MONGODB_PASSWORD: str = Field(default="", description="MongoDB Atlas password")
+    MONGODB_URI: str = Field(
+        default="",
+        description="MongoDB connection URI",
+    )
+    MONGODB_DB_NAME: str = Field(default="propchain", description="MongoDB database name")
+
     # Logging infrastructure
     LOG_LEVEL: str = Field(default="INFO", description="Log level: DEBUG, INFO, WARNING, ERROR, CRITICAL")
     LOG_DIR: str = Field(default="logs", description="Directory to store rotating log files")

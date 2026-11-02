@@ -196,24 +196,15 @@ export const RegisterPropertyModal: React.FC<RegisterPropertyModalProps> = ({
 
         <div className="border-t border-slate-100 pt-3">
           <h4 className="text-xs font-semibold text-slate-800 uppercase tracking-wider mb-2">
-            Owner & Wallet Authentication
+            Owner Information
           </h4>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Input
-              label="Primary Owner Legal Entity"
-              placeholder="e.g. Apex Real Estate Holdings LLC"
-              required
-              error={errors.ownerName?.message}
-              {...register('ownerName')}
-            />
-            <Input
-              label="Owner Ethereum Wallet (0x...)"
-              placeholder="0x3A9E8b6e3f4211516eB70b138F9B6eFe715697F3"
-              required
-              error={errors.ownerWallet?.message}
-              {...register('ownerWallet')}
-            />
-          </div>
+          <Input
+            label="Primary Owner Legal Entity"
+            placeholder="e.g. Apex Real Estate Holdings LLC"
+            required
+            error={errors.ownerName?.message}
+            {...register('ownerName')}
+          />
         </div>
 
         <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">

@@ -9,10 +9,16 @@ from fastapi import FastAPI, status
 
 from app.api.v1.router import api_v1_router
 from app.core.config import get_settings
-from app.core.database import check_database_connection, close_database_engine
+from app.core.database import check_database_connection, close_database_engine, get_session_factory
 from app.core.exceptions import register_exception_handlers
 from app.core.logging import get_logger, setup_logging
 from app.core.middleware import setup_middleware
+from app.core.mongo import (
+    check_mongo_connection,
+    close_mongo_client,
+    setup_sqlalchemy_mongo_listener,
+    sync_all_to_mongo,
+)
 
 # Initialize logging infrastructure before application startup
 setup_logging()
@@ -34,10 +40,26 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         else:
             logger.warning("Initial database connection check: %s (Will retry on requests)", msg)
 
+        # Setup real-time MongoDB Atlas replication
+        setup_sqlalchemy_mongo_listener()
+        mongo_ok, mongo_msg, mongo_stats = check_mongo_connection()
+        if mongo_ok:
+            logger.info("MongoDB Atlas: %s", mongo_msg)
+            try:
+                session_factory = get_session_factory()
+                with session_factory() as session:
+                    sync_res = sync_all_to_mongo(session)
+                    logger.info("MongoDB Initial Sync Complete: %s", sync_res)
+            except Exception as exc:
+                logger.warning("Initial MongoDB sync notice: %s", exc)
+        else:
+            logger.warning("MongoDB Atlas connection check: %s", mongo_msg)
+
     yield
 
     logger.info("Shutting down %s...", settings.APP_NAME)
     close_database_engine()
+    close_mongo_client()
     logger.info("Application shutdown complete.")
 
 

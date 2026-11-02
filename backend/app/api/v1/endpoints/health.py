@@ -66,3 +66,28 @@ async def get_database_health(response: Response) -> DatabaseHealthResponse:
         details=details,
     )
 
+
+@router.get(
+    "/mongodb",
+    summary="MongoDB Atlas Connectivity Probe",
+    description="Inspects real-time connection status and document counts in MongoDB Atlas.",
+)
+async def get_mongodb_health(response: Response):
+    from app.core.mongo import check_mongo_connection
+
+    is_connected, message, details = check_mongo_connection()
+    if not is_connected:
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+        return {
+            "status": "unhealthy",
+            "mongodb": "disconnected",
+            "message": message,
+        }
+
+    return {
+        "status": "healthy",
+        "mongodb": "connected",
+        "message": message,
+        "details": details,
+    }
+

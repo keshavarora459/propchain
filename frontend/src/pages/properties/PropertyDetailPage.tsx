@@ -14,7 +14,7 @@ import { PageHeader } from '@/components/common/PageHeader'
 import { StatusBadge } from '@/components/common/StatusBadge'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
-import { formatCurrency, formatDate } from '@/lib/utils'
+import { formatCurrency, formatDate, truncateHash } from '@/lib/utils'
 import { propertyService } from '@/services/propertyService'
 import type { Property } from '@/types/property'
 import apiClient from '@/lib/axios'
@@ -23,6 +23,7 @@ export const PropertyDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>()
 
   const [property, setProperty] = useState<Property | null>(null)
+  const [documents, setDocuments] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isVerifying, setIsVerifying] = useState(false)
   const [conveyanceCount, setConveyanceCount] = useState<number>(1)
@@ -44,11 +45,25 @@ export const PropertyDetailPage: React.FC = () => {
         setIsLoading(false)
       })
 
+    // Fetch attached documents for this property
+    apiClient
+      .get<any[]>(`/properties/${id}/documents`)
+      .then((res) => {
+        if (Array.isArray(res.data)) {
+          setDocuments(res.data)
+        }
+      })
+      .catch((err) => {
+        console.warn('Could not load property documents from backend:', err)
+      })
+
     // Fetch conveyance count if available
     apiClient
-      .get<{ items: any[] }>(`/ownership/properties/${id}/history`)
+      .get<any>(`/properties/${id}/ownership-history`)
       .then((res) => {
-        if (res.data && Array.isArray(res.data.items)) {
+        if (Array.isArray(res.data)) {
+          setConveyanceCount(Math.max(1, res.data.length))
+        } else if (res.data?.items && Array.isArray(res.data.items)) {
           setConveyanceCount(Math.max(1, res.data.items.length))
         }
       })
@@ -231,13 +246,51 @@ export const PropertyDetailPage: React.FC = () => {
               </Link>
             </CardHeader>
             <CardContent className="divide-y divide-slate-100 p-0">
-              <div className="p-8 text-center text-xs text-slate-400">
-                <FileText className="h-8 w-8 text-slate-300 mx-auto mb-2" />
-                <p className="font-medium text-slate-600">No Deeds Uploaded Yet</p>
-                <p className="mt-1">
-                  Upload deed surveys or conveyance certificates in the Verify Documents tab to anchor them to this parcel.
-                </p>
-              </div>
+              {documents.length === 0 ? (
+                <div className="p-8 text-center text-xs text-slate-400">
+                  <FileText className="h-8 w-8 text-slate-300 mx-auto mb-2" />
+                  <p className="font-medium text-slate-600">No Deeds Uploaded Yet</p>
+                  <p className="mt-1">
+                    Upload deed surveys or conveyance certificates in the Verify Documents tab to anchor them to this parcel.
+                  </p>
+                </div>
+              ) : (
+                documents.map((doc) => (
+                  <div key={doc.id} className="p-4 flex items-center justify-between hover:bg-slate-50 transition-colors">
+                    <div className="flex items-center gap-3">
+                      <div className="h-9 w-9 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center font-bold shrink-0">
+                        <FileText className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold text-slate-800">
+                          {doc.title || doc.original_filename || 'Property Deed Document'}
+                        </p>
+                        <p className="text-[11px] text-slate-400 font-mono mt-0.5">
+                          SHA256: {doc.document_hash ? truncateHash(doc.document_hash, 10, 8) : 'Verified on-chain'}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <StatusBadge
+                        status={
+                          doc.status === 'VERIFIED'
+                            ? 'Verified'
+                            : doc.status === 'REJECTED'
+                            ? 'Rejected'
+                            : 'Pending'
+                        }
+                      />
+                      <span className="text-xs font-mono text-slate-500">
+                        {doc.file_size
+                          ? doc.file_size > 1024 * 1024
+                            ? `${(doc.file_size / (1024 * 1024)).toFixed(1)} MB`
+                            : `${Math.round(doc.file_size / 1024)} KB`
+                          : 'PDF'}
+                      </span>
+                    </div>
+                  </div>
+                ))
+              )}
             </CardContent>
           </Card>
         </div>

@@ -68,6 +68,11 @@ def list_ownership_history(
     response_model=List[OwnershipEventResponse],
     summary="Get complete chronological ownership conveyance events for a specific property",
 )
+@router.get(
+    "/ownership/properties/{property_id}/history",
+    response_model=List[OwnershipEventResponse],
+    include_in_schema=False,
+)
 def get_property_ownership_history(
     property_id: uuid.UUID,
     current_user: User = Depends(get_current_user),
