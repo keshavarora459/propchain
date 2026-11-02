@@ -1,9 +1,9 @@
 # PropChain Backend Dependencies - Major Phase 1 Core Platform & Blockchain
 # Pinned/version-constrained for reproducibility and reliability
-fastapi==0.115.5
-uvicorn[standard]==0.32.1
-pydantic==2.10.3
-pydantic-settings>=2.6.1
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+pydantic>=2.9.0
+pydantic-settings>=2.6.0
 email-validator>=2.0.0
 sqlalchemy>=2.0.36
 alembic>=1.14.0
