@@ -98,8 +98,13 @@ apiClient.interceptors.response.use(
         processQueue(refreshErr, null)
         localStorage.removeItem('propchain_token')
         localStorage.removeItem('propchain_refresh_token')
-        if (window.location.pathname !== '/login' && window.location.pathname !== '/register') {
-          window.location.href = '/login'
+        const currentPath = window.location.hash || window.location.pathname
+        if (!currentPath.includes('/login') && !currentPath.includes('/register')) {
+          if (window.location.hash) {
+            window.location.hash = '#/login'
+          } else {
+            window.location.href = '/login'
+          }
         }
         return Promise.reject(refreshErr)
       } finally {
