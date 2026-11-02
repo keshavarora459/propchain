@@ -67,6 +67,20 @@ class TransactionApprovalResponse(BaseModel):
     rejection_reason: Optional[str] = None
     actioned_at: Optional[datetime] = None
     created_at: datetime
+    # Enriched transaction, parcel, and counterparty fields
+    transaction_number: Optional[str] = None
+    property_id: Optional[uuid.UUID] = None
+    property_number: Optional[str] = None
+    property_title: Optional[str] = None
+    buyer_id: Optional[uuid.UUID] = None
+    buyer_name: Optional[str] = None
+    buyer_email: Optional[str] = None
+    seller_id: Optional[uuid.UUID] = None
+    seller_name: Optional[str] = None
+    seller_email: Optional[str] = None
+    proposed_amount: Optional[Decimal] = None
+    currency: Optional[str] = None
+    transaction_status: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 

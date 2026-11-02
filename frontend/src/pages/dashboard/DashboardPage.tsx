@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import {
   Building2,
@@ -6,16 +6,20 @@ import {
   ArrowLeftRight,
   ShieldAlert,
   ArrowRight,
-  Cpu,
+  Eye,
+  XCircle,
+  CheckCircle2,
 } from 'lucide-react'
 import { PageHeader } from '@/components/common/PageHeader'
 import { StatCard } from '@/components/common/StatCard'
 import { StatusBadge } from '@/components/common/StatusBadge'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
+import { Button } from '@/components/ui/Button'
+import { Modal } from '@/components/ui/Modal'
 import { RegistrationTrendChart } from '@/components/charts/RegistrationTrendChart'
 import { TransactionActivityChart } from '@/components/charts/TransactionActivityChart'
-import { formatCurrency, truncateHash } from '@/lib/utils'
+import { formatCurrency, formatDate, truncateHash } from '@/lib/utils'
 import apiClient from '@/lib/axios'
 
 interface DashboardData {
@@ -27,6 +31,23 @@ interface DashboardData {
   completed_transactions: number
   pending_approvals: number
   fraud_alerts: number
+  pending_purchase_requests?: Array<{
+    id: string
+    transaction_number: string
+    property_id: string
+    property_number?: string
+    property_title: string
+    buyer_id: string
+    buyer_name: string
+    buyer_email?: string
+    seller_id: string
+    seller_name: string
+    purchase_price: number
+    proposed_amount?: number
+    currency?: string
+    status: string
+    created_at?: string
+  }>
   recent_transactions: Array<{
     id: string
     transaction_number: string
@@ -59,17 +80,71 @@ export const DashboardPage: React.FC = () => {
     completed_transactions: 0,
     pending_approvals: 0,
     fraud_alerts: 0,
+    pending_purchase_requests: [],
     recent_transactions: [],
   })
 
-  useEffect(() => {
-    apiClient
-      .get<DashboardData>('/analytics/dashboard')
-      .then((res) => {
-        if (res.data) setData(res.data)
-      })
-      .catch((err) => console.error('Failed to load live dashboard telemetry:', err))
+  const [selectedDetail, setSelectedDetail] = useState<any | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+  const [isProcessing, setIsProcessing] = useState(false)
+  const [rejectModalOpen, setRejectModalOpen] = useState(false)
+  const [rejectReason, setRejectReason] = useState('')
+  const [rejectTargetId, setRejectTargetId] = useState<string | null>(null)
+
+  const loadDashboard = useCallback(async () => {
+    try {
+      const res = await apiClient.get<DashboardData>('/analytics/dashboard')
+      if (res.data) setData(res.data)
+    } catch (err) {
+      console.error('Failed to load live dashboard telemetry:', err)
+    }
   }, [])
+
+  useEffect(() => {
+    loadDashboard()
+  }, [loadDashboard])
+
+  const handleAccept = async (id: string) => {
+    try {
+      setIsProcessing(true)
+      await apiClient.post(`/transactions/${id}/accept`)
+      setNotice('Buyer purchase offer accepted successfully! Transaction has moved to verification phase.')
+      setTimeout(() => setNotice(null), 5000)
+      if (selectedDetail?.id === id) setSelectedDetail(null)
+      await loadDashboard()
+    } catch (err: any) {
+      console.error('Error accepting offer:', err)
+      alert(err.response?.data?.detail || 'Failed to accept purchase offer')
+    } finally {
+      setIsProcessing(false)
+    }
+  }
+
+  const promptReject = (id: string) => {
+    setRejectTargetId(id)
+    setRejectReason('')
+    setRejectModalOpen(true)
+  }
+
+  const confirmReject = async () => {
+    if (!rejectTargetId) return
+    try {
+      setIsProcessing(true)
+      await apiClient.post(`/transactions/${rejectTargetId}/reject`, {
+        reason: rejectReason.trim() || 'Purchase terms declined by seller',
+      })
+      setNotice('Purchase offer rejected. Transaction status updated.')
+      setTimeout(() => setNotice(null), 5000)
+      setRejectModalOpen(false)
+      if (selectedDetail?.id === rejectTargetId) setSelectedDetail(null)
+      await loadDashboard()
+    } catch (err: any) {
+      console.error('Error rejecting offer:', err)
+      alert(err.response?.data?.detail || 'Failed to reject purchase offer')
+    } finally {
+      setIsProcessing(false)
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -86,6 +161,13 @@ export const DashboardPage: React.FC = () => {
         }
       />
 
+      {notice && (
+        <div className="flex items-center gap-3 p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-sm font-medium animate-fadeIn">
+          <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0" />
+          <span>{notice}</span>
+        </div>
+      )}
+
       {/* Live System Indicator Banner */}
       <div className="rounded-lg border border-blue-200 bg-blue-50/70 p-3.5 text-xs text-blue-900 flex items-center justify-between">
         <p>
@@ -95,6 +177,100 @@ export const DashboardPage: React.FC = () => {
           System Active
         </span>
       </div>
+
+      {/* Incoming Purchase Requests Section for Sellers */}
+      {data.pending_purchase_requests && data.pending_purchase_requests.length > 0 && (
+        <Card className="border-amber-300 bg-amber-50/40 shadow-sm overflow-hidden">
+          <CardHeader className="flex flex-row items-center justify-between pb-3 bg-amber-100/50 border-b border-amber-200">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="flex h-2.5 w-2.5 rounded-full bg-amber-600 animate-pulse" />
+                <CardTitle className="text-slate-900 font-bold text-base">Incoming Property Purchase Requests</CardTitle>
+              </div>
+              <CardDescription className="text-slate-600">
+                Buyers have initiated purchase proposals for your registered properties. Review and accept to begin decentralized escrow.
+              </CardDescription>
+            </div>
+            <Link
+              to="/approvals"
+              className="text-xs font-semibold text-blue-700 hover:text-blue-900 flex items-center gap-1"
+            >
+              Approvals Page <ArrowRight className="h-3 w-3" />
+            </Link>
+          </CardHeader>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Transaction ID</TableHead>
+                  <TableHead>Property</TableHead>
+                  <TableHead>Buyer</TableHead>
+                  <TableHead>Purchase Amount</TableHead>
+                  <TableHead>Request Date</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {data.pending_purchase_requests.map((req) => (
+                  <TableRow key={req.id} className="hover:bg-amber-50/80 transition-colors">
+                    <TableCell className="font-mono text-xs font-bold text-slate-900">
+                      {req.transaction_number}
+                    </TableCell>
+                    <TableCell>
+                      <p className="font-semibold text-slate-900">{req.property_title}</p>
+                      <span className="font-mono text-[11px] text-slate-400">{req.property_number || req.property_id}</span>
+                    </TableCell>
+                    <TableCell>
+                      <p className="font-medium text-slate-800 text-xs">{req.buyer_name}</p>
+                      {req.buyer_email && <span className="text-[11px] text-slate-400">{req.buyer_email}</span>}
+                    </TableCell>
+                    <TableCell className="font-bold text-emerald-700 text-sm">
+                      {formatCurrency(req.purchase_price)}
+                    </TableCell>
+                    <TableCell className="text-xs text-slate-500">
+                      {req.created_at ? formatDate(req.created_at) : 'Today'}
+                    </TableCell>
+                    <TableCell>
+                      <StatusBadge status="PENDING_SELLER_ACCEPTANCE" />
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setSelectedDetail(req)}
+                          leftIcon={<Eye className="h-3 w-3" />}
+                        >
+                          View
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="primary"
+                          onClick={() => handleAccept(req.id)}
+                          disabled={isProcessing}
+                          leftIcon={<CheckCircle className="h-3 w-3" />}
+                        >
+                          Accept
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="danger"
+                          onClick={() => promptReject(req.id)}
+                          disabled={isProcessing}
+                          leftIcon={<XCircle className="h-3 w-3" />}
+                        >
+                          Reject
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Key Metric Stat Cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -243,49 +419,100 @@ export const DashboardPage: React.FC = () => {
               )}
             </CardContent>
           </Card>
-
-          {/* Node Status Card */}
-          <Card>
-            <CardHeader className="pb-3">
-              <div className="flex items-center gap-2">
-                <Cpu className="h-4 w-4 text-blue-600" />
-                <CardTitle className="text-sm">Blockchain Network Status</CardTitle>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-2.5 text-xs">
-              <div className="flex justify-between py-1 border-b border-slate-100">
-                <span className="text-slate-500">Chain Protocol</span>
-                <span className="font-semibold text-slate-800">EVM Compatible</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-slate-100">
-                <span className="text-slate-500">Chain ID</span>
-                <span className="font-mono font-semibold text-slate-800">31337 (Localhost)</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-slate-100">
-                <span className="text-slate-500">RPC Endpoint</span>
-                <span className="font-mono text-slate-700">http://127.0.0.1:8545</span>
-              </div>
-              <div className="flex justify-between py-1">
-                <span className="text-slate-500">Network State</span>
-                <span className="font-semibold text-emerald-600 flex items-center gap-1">
-                  <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" /> Synchronized
-                </span>
-              </div>
-              <div className="pt-2 border-t border-slate-100">
-                <Link
-                  to="/blockchain-explorer"
-                  className="flex items-center justify-center gap-1.5 w-full rounded-md bg-blue-50 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-100 transition-colors"
-                >
-                  <Cpu className="h-3.5 w-3.5" />
-                  View Decentralized Ledger Explorer
-                  <ArrowRight className="h-3.5 w-3.5 ml-1" />
-                </Link>
-              </div>
-            </CardContent>
-          </Card>
         </div>
       </div>
+
+      {/* Review Request Modal */}
+      {selectedDetail && (
+        <Modal
+          isOpen={!!selectedDetail}
+          onClose={() => setSelectedDetail(null)}
+          title={`Purchase Offer: ${selectedDetail.transaction_number}`}
+          description={`Initiated by ${selectedDetail.buyer_name}`}
+          maxWidth="md"
+        >
+          <div className="space-y-4 text-xs">
+            <div className="p-3 bg-slate-50 rounded-lg space-y-2 border border-slate-100">
+              <div className="flex justify-between">
+                <span className="text-slate-500">Target Parcel:</span>
+                <span className="font-semibold text-slate-800">{selectedDetail.property_title}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Buyer:</span>
+                <span className="font-medium text-slate-800">{selectedDetail.buyer_name} ({selectedDetail.buyer_email || ''})</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Offered Purchase Price:</span>
+                <span className="font-bold text-emerald-700 text-sm">{formatCurrency(selectedDetail.purchase_price)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Status:</span>
+                <StatusBadge status={selectedDetail.status} />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+              <Button
+                size="sm"
+                variant="primary"
+                onClick={() => handleAccept(selectedDetail.id)}
+                disabled={isProcessing}
+                leftIcon={<CheckCircle className="h-3.5 w-3.5" />}
+              >
+                Accept Offer
+              </Button>
+              <Button
+                size="sm"
+                variant="danger"
+                onClick={() => promptReject(selectedDetail.id)}
+                disabled={isProcessing}
+                leftIcon={<XCircle className="h-3.5 w-3.5" />}
+              >
+                Reject Offer
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => setSelectedDetail(null)}>
+                Close
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Reject Modal */}
+      {rejectModalOpen && (
+        <Modal
+          isOpen={rejectModalOpen}
+          onClose={() => setRejectModalOpen(false)}
+          title="Reject Purchase Offer"
+          description="Provide a reason for declining this property purchase agreement proposal."
+          maxWidth="sm"
+        >
+          <div className="space-y-4 text-xs">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Decline Reason:
+              </label>
+              <textarea
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+                placeholder="e.g. Price offer below expectation, terms not agreed..."
+                className="w-full rounded-lg border border-slate-300 p-2 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-slate-900"
+                rows={3}
+              />
+            </div>
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+              <Button variant="outline" size="sm" onClick={() => setRejectModalOpen(false)}>
+                Cancel
+              </Button>
+              <Button variant="danger" size="sm" onClick={confirmReject} disabled={isProcessing}>
+                Confirm Rejection
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   )
 }
+
 export default DashboardPage

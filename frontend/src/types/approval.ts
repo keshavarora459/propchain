@@ -1,9 +1,17 @@
-export type ApprovalCategory = 'Property Registration' | 'Title Transfer' | 'Document Audit' | 'Encumbrance Clearance'
+export type ApprovalCategory =
+  | 'Property Registration'
+  | 'Title Transfer'
+  | 'Document Audit'
+  | 'Encumbrance Clearance'
+  | 'Seller Acceptance'
+  | 'Buyer Purchase Request'
+  | string
+
 export type ApprovalStatus = 'Pending' | 'Approved' | 'Rejected' | 'Under Investigation'
 
 export interface ApprovalRequest {
   id: string
-  approvalId: string // e.g. "APR-410"
+  approvalId: string
   category: ApprovalCategory
   propertyId: string
   propertyTitle: string
@@ -15,5 +23,13 @@ export interface ApprovalRequest {
   description: string
   decidedAt?: string
   decisionNotes?: string
+  // Linked transaction details
+  transactionId?: string
+  transactionNumber?: string
+  buyerName?: string
+  buyerEmail?: string
+  sellerName?: string
+  sellerEmail?: string
+  amount?: number
+  currency?: string
 }
-

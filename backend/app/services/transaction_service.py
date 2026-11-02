@@ -248,8 +248,12 @@ class TransactionService:
         if not txn:
             raise NotFoundError(f"Transaction with ID '{transaction_id}' not found.")
 
-        user_role = UserRole(current_user.role)
-        if user_role != UserRole.ADMIN and txn.seller_id != current_user.id:
+        user_role = UserRole(current_user.role) if isinstance(current_user.role, str) else current_user.role
+        is_seller = (
+            txn.seller_id == current_user.id
+            or (txn.property and (txn.property.current_owner_id == current_user.id or txn.property.creator_user_id == current_user.id))
+        )
+        if user_role != UserRole.ADMIN and not is_seller:
             raise ForbiddenError("Only the designated seller can accept this transaction.")
 
         if txn.status != "PENDING_SELLER_ACCEPTANCE":
@@ -277,8 +281,12 @@ class TransactionService:
         if not txn:
             raise NotFoundError(f"Transaction with ID '{transaction_id}' not found.")
 
-        user_role = UserRole(current_user.role)
-        if user_role != UserRole.ADMIN and txn.seller_id != current_user.id:
+        user_role = UserRole(current_user.role) if isinstance(current_user.role, str) else current_user.role
+        is_seller = (
+            txn.seller_id == current_user.id
+            or (txn.property and (txn.property.current_owner_id == current_user.id or txn.property.creator_user_id == current_user.id))
+        )
+        if user_role != UserRole.ADMIN and not is_seller:
             raise ForbiddenError("Only the designated seller can reject this transaction.")
 
         if txn.status != "PENDING_SELLER_ACCEPTANCE":

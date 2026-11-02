@@ -15,6 +15,36 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({ status, className }) =
   let label = status
 
   switch (status) {
+    // Transaction lifecycle
+    case 'PENDING_SELLER_ACCEPTANCE':
+      variant = 'warning'
+      label = 'Pending Seller Acceptance'
+      break
+    case 'PENDING_DOCUMENT_VERIFICATION':
+      variant = 'info'
+      label = 'Seller Accepted'
+      break
+    case 'PENDING_LEGAL_REGISTRATION':
+      variant = 'info'
+      label = 'Pending Legal Registration'
+      break
+    case 'PENDING_ESCROW_DEPOSIT':
+      variant = 'warning'
+      label = 'Awaiting Escrow Deposit'
+      break
+    case 'COMPLETED':
+      variant = 'success'
+      label = 'Completed'
+      break
+    case 'REJECTED':
+      variant = 'danger'
+      label = 'Seller Rejected'
+      break
+    case 'CANCELLED':
+      variant = 'danger'
+      label = 'Cancelled'
+      break
+
     // Verification & Approval
     case 'Verified':
     case 'Approved':
@@ -68,4 +98,3 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({ status, className }) =
     </Badge>
   )
 }
-

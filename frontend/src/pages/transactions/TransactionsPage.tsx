@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react'
-import { Plus, Search, Eye, CheckCircle2, ShieldCheck } from 'lucide-react'
+import { Plus, Search, Eye, CheckCircle2, ShieldCheck, CheckCircle, XCircle } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { PageHeader } from '@/components/common/PageHeader'
@@ -27,6 +27,10 @@ export const TransactionsPage: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [successNotice, setSuccessNotice] = useState<string | null>(null)
+  const [isProcessing, setIsProcessing] = useState(false)
+  const [rejectModalOpen, setRejectModalOpen] = useState(false)
+  const [rejectReason, setRejectReason] = useState('')
+  const [rejectTargetId, setRejectTargetId] = useState<string | null>(null)
 
   const loadData = useCallback(async () => {
     try {
@@ -40,22 +44,39 @@ export const TransactionsPage: React.FC = () => {
       }
 
       if (txnRes.status === 'fulfilled' && Array.isArray(txnRes.value.data)) {
-        const liveTxns: Transaction[] = txnRes.value.data.map((t) => ({
-          id: t.id,
-          transactionId: t.transaction_number || `TXN-${(t.id || '').slice(0, 6)}`,
-          propertyId: t.property?.property_number || t.property_number || t.property_id || 'PROP-PARCEL',
-          propertyTitle: t.property_title || t.property?.title || 'Real Estate Parcel',
-          buyerName: t.buyer_name || t.buyer?.full_name || 'Buyer',
-          buyerWallet: t.buyer_wallet_address || '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
-          sellerName: t.seller_name || t.seller?.full_name || 'Seller',
-          sellerWallet: t.seller_wallet_address || '0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC',
-          amount: Number(t.proposed_amount) || Number(t.purchase_price) || 0,
-          currency: t.currency || 'USD',
-          status: t.status || 'Pending',
-          type: t.transaction_type || 'Sale',
-          escrowStatus: t.status === 'COMPLETED' ? 'Settled' : 'In Escrow',
-          initiatedAt: t.created_at || new Date().toISOString(),
-        }))
+        const liveTxns: Transaction[] = txnRes.value.data.map((t) => {
+          let escrowStatusText = 'In Escrow'
+          if (t.status === 'COMPLETED') {
+            escrowStatusText = 'Settled'
+          } else if (t.status === 'REJECTED') {
+            escrowStatusText = 'Seller Rejected'
+          } else if (t.status === 'CANCELLED') {
+            escrowStatusText = 'Cancelled'
+          } else if (t.status === 'PENDING_SELLER_ACCEPTANCE') {
+            escrowStatusText = 'Awaiting Seller Acceptance'
+          } else if (t.status === 'PENDING_DOCUMENT_VERIFICATION') {
+            escrowStatusText = 'In Escrow (Offer Accepted)'
+          } else if (t.status === 'PENDING_LEGAL_REGISTRATION') {
+            escrowStatusText = 'In Escrow (Title Verified)'
+          }
+
+          return {
+            id: t.id,
+            transactionId: t.transaction_number || `TXN-${(t.id || '').slice(0, 6)}`,
+            propertyId: t.property?.property_number || t.property_number || t.property_id || 'PROP-PARCEL',
+            propertyTitle: t.property_title || t.property?.title || 'Real Estate Parcel',
+            buyerName: t.buyer_name || t.buyer?.full_name || 'Buyer',
+            buyerWallet: t.buyer_wallet_address || '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
+            sellerName: t.seller_name || t.seller?.full_name || 'Seller',
+            sellerWallet: t.seller_wallet_address || '0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC',
+            amount: Number(t.proposed_amount) || Number(t.purchase_price) || 0,
+            currency: t.currency || 'USD',
+            status: t.status || 'Pending',
+            type: t.transaction_type || 'Sale',
+            escrowStatus: escrowStatusText,
+            initiatedAt: t.created_at || new Date().toISOString(),
+          }
+        })
         setTransactions(liveTxns)
       }
     } catch (err) {
@@ -158,9 +179,9 @@ export const TransactionsPage: React.FC = () => {
       sellerWallet: sellerWallet,
       amount: Number(data.amount) || 0,
       currency: data.currency || 'USD',
-      status: 'Pending',
+      status: 'PENDING_SELLER_ACCEPTANCE',
       type: data.type || 'Sale',
-      escrowStatus: 'Awaiting Deposit',
+      escrowStatus: 'Awaiting Seller Acceptance',
       initiatedAt: new Date().toISOString(),
     }
 
@@ -169,7 +190,49 @@ export const TransactionsPage: React.FC = () => {
     setIsModalOpen(false)
     setSuccessNotice(`Escrow Contract ${newTxn.transactionId} established successfully!`)
     setTimeout(() => setSuccessNotice(null), 5000)
-    loadData()
+    await loadData()
+  }
+
+  const handleAcceptOffer = async (txnId: string) => {
+    try {
+      setIsProcessing(true)
+      await apiClient.post(`/transactions/${txnId}/accept`)
+      setSuccessNotice('Offer accepted! Transaction advanced to document verification.')
+      setTimeout(() => setSuccessNotice(null), 5000)
+      if (selectedTxn?.id === txnId) setSelectedTxn(null)
+      await loadData()
+    } catch (err: any) {
+      console.error('Failed to accept offer:', err)
+      alert(err.response?.data?.detail || 'Failed to accept purchase offer')
+    } finally {
+      setIsProcessing(false)
+    }
+  }
+
+  const promptRejectOffer = (txnId: string) => {
+    setRejectTargetId(txnId)
+    setRejectReason('')
+    setRejectModalOpen(true)
+  }
+
+  const confirmRejectOffer = async () => {
+    if (!rejectTargetId) return
+    try {
+      setIsProcessing(true)
+      await apiClient.post(`/transactions/${rejectTargetId}/reject`, {
+        reason: rejectReason.trim() || 'Purchase offer declined by seller',
+      })
+      setSuccessNotice('Offer rejected. Transaction status updated.')
+      setTimeout(() => setSuccessNotice(null), 5000)
+      setRejectModalOpen(false)
+      if (selectedTxn?.id === rejectTargetId) setSelectedTxn(null)
+      await loadData()
+    } catch (err: any) {
+      console.error('Failed to reject offer:', err)
+      alert(err.response?.data?.detail || 'Failed to reject purchase offer')
+    } finally {
+      setIsProcessing(false)
+    }
   }
 
   const filteredTransactions = transactions.filter(
@@ -231,7 +294,7 @@ export const TransactionsPage: React.FC = () => {
                 <TableHead>Settlement Amount</TableHead>
                 <TableHead>Escrow State</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead className="text-right">Inspection</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -264,14 +327,38 @@ export const TransactionsPage: React.FC = () => {
                     <StatusBadge status={txn.status} />
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setSelectedTxn(txn)}
-                      leftIcon={<Eye className="h-3 w-3" />}
-                    >
-                      Audit
-                    </Button>
+                    <div className="flex items-center justify-end gap-1.5">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setSelectedTxn(txn)}
+                        leftIcon={<Eye className="h-3 w-3" />}
+                      >
+                        Audit
+                      </Button>
+                      {txn.status === 'PENDING_SELLER_ACCEPTANCE' && (
+                        <>
+                          <Button
+                            size="sm"
+                            variant="primary"
+                            onClick={() => handleAcceptOffer(txn.id)}
+                            disabled={isProcessing}
+                            leftIcon={<CheckCircle className="h-3 w-3" />}
+                          >
+                            Accept
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="danger"
+                            onClick={() => promptRejectOffer(txn.id)}
+                            disabled={isProcessing}
+                            leftIcon={<XCircle className="h-3 w-3" />}
+                          >
+                            Reject
+                          </Button>
+                        </>
+                      )}
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
@@ -391,6 +478,10 @@ export const TransactionsPage: React.FC = () => {
                 <span className="text-slate-400">Current Phase:</span>
                 <span className="font-medium text-blue-600">{selectedTxn.escrowStatus}</span>
               </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Transaction Status:</span>
+                <StatusBadge status={selectedTxn.status} />
+              </div>
             </div>
 
             <div className="p-3 bg-slate-900 text-white rounded-lg font-mono text-[11px] space-y-2">
@@ -408,9 +499,67 @@ export const TransactionsPage: React.FC = () => {
               </div>
             </div>
 
-            <div className="flex justify-end pt-2">
-              <Button size="sm" onClick={() => setSelectedTxn(null)}>
+            <div className="flex justify-between items-center pt-2">
+              {selectedTxn.status === 'PENDING_SELLER_ACCEPTANCE' ? (
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="primary"
+                    onClick={() => handleAcceptOffer(selectedTxn.id)}
+                    disabled={isProcessing}
+                    leftIcon={<CheckCircle className="h-3 w-3" />}
+                  >
+                    Accept Offer
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="danger"
+                    onClick={() => promptRejectOffer(selectedTxn.id)}
+                    disabled={isProcessing}
+                    leftIcon={<XCircle className="h-3 w-3" />}
+                  >
+                    Reject Offer
+                  </Button>
+                </div>
+              ) : (
+                <div />
+              )}
+              <Button size="sm" variant="outline" onClick={() => setSelectedTxn(null)}>
                 Close Audit View
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Reject Modal */}
+      {rejectModalOpen && (
+        <Modal
+          isOpen={rejectModalOpen}
+          onClose={() => setRejectModalOpen(false)}
+          title="Reject Purchase Offer"
+          description="Provide a reason for declining this property purchase agreement proposal."
+          maxWidth="sm"
+        >
+          <div className="space-y-4 text-xs">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Decline Reason:
+              </label>
+              <textarea
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+                placeholder="e.g. Price offer below expectation, terms not agreed..."
+                className="w-full rounded-lg border border-slate-300 p-2 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-slate-900"
+                rows={3}
+              />
+            </div>
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+              <Button variant="outline" size="sm" onClick={() => setRejectModalOpen(false)}>
+                Cancel
+              </Button>
+              <Button variant="danger" size="sm" onClick={confirmRejectOffer} disabled={isProcessing}>
+                Confirm Rejection
               </Button>
             </div>
           </div>
