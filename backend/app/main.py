@@ -49,10 +49,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
         # Hydrate all records directly from MongoDB Atlas as the source of truth
         mongo_ok, mongo_msg, mongo_stats = check_mongo_connection()
+        session_factory = get_session_factory()
         if mongo_ok:
             logger.info("MongoDB Atlas: %s", mongo_msg)
             try:
-                session_factory = get_session_factory()
                 with session_factory() as session:
                     hydrate_res = hydrate_all_from_mongo(session)
                     logger.info("Hydrated from MongoDB Atlas: %s", hydrate_res)
@@ -60,6 +60,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 logger.warning("MongoDB hydration notice: %s", exc)
         else:
             logger.warning("MongoDB Atlas connection check: %s", mongo_msg)
+
+        # Fallback safeguard: Ensure core demo accounts exist so login always works
+        from app.models.user import User
+        with session_factory() as session:
+            if session.query(User).count() == 0:
+                logger.info("Provisioning core demo accounts...")
+                try:
+                    from scripts.seed_demo_users import seed_demo_users
+                    seed_demo_users()
+                except Exception as seed_exc:
+                    logger.warning("Could not auto-seed demo accounts: %s", seed_exc)
 
         # Setup real-time MongoDB Atlas replication for all mutations
         setup_sqlalchemy_mongo_listener()

@@ -60,6 +60,8 @@ def get_mongo_client() -> MongoClient:
             "connectTimeoutMS": 5000,
             "socketTimeoutMS": 10000,
             "maxPoolSize": 20,
+            "tls": True,
+            "tlsAllowInvalidCertificates": True,
         }
         if ca_file:
             client_kwargs["tlsCAFile"] = ca_file
