@@ -76,7 +76,6 @@ export const FraudDetectionPage: React.FC = () => {
 
   const criticalCount = alerts.filter((a) => a.riskLevel === 'Critical').length
   const mediumCount = alerts.filter((a) => a.riskLevel === 'Medium').length
-  const resolvedCount = alerts.filter((a) => a.status === 'Resolved').length
 
   const handleResolve = (id: string) => {
     setAlerts((prev) => prev.filter((a) => a.id !== id))

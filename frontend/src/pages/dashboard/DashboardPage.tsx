@@ -15,7 +15,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import { RegistrationTrendChart } from '@/components/charts/RegistrationTrendChart'
 import { TransactionActivityChart } from '@/components/charts/TransactionActivityChart'
-import { formatCurrency, truncateHash, formatDate } from '@/lib/utils'
+import { formatCurrency, truncateHash } from '@/lib/utils'
 import apiClient from '@/lib/axios'
 
 interface DashboardData {
@@ -60,9 +60,7 @@ export const DashboardPage: React.FC = () => {
     pending_approvals: 0,
     fraud_alerts: 0,
     recent_transactions: [],
-    recent_events: [],
   })
-  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     apiClient
@@ -71,7 +69,6 @@ export const DashboardPage: React.FC = () => {
         if (res.data) setData(res.data)
       })
       .catch((err) => console.error('Failed to load live dashboard telemetry:', err))
-      .finally(() => setLoading(false))
   }, [])
 
   return (
