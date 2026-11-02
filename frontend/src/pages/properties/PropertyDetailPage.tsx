@@ -16,6 +16,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { formatCurrency, formatDate, truncateHash } from '@/lib/utils'
 import { propertyService } from '@/services/propertyService'
+import { ownershipService } from '@/services/ownershipService'
 import type { Property } from '@/types/property'
 import apiClient from '@/lib/axios'
 
@@ -81,6 +82,15 @@ export const PropertyDetailPage: React.FC = () => {
         verification_status: 'VERIFIED',
       })
       setProperty(updated)
+      // Anchor on blockchain if not anchored yet
+      try {
+        const anchorRes = await ownershipService.anchorProperty(property.id)
+        if (anchorRes?.property_number) {
+          setProperty((prev) => prev ? { ...prev, blockchainPropertyId: anchorRes.property_number } : prev)
+        }
+      } catch (anchorErr) {
+        console.warn('Blockchain anchor call notice:', anchorErr)
+      }
     } catch (err) {
       console.error('Failed to verify property:', err)
     } finally {

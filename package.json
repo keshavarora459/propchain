@@ -1,0 +1,12 @@
+{
+  "name": "propchain-root",
+  "version": "1.0.0",
+  "private": true,
+  "description": "PropChain Root Workspace Scripts",
+  "scripts": {
+    "dev": "npm --prefix frontend run dev",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "dev:backend": "powershell -ExecutionPolicy Bypass -Command \".\\backend\\.venv\\Scripts\\python.exe -m uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8000 --reload\"",
+    "dev:blockchain": "npm --prefix blockchain run node"
+  }
+}
