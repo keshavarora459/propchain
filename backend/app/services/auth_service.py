@@ -96,20 +96,21 @@ class AuthService:
         """Authenticate user, verify password, check account status, and issue JWT tokens."""
         settings = get_settings()
 
-        # Rate-limiting check: count recent failed login attempts
-        failed_count = user_repository.count_recent_failed_attempts(
-            db, request.email, window_minutes=settings.LOGIN_LOCKOUT_MINUTES
-        )
-        if failed_count >= settings.LOGIN_MAX_FAILED_ATTEMPTS:
-            logger.warning(
-                "Login rate limit exceeded for %s: %d failed attempts",
-                request.email,
-                failed_count,
+        # Rate-limiting check: count recent failed login attempts (bypassed in development mode)
+        if settings.APP_ENV != "development":
+            failed_count = user_repository.count_recent_failed_attempts(
+                db, request.email, window_minutes=settings.LOGIN_LOCKOUT_MINUTES
             )
-            raise PropChainException(
-                message="Too many failed login attempts. Account temporarily locked for security. Please try again later.",
-                status_code=429,
-            )
+            if failed_count >= settings.LOGIN_MAX_FAILED_ATTEMPTS:
+                logger.warning(
+                    "Login rate limit exceeded for %s: %d failed attempts",
+                    request.email,
+                    failed_count,
+                )
+                raise PropChainException(
+                    message="Too many failed login attempts. Account temporarily locked for security. Please try again later.",
+                    status_code=429,
+                )
 
         user = user_repository.get_by_email(db, request.email)
 
@@ -141,6 +142,7 @@ class AuthService:
             )
 
         # Successful login
+        user_repository.clear_failed_attempts(db, request.email)
         user_repository.record_login_attempt(
             db, request.email, success=True, ip_address=ip_address, user_agent=user_agent
         )

@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Tuple
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, delete
 from sqlalchemy.orm import Session
 
 from app.core.permissions import AccountStatus, UserRole
@@ -205,6 +205,12 @@ class UserRepository:
             .where(LoginAttempt.created_at >= cutoff)
         )
         return db.scalar(stmt) or 0
+
+    def clear_failed_attempts(self, db: Session, email: str) -> None:
+        """Clear failed login attempts for an email upon successful login or administrative reset."""
+        stmt = delete(LoginAttempt).where(LoginAttempt.email_identifier == email.lower().strip())
+        db.execute(stmt)
+        db.commit()
 
     # -------------------------------------------------------------------------
     # User Activity Logging
