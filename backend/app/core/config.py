@@ -49,9 +49,9 @@ class Settings(BaseSettings):
         description="Secondary allowed CORS origins",
     )
 
-    # Database configuration (PostgreSQL + psycopg 3)
+    # Database configuration (Ephemeral in-memory cache, MongoDB Atlas is persistent store)
     DATABASE_URL: str = Field(
-        default="postgresql+psycopg://postgres:postgres@localhost:5432/propchain",
+        default="sqlite:///:memory:",
         description="SQLAlchemy database connection URL",
     )
     DATABASE_POOL_SIZE: int = Field(default=5, ge=1, le=50, description="SQLAlchemy connection pool size")

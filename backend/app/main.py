@@ -16,6 +16,7 @@ from app.core.middleware import setup_middleware
 from app.core.mongo import (
     check_mongo_connection,
     close_mongo_client,
+    hydrate_all_from_mongo,
     setup_sqlalchemy_mongo_listener,
     sync_all_to_mongo,
 )
@@ -40,20 +41,28 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         else:
             logger.warning("Initial database connection check: %s (Will retry on requests)", msg)
 
-        # Setup real-time MongoDB Atlas replication
-        setup_sqlalchemy_mongo_listener()
+        # Ensure all tables exist in the in-memory engine
+        from app.models.base import Base
+        from app.core.database import get_engine
+        import app.models
+        Base.metadata.create_all(bind=get_engine())
+
+        # Hydrate all records directly from MongoDB Atlas as the source of truth
         mongo_ok, mongo_msg, mongo_stats = check_mongo_connection()
         if mongo_ok:
             logger.info("MongoDB Atlas: %s", mongo_msg)
             try:
                 session_factory = get_session_factory()
                 with session_factory() as session:
-                    sync_res = sync_all_to_mongo(session)
-                    logger.info("MongoDB Initial Sync Complete: %s", sync_res)
+                    hydrate_res = hydrate_all_from_mongo(session)
+                    logger.info("Hydrated from MongoDB Atlas: %s", hydrate_res)
             except Exception as exc:
-                logger.warning("Initial MongoDB sync notice: %s", exc)
+                logger.warning("MongoDB hydration notice: %s", exc)
         else:
             logger.warning("MongoDB Atlas connection check: %s", mongo_msg)
+
+        # Setup real-time MongoDB Atlas replication for all mutations
+        setup_sqlalchemy_mongo_listener()
 
     yield
 

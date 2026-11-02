@@ -12,6 +12,11 @@ desktop.ini
 *.sublime-workspace
 .antigravity/
 
+# Local Databases
+*.db
+*.sqlite
+*.sqlite3
+
 # Environment Variables & Secrets (NEVER COMMIT REAL SECRETS)
 .env
 .env.*

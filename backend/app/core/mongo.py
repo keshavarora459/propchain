@@ -234,3 +234,125 @@ def setup_sqlalchemy_mongo_listener() -> None:
 
     logger.info("Registered SQLAlchemy real-time MongoDB replication listener.")
 
+
+def hydrate_all_from_mongo(session: Session) -> Dict[str, int]:
+    """Hydrate all tables from MongoDB Atlas collections into the in-memory engine on startup."""
+    db = get_mongo_db()
+    if db is None:
+        return {}
+
+    from app.models.approval import TransactionApproval
+    from app.models.blockchain import BlockchainEvent, OwnershipEvent
+    from app.models.document import PropertyDocument
+    from app.models.property import Property
+    from app.models.transaction import PropertyTransaction
+    from app.models.user import User
+    from app.models.wallet import UserWallet
+
+    logger.info("Hydrating in-memory database directly from MongoDB Atlas...")
+    hydrated: Dict[str, int] = {}
+
+    # 1. Users
+    u_count = 0
+    for u_doc in db["users"].find():
+        try:
+            data = {k: v for k, v in u_doc.items() if not k.startswith("_") and k in User.__table__.columns}
+            data["id"] = uuid.UUID(str(u_doc["_id"]))
+            session.add(User(**data))
+            u_count += 1
+        except Exception as e:
+            logger.warning("Could not hydrate user %s: %s", u_doc.get("_id"), e)
+    session.flush()
+    hydrated["users"] = u_count
+
+    # 2. Properties
+    p_count = 0
+    for p_doc in db["properties"].find():
+        try:
+            data = {k: v for k, v in p_doc.items() if not k.startswith("_") and k in Property.__table__.columns}
+            data["id"] = uuid.UUID(str(p_doc["_id"]))
+            if data.get("creator_user_id"):
+                data["creator_user_id"] = uuid.UUID(str(data["creator_user_id"]))
+            if data.get("current_owner_id"):
+                data["current_owner_id"] = uuid.UUID(str(data["current_owner_id"]))
+            session.add(Property(**data))
+            p_count += 1
+        except Exception as e:
+            logger.warning("Could not hydrate property %s: %s", p_doc.get("_id"), e)
+    session.flush()
+    hydrated["properties"] = p_count
+
+    # 3. Documents
+    d_count = 0
+    for d_doc in db["documents"].find():
+        try:
+            data = {k: v for k, v in d_doc.items() if not k.startswith("_") and k in PropertyDocument.__table__.columns}
+            data["id"] = uuid.UUID(str(d_doc["_id"]))
+            if data.get("property_id"):
+                data["property_id"] = uuid.UUID(str(data["property_id"]))
+            if data.get("uploader_user_id"):
+                data["uploader_user_id"] = uuid.UUID(str(data["uploader_user_id"]))
+            session.add(PropertyDocument(**data))
+            d_count += 1
+        except Exception as e:
+            logger.warning("Could not hydrate document %s: %s", d_doc.get("_id"), e)
+    session.flush()
+    hydrated["documents"] = d_count
+
+    # 4. Transactions
+    t_count = 0
+    for t_doc in db["transactions"].find():
+        try:
+            data = {k: v for k, v in t_doc.items() if not k.startswith("_") and k in PropertyTransaction.__table__.columns}
+            data["id"] = uuid.UUID(str(t_doc["_id"]))
+            if data.get("property_id"):
+                data["property_id"] = uuid.UUID(str(data["property_id"]))
+            if data.get("buyer_user_id"):
+                data["buyer_user_id"] = uuid.UUID(str(data["buyer_user_id"]))
+            if data.get("seller_user_id"):
+                data["seller_user_id"] = uuid.UUID(str(data["seller_user_id"]))
+            session.add(PropertyTransaction(**data))
+            t_count += 1
+        except Exception as e:
+            logger.warning("Could not hydrate transaction %s: %s", t_doc.get("_id"), e)
+    session.flush()
+    hydrated["transactions"] = t_count
+
+    # 5. Approvals
+    a_count = 0
+    for a_doc in db["approvals"].find():
+        try:
+            data = {k: v for k, v in a_doc.items() if not k.startswith("_") and k in TransactionApproval.__table__.columns}
+            data["id"] = uuid.UUID(str(a_doc["_id"]))
+            if data.get("transaction_id"):
+                data["transaction_id"] = uuid.UUID(str(data["transaction_id"]))
+            if data.get("approver_user_id"):
+                data["approver_user_id"] = uuid.UUID(str(data["approver_user_id"]))
+            session.add(TransactionApproval(**data))
+            a_count += 1
+        except Exception as e:
+            logger.warning("Could not hydrate approval %s: %s", a_doc.get("_id"), e)
+    session.flush()
+    hydrated["approvals"] = a_count
+
+    # 6. Ownership Events
+    o_count = 0
+    for o_doc in db["ownership_events"].find():
+        try:
+            data = {k: v for k, v in o_doc.items() if not k.startswith("_") and k in OwnershipEvent.__table__.columns}
+            data["id"] = uuid.UUID(str(o_doc["_id"]))
+            if data.get("property_id"):
+                data["property_id"] = uuid.UUID(str(data["property_id"]))
+            if data.get("transaction_id"):
+                data["transaction_id"] = uuid.UUID(str(data["transaction_id"]))
+            session.add(OwnershipEvent(**data))
+            o_count += 1
+        except Exception as e:
+            logger.warning("Could not hydrate ownership event %s: %s", o_doc.get("_id"), e)
+    session.flush()
+    hydrated["ownership_events"] = o_count
+
+    session.commit()
+    logger.info("Successfully hydrated all data directly from MongoDB Atlas: %s", hydrated)
+    return hydrated
+
