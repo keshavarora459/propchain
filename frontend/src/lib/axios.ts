@@ -1,6 +1,10 @@
 import axios, { type InternalAxiosRequestConfig } from 'axios'
 
-const baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1'
+let rawBaseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1'
+if (rawBaseURL && !rawBaseURL.endsWith('/api/v1')) {
+  rawBaseURL = rawBaseURL.replace(/\/+$/, '') + '/api/v1'
+}
+const baseURL = rawBaseURL
 
 export const apiClient = axios.create({
   baseURL,
