@@ -31,7 +31,11 @@ COLLECTION_MAPPING = {
     "OwnershipEvent": "ownership_events",
     "UserWallet": "wallets",
     "BlockchainEvent": "blockchain_events",
+    "BlockchainOperation": "blockchain_operations",
     "AuditLog": "audit_logs",
+    "UserActivityLog": "user_activity_logs",
+    "LoginAttempt": "login_attempts",
+    "RefreshToken": "refresh_tokens",
 }
 
 
@@ -351,6 +355,21 @@ def hydrate_all_from_mongo(session: Session) -> Dict[str, int]:
             logger.warning("Could not hydrate ownership event %s: %s", o_doc.get("_id"), e)
     session.flush()
     hydrated["ownership_events"] = o_count
+
+    # 7. Wallets
+    w_count = 0
+    for w_doc in db["wallets"].find():
+        try:
+            data = {k: v for k, v in w_doc.items() if not k.startswith("_") and k in UserWallet.__table__.columns}
+            data["id"] = uuid.UUID(str(w_doc["_id"]))
+            if data.get("user_id"):
+                data["user_id"] = uuid.UUID(str(data["user_id"]))
+            session.add(UserWallet(**data))
+            w_count += 1
+        except Exception as e:
+            logger.warning("Could not hydrate wallet %s: %s", w_doc.get("_id"), e)
+    session.flush()
+    hydrated["wallets"] = w_count
 
     session.commit()
     logger.info("Successfully hydrated all data directly from MongoDB Atlas: %s", hydrated)
