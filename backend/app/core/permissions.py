@@ -53,6 +53,7 @@ ROLE_PERMISSIONS: Dict[UserRole, FrozenSet[Permission]] = {
     UserRole.PROPERTY_OWNER: frozenset({
         Permission.VIEW_DASHBOARD,
         Permission.REGISTER_PROPERTY,
+        Permission.INITIATE_TRANSACTION,
         Permission.VIEW_PROPERTIES,
         Permission.VIEW_BLOCKCHAIN_HISTORY,
     }),

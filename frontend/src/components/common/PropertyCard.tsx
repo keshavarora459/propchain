@@ -11,6 +11,11 @@ export interface PropertyCardProps {
 }
 
 export const PropertyCard: React.FC<PropertyCardProps> = ({ property }) => {
+  const isVerified =
+    (property.verificationStatus || (property as any).verification_status || '').toString().toUpperCase() === 'VERIFIED'
+  const isActive =
+    !property.status || property.status.toString().toUpperCase() === 'ACTIVE'
+
   return (
     <Card className="hover:shadow-md transition-all group overflow-hidden border-slate-200">
       <div className="h-40 bg-slate-900 relative p-4 flex flex-col justify-between overflow-hidden">
@@ -56,17 +61,24 @@ export const PropertyCard: React.FC<PropertyCardProps> = ({ property }) => {
           </span>
         </div>
 
-        <div className="pt-2">
+        <div className="pt-2 flex items-center gap-2">
           <Link
             to={`/properties/${property.id}`}
-            className="w-full flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg bg-slate-50 hover:bg-slate-100 text-xs font-medium text-slate-700 transition-colors"
+            className="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg bg-slate-50 hover:bg-slate-100 text-xs font-medium text-slate-700 transition-colors"
           >
-            <span>View Title & Ledger</span>
+            <span>Details</span>
             <ArrowRight className="h-3 w-3" />
           </Link>
+          {isVerified && isActive && (
+            <Link
+              to={`/transactions?propertyId=${property.id}&initiate=true`}
+              className="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg bg-blue-600 hover:bg-blue-700 text-xs font-medium text-white transition-colors shadow-xs"
+            >
+              <span>Make Offer</span>
+            </Link>
+          )}
         </div>
       </CardContent>
     </Card>
   )
 }
-

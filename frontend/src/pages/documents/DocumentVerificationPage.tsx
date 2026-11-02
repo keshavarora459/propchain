@@ -21,8 +21,10 @@ import type { Property } from '@/types/property'
 import { propertyService } from '@/services/propertyService'
 import { ownershipService } from '@/services/ownershipService'
 import apiClient from '@/lib/axios'
+import { useAuth } from '@/hooks/useAuth'
 
 export const DocumentVerificationPage: React.FC = () => {
+  const { user } = useAuth()
   const [documents, setDocuments] = useState<DocumentRecord[]>([])
   const [properties, setProperties] = useState<Property[]>([])
   const [selectedDoc, setSelectedDoc] = useState<DocumentRecord | null>(null)
@@ -442,20 +444,24 @@ export const DocumentVerificationPage: React.FC = () => {
                       >
                         Audit
                       </Button>
-                      <button
-                        onClick={() => handleDecision(doc.id, 'Verified')}
-                        className="p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-50 transition-colors"
-                        title="Approve Document"
-                      >
-                        <CheckCircle className="h-4 w-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDecision(doc.id, 'Rejected')}
-                        className="p-1.5 rounded-lg text-rose-600 hover:bg-rose-50 transition-colors"
-                        title="Reject Document"
-                      >
-                        <XCircle className="h-4 w-4" />
-                      </button>
+                      {(user?.role === 'VERIFIER' || user?.role === 'ADMIN') && (
+                        <>
+                          <button
+                            onClick={() => handleDecision(doc.id, 'Verified')}
+                            className="p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-50 transition-colors"
+                            title="Approve Document"
+                          >
+                            <CheckCircle className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDecision(doc.id, 'Rejected')}
+                            className="p-1.5 rounded-lg text-rose-600 hover:bg-rose-50 transition-colors"
+                            title="Reject Document"
+                          >
+                            <XCircle className="h-4 w-4" />
+                          </button>
+                        </>
+                      )}
                     </div>
                   </TableCell>
                 </TableRow>

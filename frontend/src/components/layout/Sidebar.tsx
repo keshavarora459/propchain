@@ -16,15 +16,21 @@ import {
   Shield,
   Users,
   X,
+  UserCheck,
+  Scale,
+  Home,
+  ShoppingBag,
 } from 'lucide-react'
 import { useUI } from '@/hooks/useUI'
 import { useAuth } from '@/hooks/useAuth'
-import { NAVIGATION_ITEMS, type NavItem } from '@/constants/navigation'
+import { getNavigationForRole, type NavItem } from '@/constants/navigation'
 import { cn } from '@/lib/utils'
 
 export const Sidebar: React.FC = () => {
   const { sidebarCollapsed, toggleSidebar, mobileSidebarOpen, setMobileSidebarOpen } = useUI()
   const { user } = useAuth()
+
+  const navItems = getNavigationForRole(user?.role)
 
   const getIcon = (iconName: string) => {
     switch (iconName) {
@@ -48,14 +54,35 @@ export const Sidebar: React.FC = () => {
         return <BarChart3 className="h-5 w-5 shrink-0" />
       case 'Settings':
         return <Settings className="h-5 w-5 shrink-0" />
+      case 'Users':
+        return <Users className="h-5 w-5 shrink-0" />
       default:
         return <LayoutDashboard className="h-5 w-5 shrink-0" />
     }
   }
 
+  const getRoleBadge = () => {
+    switch (user?.role) {
+      case 'ADMIN':
+        return { label: 'Administrator', icon: Shield, color: 'text-amber-400 bg-amber-500/10 border-amber-500/20' }
+      case 'LEGAL_AUTHORITY':
+        return { label: 'Legal Registrar', icon: Scale, color: 'text-purple-400 bg-purple-500/10 border-purple-500/20' }
+      case 'VERIFIER':
+        return { label: 'Title Verifier', icon: UserCheck, color: 'text-cyan-400 bg-cyan-500/10 border-cyan-500/20' }
+      case 'PROPERTY_OWNER':
+        return { label: 'Property Owner', icon: Home, color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' }
+      case 'BUYER':
+      default:
+        return { label: 'Verified Buyer', icon: ShoppingBag, color: 'text-blue-400 bg-blue-500/10 border-blue-500/20' }
+    }
+  }
+
+  const roleMeta = getRoleBadge()
+  const RoleIcon = roleMeta.icon
+
   const renderNavLinks = () => (
     <nav className="flex-1 space-y-1 px-3 py-4 overflow-y-auto">
-      {NAVIGATION_ITEMS.map((item: NavItem) => (
+      {navItems.map((item: NavItem) => (
         <NavLink
           key={item.href}
           to={item.href}
@@ -82,25 +109,6 @@ export const Sidebar: React.FC = () => {
           )}
         </NavLink>
       ))}
-
-      {user?.role === 'ADMIN' && (
-        <NavLink
-          to="/admin/users"
-          onClick={() => setMobileSidebarOpen(false)}
-          className={({ isActive }) =>
-            cn(
-              'flex items-center gap-3 rounded-lg px-3 py-2.5 text-xs font-medium transition-all group relative',
-              isActive
-                ? 'bg-blue-900/40 text-blue-300 border border-blue-500/30 font-semibold'
-                : 'text-amber-400/80 hover:bg-slate-800/60 hover:text-amber-300'
-            )
-          }
-          title={sidebarCollapsed ? 'User Management' : undefined}
-        >
-          <Users className="h-5 w-5 shrink-0" />
-          {!sidebarCollapsed && <span className="truncate">User Management</span>}
-        </NavLink>
-      )}
     </nav>
   )
 
@@ -140,7 +148,17 @@ export const Sidebar: React.FC = () => {
             <X className="h-5 w-5" />
           </button>
         </div>
+
+        {/* Role identifier in mobile drawer */}
+        <div className="px-4 py-3 border-b border-slate-800/80 bg-slate-900/40">
+          <div className={cn('flex items-center gap-2 px-2.5 py-1.5 rounded-lg border text-xs font-medium', roleMeta.color)}>
+            <RoleIcon className="h-4 w-4 shrink-0" />
+            <span className="font-semibold">{roleMeta.label}</span>
+          </div>
+        </div>
+
         {renderNavLinks()}
+
         <div className="border-t border-slate-800/80 p-4">
           <div className="rounded-lg bg-slate-900 p-3 text-xs text-slate-400">
             <p className="font-semibold text-slate-200">EVM Hardhat Node</p>
@@ -179,6 +197,19 @@ export const Sidebar: React.FC = () => {
             {sidebarCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
           </button>
         </div>
+
+        {/* User Role Badge in Sidebar */}
+        {!sidebarCollapsed && (
+          <div className="px-3 pt-3">
+            <div className={cn('flex items-center gap-2 px-2.5 py-1.5 rounded-lg border text-xs font-medium', roleMeta.color)}>
+              <RoleIcon className="h-4 w-4 shrink-0" />
+              <div className="truncate">
+                <p className="text-[10px] uppercase tracking-wider font-semibold opacity-70">Current Role</p>
+                <p className="font-semibold text-xs truncate">{roleMeta.label}</p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Navigation Items */}
         {renderNavLinks()}

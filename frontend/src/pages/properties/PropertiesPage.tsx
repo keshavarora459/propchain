@@ -13,9 +13,11 @@ import { PROPERTY_TYPES, VERIFICATION_STATUSES } from '@/constants/options'
 import { formatCurrency } from '@/lib/utils'
 import type { Property } from '@/types/property'
 import { propertyService } from '@/services/propertyService'
+import { useAuth } from '@/hooks/useAuth'
 import { Link } from 'react-router-dom'
 
 export const PropertiesPage: React.FC = () => {
+  const { user } = useAuth()
   const [properties, setProperties] = useState<Property[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
@@ -118,9 +120,11 @@ export const PropertiesPage: React.FC = () => {
                 <List className="h-4 w-4" />
               </button>
             </div>
-            <Button onClick={() => setIsModalOpen(true)} leftIcon={<Plus className="h-4 w-4" />}>
-              Register Parcel
-            </Button>
+            {(user?.role === 'PROPERTY_OWNER' || user?.role === 'ADMIN') && (
+              <Button onClick={() => setIsModalOpen(true)} leftIcon={<Plus className="h-4 w-4" />}>
+                Register Parcel
+              </Button>
+            )}
           </div>
         }
       />
@@ -210,12 +214,22 @@ export const PropertiesPage: React.FC = () => {
                     <StatusBadge status={prop.verificationStatus} />
                   </TableCell>
                   <TableCell className="text-right">
-                    <Link
-                      to={`/properties/${prop.id || prop.propertyId}`}
-                      className="text-xs font-semibold text-blue-600 hover:text-blue-800"
-                    >
-                      Inspect
-                    </Link>
+                    <div className="flex items-center justify-end gap-2">
+                      <Link
+                        to={`/properties/${prop.id || prop.propertyId}`}
+                        className="text-xs font-semibold text-slate-600 hover:text-slate-900"
+                      >
+                        Inspect
+                      </Link>
+                      {(prop.verificationStatus?.toLowerCase() === 'verified' || (prop as any).verification_status?.toLowerCase() === 'verified') && (
+                        <Link
+                          to={`/transactions?propertyId=${prop.id || prop.propertyId}&initiate=true`}
+                          className="text-xs font-semibold text-blue-600 hover:text-blue-800"
+                        >
+                          Make Offer
+                        </Link>
+                      )}
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}

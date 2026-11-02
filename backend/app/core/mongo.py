@@ -321,19 +321,27 @@ def hydrate_all_from_mongo(session: Session) -> Dict[str, int]:
 
     # 1. Users
     u_count = 0
+    seen_emails = {str(u[0]).lower() for u in session.query(User.email).all() if u[0]}
     for u_doc in db["users"].find():
         try:
             data = {k: v for k, v in u_doc.items() if not k.startswith("_") and k in User.__table__.columns}
             u_id = safe_uuid(u_doc.get("_id"))
             if not u_id:
                 continue
+            email = (data.get("email") or "").strip().lower()
+            if not email or email in seen_emails:
+                continue
             data["id"] = u_id
-            if not session.query(User).filter((User.id == data["id"]) | (User.email == data.get("email"))).first():
-                session.add(User(**data))
-                u_count += 1
+            session.add(User(**data))
+            seen_emails.add(email)
+            u_count += 1
         except Exception as e:
             logger.warning("Could not hydrate user %s: %s", u_doc.get("_id"), e)
-    session.flush()
+    try:
+        session.flush()
+    except Exception as e:
+        session.rollback()
+        logger.warning("Failed to flush hydrated users, rolled back: %s", e)
     hydrated["users"] = u_count
 
     # 2. Properties

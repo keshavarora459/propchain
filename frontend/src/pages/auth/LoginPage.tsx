@@ -183,23 +183,44 @@ export const LoginPage: React.FC = () => {
             {/* Quick Demo Login Option */}
             <div className="pt-3 border-t border-slate-800/80">
               <p className="text-[11px] font-semibold text-slate-400 mb-2 uppercase tracking-wider text-center">
-                ⚡ 1-Click Instant Login
+                ⚡ 1-Click Role Login
               </p>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                 <button
                   type="button"
-                  onClick={() => handleQuickLogin('admin@propchain.network')}
-                  className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-blue-600/20 border border-blue-500/40 hover:bg-blue-600/30 text-blue-300 text-xs font-semibold transition-all"
+                  onClick={() => handleQuickLogin('buyer@propchain.network')}
+                  className="flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg bg-blue-900/30 border border-blue-500/30 hover:bg-blue-800/40 text-blue-300 text-[11px] font-medium transition-all"
                 >
-                  <Zap className="h-3.5 w-3.5 text-blue-400" />
-                  <span>Admin (Full Access)</span>
+                  <span>Buyer</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleQuickLogin('seller@propchain.network')}
+                  className="flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg bg-emerald-900/30 border border-emerald-500/30 hover:bg-emerald-800/40 text-emerald-300 text-[11px] font-medium transition-all"
+                >
+                  <span>Seller</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => handleQuickLogin('verifier@propchain.network')}
-                  className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-slate-800/60 border border-slate-700/60 hover:bg-slate-800 text-slate-300 text-xs font-medium transition-all"
+                  className="flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg bg-cyan-900/30 border border-cyan-500/30 hover:bg-cyan-800/40 text-cyan-300 text-[11px] font-medium transition-all"
                 >
-                  <span>Title Verifier</span>
+                  <span>Agent / Verifier</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleQuickLogin('legal@propchain.network')}
+                  className="flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg bg-purple-900/30 border border-purple-500/30 hover:bg-purple-800/40 text-purple-300 text-[11px] font-medium transition-all"
+                >
+                  <span>Legal Registrar</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleQuickLogin('admin@propchain.network')}
+                  className="col-span-2 sm:col-span-2 flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg bg-amber-900/30 border border-amber-500/40 hover:bg-amber-800/40 text-amber-300 text-[11px] font-semibold transition-all"
+                >
+                  <Zap className="h-3 w-3 text-amber-400" />
+                  <span>Admin (Full Access)</span>
                 </button>
               </div>
             </div>

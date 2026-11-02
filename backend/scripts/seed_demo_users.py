@@ -1,9 +1,6 @@
 """
 Demo Users Seeding Script for PropChain Local Development.
 Provisions one user for each core platform role with a standard development password.
-
-Usage:
-    python scripts/seed_demo_users.py
 """
 import sys
 from pathlib import Path
@@ -12,10 +9,13 @@ from pathlib import Path
 backend_dir = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(backend_dir))
 
-from app.core.database import get_session_factory
+from app.core.database import get_engine, get_session_factory
 from app.core.permissions import AccountStatus, UserRole
 from app.core.security import hash_password
+from app.models.base import Base
+import app.models
 from app.repositories.user_repository import user_repository
+from app.core.mongo import check_mongo_connection, hydrate_all_from_mongo
 
 DEFAULT_PASSWORD = "Password123!"
 
@@ -54,10 +54,23 @@ def seed_demo_users():
     print("=" * 60)
     print(f"Default Development Password: {DEFAULT_PASSWORD}\n")
 
+    # Ensure tables exist
+    engine = get_engine()
+    Base.metadata.create_all(bind=engine)
+
     session_factory = get_session_factory()
     hashed = hash_password(DEFAULT_PASSWORD)
 
     with session_factory() as db:
+        # Attempt hydration from Mongo first
+        mongo_ok, _, _ = check_mongo_connection()
+        if mongo_ok:
+            try:
+                hydrate_all_from_mongo(db)
+            except Exception as e:
+                db.rollback()
+                print(f"Mongo hydration notice: {e}")
+
         for acc in DEMO_ACCOUNTS:
             email = acc["email"]
             existing = user_repository.get_by_email(db, email)
@@ -87,4 +100,3 @@ def seed_demo_users():
 
 if __name__ == "__main__":
     seed_demo_users()
-

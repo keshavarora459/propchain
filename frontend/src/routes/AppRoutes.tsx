@@ -73,14 +73,42 @@ export const AppRoutes: React.FC = () => {
           <Route path="/properties/:id" element={<PropertyDetailPage />} />
           <Route path="/ownership" element={<OwnershipRegistryPage />} />
           <Route path="/transactions" element={<TransactionsPage />} />
-          <Route path="/documents" element={<DocumentVerificationPage />} />
-          <Route path="/approvals" element={<ApprovalsPage />} />
-          <Route path="/fraud-detection" element={<FraudDetectionPage />} />
           <Route path="/blockchain-explorer" element={<BlockchainExplorerPage />} />
-          <Route path="/reports" element={<ReportsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
 
-          {/* Admin-Only Route */}
+          {/* Role-Protected Routes */}
+          <Route
+            path="/documents"
+            element={
+              <ProtectedRoute requiredRole={['ADMIN', 'PROPERTY_OWNER', 'VERIFIER', 'LEGAL_AUTHORITY']}>
+                <DocumentVerificationPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/approvals"
+            element={
+              <ProtectedRoute requiredRole={['ADMIN', 'VERIFIER', 'LEGAL_AUTHORITY']}>
+                <ApprovalsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/fraud-detection"
+            element={
+              <ProtectedRoute requiredRole={['ADMIN', 'VERIFIER']}>
+                <FraudDetectionPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/reports"
+            element={
+              <ProtectedRoute requiredRole="ADMIN">
+                <ReportsPage />
+              </ProtectedRoute>
+            }
+          />
           <Route
             path="/admin/users"
             element={
@@ -97,3 +125,4 @@ export const AppRoutes: React.FC = () => {
     </Suspense>
   )
 }
+export default AppRoutes

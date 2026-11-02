@@ -15,7 +15,9 @@ from fastapi import (
 )
 from sqlalchemy.orm import Session
 
+from app.core.permissions import Permission
 from app.dependencies.auth import get_current_user
+from app.dependencies.permissions import require_permission
 from app.dependencies.database import get_db
 from app.models.user import User
 from app.schemas.document import (
@@ -111,7 +113,7 @@ def download_document(
 def verify_document(
     document_id: uuid.UUID,
     payload: DocumentActionRequest = DocumentActionRequest(),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission(Permission.VERIFY_DOCUMENTS)),
     db: Session = Depends(get_db),
 ):
     service = DocumentService(db)
@@ -131,7 +133,7 @@ def verify_document(
 def reject_document(
     document_id: uuid.UUID,
     payload: DocumentRejectRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission(Permission.VERIFY_DOCUMENTS)),
     db: Session = Depends(get_db),
 ):
     service = DocumentService(db)
@@ -151,7 +153,7 @@ def reject_document(
 def request_document_correction(
     document_id: uuid.UUID,
     payload: DocumentCorrectionRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission(Permission.VERIFY_DOCUMENTS)),
     db: Session = Depends(get_db),
 ):
     service = DocumentService(db)

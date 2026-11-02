@@ -134,6 +134,14 @@ def test_complete_transaction_conveyance_lifecycle(
     ).json()
     prop_id = prop["id"]
 
+    # Verifier marks property verified so buyer can initiate offer
+    v_res = client.patch(
+        f"/api/v1/properties/{prop_id}/status",
+        headers={"Authorization": f"Bearer {verifier_token}"},
+        json={"verification_status": "VERIFIED"},
+    )
+    assert v_res.status_code == 200
+
     # 2. Buyer initiates transaction
     txn_res = client.post(
         "/api/v1/transactions",
@@ -224,9 +232,11 @@ def test_seller_rejection_workflow(
     client: TestClient,
     owner_user: User,
     buyer_user: User,
+    admin_user: User,
 ):
     owner_token = _get_token(client, owner_user)
     buyer_token = _get_token(client, buyer_user)
+    admin_token = _get_token(client, admin_user)
 
     # Register property
     prop = client.post(
@@ -244,6 +254,13 @@ def test_seller_rejection_workflow(
         },
         headers={"Authorization": f"Bearer {owner_token}"},
     ).json()
+
+    # Admin verifies property
+    client.patch(
+        f"/api/v1/properties/{prop['id']}/status",
+        headers={"Authorization": f"Bearer {admin_token}"},
+        json={"verification_status": "VERIFIED"},
+    )
 
     # Buyer initiates proposal
     txn = client.post(
