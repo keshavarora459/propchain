@@ -20,14 +20,49 @@ class UserRepository:
     """Database repository for user identities and authentication records."""
 
     def get_by_id(self, db: Session, user_id: uuid.UUID) -> Optional[User]:
-        """Fetch user by unique primary key."""
+        """Fetch user by unique primary key, pulling from MongoDB Atlas if not in cache."""
         stmt = select(User).where(User.id == user_id)
-        return db.scalars(stmt).first()
+        user = db.scalars(stmt).first()
+        if not user:
+            try:
+                from app.core.mongo import get_mongo_db, safe_uuid
+                mongo_db = get_mongo_db()
+                if mongo_db is not None:
+                    u_doc = mongo_db["users"].find_one({"_id": str(user_id)})
+                    if u_doc:
+                        data = {k: v for k, v in u_doc.items() if not k.startswith("_") and k in User.__table__.columns}
+                        data["id"] = safe_uuid(u_doc.get("_id"))
+                        user = User(**data)
+                        db.add(user)
+                        db.commit()
+            except Exception:
+                pass
+        return user
 
     def get_by_email(self, db: Session, email: str) -> Optional[User]:
-        """Fetch user by normalized lowercase email address."""
-        stmt = select(User).where(func.lower(User.email) == email.lower().strip())
-        return db.scalars(stmt).first()
+        """Fetch user by normalized lowercase email address, pulling from MongoDB Atlas if not in cache."""
+        clean_email = email.lower().strip()
+        stmt = select(User).where(func.lower(User.email) == clean_email)
+        user = db.scalars(stmt).first()
+        if not user:
+            try:
+                from app.core.mongo import get_mongo_db, safe_uuid
+                mongo_db = get_mongo_db()
+                if mongo_db is not None:
+                    u_doc = mongo_db["users"].find_one(
+                        {"email": clean_email},
+                        sort=[("updated_at", -1), ("created_at", -1)]
+                    )
+                    if u_doc:
+                        data = {k: v for k, v in u_doc.items() if not k.startswith("_") and k in User.__table__.columns}
+                        data["id"] = safe_uuid(u_doc.get("_id"))
+                        data["email"] = clean_email
+                        user = User(**data)
+                        db.add(user)
+                        db.commit()
+            except Exception:
+                pass
+        return user
 
     def create_user(
         self,

@@ -82,6 +82,14 @@ class PropertyRepository:
         owner_id: Optional[uuid.UUID] = None,
         creator_id: Optional[uuid.UUID] = None,
     ) -> Tuple[List[Property], int]:
+        # Automatic safeguard: If cache is empty, hydrate all from MongoDB Atlas immediately
+        if self.db.query(Property).count() == 0:
+            try:
+                from app.core.mongo import hydrate_all_from_mongo
+                hydrate_all_from_mongo(self.db)
+            except Exception:
+                pass
+
         stmt = select(Property).options(
             joinedload(Property.current_owner),
             joinedload(Property.creator),
