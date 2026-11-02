@@ -55,6 +55,7 @@ ROLE_PERMISSIONS: Dict[UserRole, FrozenSet[Permission]] = {
         Permission.REGISTER_PROPERTY,
         Permission.INITIATE_TRANSACTION,
         Permission.VIEW_PROPERTIES,
+        Permission.INITIATE_TRANSACTION,
         Permission.VIEW_BLOCKCHAIN_HISTORY,
     }),
     UserRole.BUYER: frozenset({

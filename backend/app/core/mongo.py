@@ -319,21 +319,29 @@ def hydrate_all_from_mongo(session: Session) -> Dict[str, int]:
     logger.info("Hydrating in-memory database directly from MongoDB Atlas...")
     hydrated: Dict[str, int] = {}
 
-    # 1. Users
+    # 1. Users (Deduplicate by email and ID, prioritizing most recently updated)
     u_count = 0
-    seen_emails = {str(u[0]).lower() for u in session.query(User.email).all() if u[0]}
-    for u_doc in db["users"].find():
+    seen_user_ids = set()
+    seen_user_emails = {str(u[0]).lower() for u in session.query(User.email).all() if u[0]}
+    admin_fallback_id = None
+
+    for u_doc in db["users"].find().sort([("updated_at", -1), ("created_at", -1)]):
         try:
-            data = {k: v for k, v in u_doc.items() if not k.startswith("_") and k in User.__table__.columns}
             u_id = safe_uuid(u_doc.get("_id"))
-            if not u_id:
+            if not u_id or u_id in seen_user_ids:
                 continue
-            email = (data.get("email") or "").strip().lower()
-            if not email or email in seen_emails:
+            email = str(u_doc.get("email", "")).lower().strip()
+            if not email or email in seen_user_emails:
                 continue
+
+            data = {k: v for k, v in u_doc.items() if not k.startswith("_") and k in User.__table__.columns}
             data["id"] = u_id
+            data["email"] = email
             session.add(User(**data))
-            seen_emails.add(email)
+            seen_user_ids.add(u_id)
+            seen_user_emails.add(email)
+            if data.get("role") == "ADMIN" and not admin_fallback_id:
+                admin_fallback_id = u_id
             u_count += 1
         except Exception as e:
             logger.warning("Could not hydrate user %s: %s", u_doc.get("_id"), e)
@@ -344,20 +352,32 @@ def hydrate_all_from_mongo(session: Session) -> Dict[str, int]:
         logger.warning("Failed to flush hydrated users, rolled back: %s", e)
     hydrated["users"] = u_count
 
+    default_user_id = admin_fallback_id or (next(iter(seen_user_ids)) if seen_user_ids else None)
+
     # 2. Properties
     p_count = 0
+    seen_prop_ids = set()
     for p_doc in db["properties"].find():
         try:
-            data = {k: v for k, v in p_doc.items() if not k.startswith("_") and k in Property.__table__.columns}
             p_id = safe_uuid(p_doc.get("_id"))
-            if not p_id:
+            if not p_id or p_id in seen_prop_ids:
                 continue
+            data = {k: v for k, v in p_doc.items() if not k.startswith("_") and k in Property.__table__.columns}
             data["id"] = p_id
-            data["creator_user_id"] = safe_uuid(data.get("creator_user_id"))
-            data["current_owner_id"] = safe_uuid(data.get("current_owner_id"))
-            if not session.query(Property).filter(Property.id == data["id"]).first():
-                session.add(Property(**data))
-                p_count += 1
+
+            c_id = safe_uuid(data.get("creator_user_id"))
+            if not c_id or c_id not in seen_user_ids:
+                c_id = default_user_id
+            data["creator_user_id"] = c_id
+
+            o_id = safe_uuid(data.get("current_owner_id"))
+            if not o_id or o_id not in seen_user_ids:
+                o_id = c_id
+            data["current_owner_id"] = o_id
+
+            session.add(Property(**data))
+            seen_prop_ids.add(p_id)
+            p_count += 1
         except Exception as e:
             logger.warning("Could not hydrate property %s: %s", p_doc.get("_id"), e)
     session.flush()
@@ -367,16 +387,24 @@ def hydrate_all_from_mongo(session: Session) -> Dict[str, int]:
     d_count = 0
     for d_doc in db["documents"].find():
         try:
-            data = {k: v for k, v in d_doc.items() if not k.startswith("_") and k in PropertyDocument.__table__.columns}
             d_id = safe_uuid(d_doc.get("_id"))
             if not d_id:
                 continue
+            data = {k: v for k, v in d_doc.items() if not k.startswith("_") and k in PropertyDocument.__table__.columns}
             data["id"] = d_id
-            data["property_id"] = safe_uuid(data.get("property_id"))
-            data["uploader_user_id"] = safe_uuid(data.get("uploader_user_id"))
-            if not session.query(PropertyDocument).filter(PropertyDocument.id == data["id"]).first():
-                session.add(PropertyDocument(**data))
-                d_count += 1
+
+            p_id = safe_uuid(data.get("property_id"))
+            if not p_id or p_id not in seen_prop_ids:
+                continue
+            data["property_id"] = p_id
+
+            u_id = safe_uuid(data.get("uploader_user_id"))
+            if not u_id or u_id not in seen_user_ids:
+                u_id = default_user_id
+            data["uploader_user_id"] = u_id
+
+            session.add(PropertyDocument(**data))
+            d_count += 1
         except Exception as e:
             logger.warning("Could not hydrate document %s: %s", d_doc.get("_id"), e)
     session.flush()
@@ -384,19 +412,35 @@ def hydrate_all_from_mongo(session: Session) -> Dict[str, int]:
 
     # 4. Transactions
     t_count = 0
+    seen_tx_ids = set()
     for t_doc in db["transactions"].find():
         try:
-            data = {k: v for k, v in t_doc.items() if not k.startswith("_") and k in PropertyTransaction.__table__.columns}
             t_id = safe_uuid(t_doc.get("_id"))
-            if not t_id:
+            if not t_id or t_id in seen_tx_ids:
                 continue
+            data = {k: v for k, v in t_doc.items() if not k.startswith("_") and k in PropertyTransaction.__table__.columns}
             data["id"] = t_id
-            data["property_id"] = safe_uuid(data.get("property_id"))
-            data["buyer_user_id"] = safe_uuid(data.get("buyer_user_id"))
-            data["seller_user_id"] = safe_uuid(data.get("seller_user_id"))
-            if not session.query(PropertyTransaction).filter(PropertyTransaction.id == data["id"]).first():
-                session.add(PropertyTransaction(**data))
-                t_count += 1
+
+            p_id = safe_uuid(data.get("property_id"))
+            if not p_id or p_id not in seen_prop_ids:
+                continue
+            data["property_id"] = p_id
+
+            b_id = safe_uuid(data.get("buyer_id") or data.get("buyer_user_id"))
+            if not b_id or b_id not in seen_user_ids:
+                b_id = default_user_id
+            data["buyer_id"] = b_id
+            data.pop("buyer_user_id", None)
+
+            s_id = safe_uuid(data.get("seller_id") or data.get("seller_user_id"))
+            if not s_id or s_id not in seen_user_ids:
+                s_id = default_user_id
+            data["seller_id"] = s_id
+            data.pop("seller_user_id", None)
+
+            session.add(PropertyTransaction(**data))
+            seen_tx_ids.add(t_id)
+            t_count += 1
         except Exception as e:
             logger.warning("Could not hydrate transaction %s: %s", t_doc.get("_id"), e)
     session.flush()
@@ -406,16 +450,24 @@ def hydrate_all_from_mongo(session: Session) -> Dict[str, int]:
     a_count = 0
     for a_doc in db["approvals"].find():
         try:
-            data = {k: v for k, v in a_doc.items() if not k.startswith("_") and k in TransactionApproval.__table__.columns}
             a_id = safe_uuid(a_doc.get("_id"))
             if not a_id:
                 continue
+            data = {k: v for k, v in a_doc.items() if not k.startswith("_") and k in TransactionApproval.__table__.columns}
             data["id"] = a_id
-            data["transaction_id"] = safe_uuid(data.get("transaction_id"))
-            data["approver_user_id"] = safe_uuid(data.get("approver_user_id"))
-            if not session.query(TransactionApproval).filter(TransactionApproval.id == data["id"]).first():
-                session.add(TransactionApproval(**data))
-                a_count += 1
+
+            tx_id = safe_uuid(data.get("transaction_id"))
+            if not tx_id or tx_id not in seen_tx_ids:
+                continue
+            data["transaction_id"] = tx_id
+
+            ap_id = safe_uuid(data.get("approver_user_id"))
+            if not ap_id or ap_id not in seen_user_ids:
+                ap_id = default_user_id
+            data["approver_user_id"] = ap_id
+
+            session.add(TransactionApproval(**data))
+            a_count += 1
         except Exception as e:
             logger.warning("Could not hydrate approval %s: %s", a_doc.get("_id"), e)
     session.flush()
@@ -425,20 +477,32 @@ def hydrate_all_from_mongo(session: Session) -> Dict[str, int]:
     o_count = 0
     for o_doc in db["ownership_events"].find():
         try:
-            data = {k: v for k, v in o_doc.items() if not k.startswith("_") and k in OwnershipEvent.__table__.columns}
             o_id = safe_uuid(o_doc.get("_id"))
             if not o_id:
                 continue
+            data = {k: v for k, v in o_doc.items() if not k.startswith("_") and k in OwnershipEvent.__table__.columns}
             data["id"] = o_id
-            data["property_id"] = safe_uuid(data.get("property_id"))
-            data["previous_owner_id"] = safe_uuid(data.get("previous_owner_id"))
-            data["new_owner_id"] = safe_uuid(data.get("new_owner_id"))
-            # transaction_id is a String (e.g. 'GENESIS' or transaction UUID string)
+
+            p_id = safe_uuid(data.get("property_id"))
+            if not p_id or p_id not in seen_prop_ids:
+                continue
+            data["property_id"] = p_id
+
+            new_owner = safe_uuid(data.get("new_owner_id"))
+            if not new_owner or new_owner not in seen_user_ids:
+                new_owner = default_user_id
+            data["new_owner_id"] = new_owner
+
+            prev_owner = safe_uuid(data.get("previous_owner_id"))
+            if prev_owner and prev_owner not in seen_user_ids:
+                prev_owner = None
+            data["previous_owner_id"] = prev_owner
+
             if data.get("transaction_id"):
                 data["transaction_id"] = str(data["transaction_id"])
-            if not session.query(OwnershipEvent).filter(OwnershipEvent.id == data["id"]).first():
-                session.add(OwnershipEvent(**data))
-                o_count += 1
+
+            session.add(OwnershipEvent(**data))
+            o_count += 1
         except Exception as e:
             logger.warning("Could not hydrate ownership event %s: %s", o_doc.get("_id"), e)
     session.flush()
@@ -448,19 +512,26 @@ def hydrate_all_from_mongo(session: Session) -> Dict[str, int]:
     w_count = 0
     for w_doc in db["wallets"].find():
         try:
-            data = {k: v for k, v in w_doc.items() if not k.startswith("_") and k in UserWallet.__table__.columns}
             w_id = safe_uuid(w_doc.get("_id"))
             if not w_id:
                 continue
+            data = {k: v for k, v in w_doc.items() if not k.startswith("_") and k in UserWallet.__table__.columns}
             data["id"] = w_id
-            data["user_id"] = safe_uuid(data.get("user_id"))
-            if not session.query(UserWallet).filter(UserWallet.id == data["id"]).first():
-                session.add(UserWallet(**data))
-                w_count += 1
+            u_id = safe_uuid(data.get("user_id"))
+            if not u_id or u_id not in seen_user_ids:
+                continue
+            data["user_id"] = u_id
+            session.add(UserWallet(**data))
+            w_count += 1
         except Exception as e:
             logger.warning("Could not hydrate wallet %s: %s", w_doc.get("_id"), e)
     session.flush()
     hydrated["wallets"] = w_count
+
+    session.commit()
+    logger.info("Successfully hydrated all data directly from MongoDB Atlas: %s", hydrated)
+    return hydrated
+
 
     session.commit()
     logger.info("Successfully hydrated all data directly from MongoDB Atlas: %s", hydrated)

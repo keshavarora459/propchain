@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { BrowserRouter } from 'react-router-dom'
+import { HashRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { UIProvider } from '@/context/UIContext'
 import { AuthProvider } from '@/context/AuthContext'
@@ -25,9 +25,9 @@ export function App() {
       <AuthProvider>
         <WalletProvider>
           <UIProvider>
-            <BrowserRouter>
+            <HashRouter>
               <AppRoutes />
-            </BrowserRouter>
+            </HashRouter>
           </UIProvider>
         </WalletProvider>
       </AuthProvider>

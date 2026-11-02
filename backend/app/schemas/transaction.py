@@ -4,18 +4,22 @@ Pydantic v2 schemas for Real Estate Transactions and Approvals in PropChain.
 import uuid
 from datetime import date, datetime
 from decimal import Decimal
-from typing import List, Optional
+from typing import Any, List, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class TransactionCreate(BaseModel):
-    property_id: uuid.UUID
+    property_id: Union[uuid.UUID, str]
     proposed_amount: Optional[Decimal] = Field(None, gt=0, description="Conveyance escrow or purchase amount")
-    purchase_price: Optional[Decimal] = Field(None, gt=0, description="Alias for proposed_amount")
+    purchase_price: Optional[Decimal] = Field(None, gt=0, description="Alternative field for purchase price")
     currency: str = Field(default="USD", max_length=10)
     transaction_type: str = Field(default="SALE", max_length=32)
     description: Optional[str] = Field(None, max_length=2000)
+    buyer_name: Optional[str] = None
+    buyer_wallet: Optional[str] = None
+    seller_name: Optional[str] = None
+    seller_wallet: Optional[str] = None
 
     @model_validator(mode="after")
     def resolve_amount(self) -> "TransactionCreate":
@@ -72,6 +76,20 @@ class TransactionApprovalResponse(BaseModel):
     rejection_reason: Optional[str] = None
     actioned_at: Optional[datetime] = None
     created_at: datetime
+    # Enriched transaction, parcel, and counterparty fields
+    transaction_number: Optional[str] = None
+    property_id: Optional[uuid.UUID] = None
+    property_number: Optional[str] = None
+    property_title: Optional[str] = None
+    buyer_id: Optional[uuid.UUID] = None
+    buyer_name: Optional[str] = None
+    buyer_email: Optional[str] = None
+    seller_id: Optional[uuid.UUID] = None
+    seller_name: Optional[str] = None
+    seller_email: Optional[str] = None
+    proposed_amount: Optional[Decimal] = None
+    currency: Optional[str] = None
+    transaction_status: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 

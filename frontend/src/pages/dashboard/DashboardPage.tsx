@@ -18,16 +18,19 @@ export const DashboardPage: React.FC = () => {
     )
   }
 
-  switch (user?.role) {
-    case 'ADMIN':
-      return <AdminDashboard />
-    case 'LEGAL_AUTHORITY':
-      return <LegalAuthorityDashboard />
-    case 'VERIFIER':
-      return <AgentDashboard />
+  const role = user?.role
+
+  switch (role) {
+    case 'BUYER':
+      return <BuyerDashboard />
     case 'PROPERTY_OWNER':
       return <SellerDashboard />
-    case 'BUYER':
+    case 'VERIFIER':
+      return <AgentDashboard />
+    case 'LEGAL_AUTHORITY':
+      return <LegalAuthorityDashboard />
+    case 'ADMIN':
+      return <AdminDashboard />
     default:
       return <BuyerDashboard />
   }
