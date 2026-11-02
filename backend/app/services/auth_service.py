@@ -96,15 +96,19 @@ class AuthService:
         """Authenticate user, verify password, check account status, and issue JWT tokens."""
         settings = get_settings()
 
+        email_clean = request.email.lower().strip()
+        if "@propchain.nctwork" in email_clean:
+            email_clean = email_clean.replace("@propchain.nctwork", "@propchain.network")
+
         # Rate-limiting check: count recent failed login attempts (bypassed in development mode)
         if settings.APP_ENV != "development":
             failed_count = user_repository.count_recent_failed_attempts(
-                db, request.email, window_minutes=settings.LOGIN_LOCKOUT_MINUTES
+                db, email_clean, window_minutes=settings.LOGIN_LOCKOUT_MINUTES
             )
             if failed_count >= settings.LOGIN_MAX_FAILED_ATTEMPTS:
                 logger.warning(
                     "Login rate limit exceeded for %s: %d failed attempts",
-                    request.email,
+                    email_clean,
                     failed_count,
                 )
                 raise PropChainException(
@@ -112,20 +116,20 @@ class AuthService:
                     status_code=429,
                 )
 
-        user = user_repository.get_by_email(db, request.email)
+        user = user_repository.get_by_email(db, email_clean)
 
         # Reject if user does not exist (generic error to avoid email enumeration)
         if not user:
             user_repository.record_login_attempt(
-                db, request.email, success=False, ip_address=ip_address, user_agent=user_agent
+                db, email_clean, success=False, ip_address=ip_address, user_agent=user_agent
             )
-            logger.info("Authentication failed: unknown email %s", request.email)
+            logger.info("Authentication failed: unknown email %s", email_clean)
             raise AuthenticationError("Invalid email or password.")
 
         # Verify password hash
         if not verify_password(request.password, user.password_hash):
             user_repository.record_login_attempt(
-                db, request.email, success=False, ip_address=ip_address, user_agent=user_agent
+                db, email_clean, success=False, ip_address=ip_address, user_agent=user_agent
             )
             logger.info("Authentication failed: invalid password for user %s", user.id)
             raise AuthenticationError("Invalid email or password.")
@@ -133,7 +137,7 @@ class AuthService:
         # Check account status
         if user.account_status != AccountStatus.ACTIVE.value:
             user_repository.record_login_attempt(
-                db, request.email, success=False, ip_address=ip_address, user_agent=user_agent
+                db, email_clean, success=False, ip_address=ip_address, user_agent=user_agent
             )
             logger.warning("Login rejected for non-active account %s (status: %s)", user.id, user.account_status)
             raise PropChainException(
@@ -142,9 +146,9 @@ class AuthService:
             )
 
         # Successful login
-        user_repository.clear_failed_attempts(db, request.email)
+        user_repository.clear_failed_attempts(db, email_clean)
         user_repository.record_login_attempt(
-            db, request.email, success=True, ip_address=ip_address, user_agent=user_agent
+            db, email_clean, success=True, ip_address=ip_address, user_agent=user_agent
         )
         user_repository.update_user(db, user, last_login_at=datetime.now(timezone.utc))
 
