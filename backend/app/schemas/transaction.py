@@ -4,17 +4,22 @@ Pydantic v2 schemas for Real Estate Transactions and Approvals in PropChain.
 import uuid
 from datetime import date, datetime
 from decimal import Decimal
-from typing import List, Optional
+from typing import Any, List, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field
 
 
 class TransactionCreate(BaseModel):
-    property_id: uuid.UUID
-    proposed_amount: Decimal = Field(..., gt=0, description="Conveyance escrow or purchase amount")
-    currency: str = Field(default="INR", max_length=10)
+    property_id: Union[uuid.UUID, str]
+    proposed_amount: Optional[Decimal] = Field(None, gt=0, description="Conveyance escrow or purchase amount")
+    purchase_price: Optional[Decimal] = Field(None, gt=0, description="Alternative field for purchase price")
+    currency: str = Field(default="USD", max_length=10)
     transaction_type: str = Field(default="SALE", max_length=32)
     description: Optional[str] = Field(None, max_length=2000)
+    buyer_name: Optional[str] = None
+    buyer_wallet: Optional[str] = None
+    seller_name: Optional[str] = None
+    seller_wallet: Optional[str] = None
 
 
 class TransactionResponse(BaseModel):

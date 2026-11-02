@@ -422,15 +422,17 @@ def hydrate_all_from_mongo(session: Session) -> Dict[str, int]:
                 continue
             data["property_id"] = p_id
 
-            b_id = safe_uuid(data.get("buyer_user_id"))
+            b_id = safe_uuid(data.get("buyer_id") or data.get("buyer_user_id"))
             if not b_id or b_id not in seen_user_ids:
                 b_id = default_user_id
-            data["buyer_user_id"] = b_id
+            data["buyer_id"] = b_id
+            data.pop("buyer_user_id", None)
 
-            s_id = safe_uuid(data.get("seller_user_id"))
+            s_id = safe_uuid(data.get("seller_id") or data.get("seller_user_id"))
             if not s_id or s_id not in seen_user_ids:
                 s_id = default_user_id
-            data["seller_user_id"] = s_id
+            data["seller_id"] = s_id
+            data.pop("seller_user_id", None)
 
             session.add(PropertyTransaction(**data))
             seen_tx_ids.add(t_id)
