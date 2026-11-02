@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   UploadCloud,
   FileText,
@@ -18,6 +18,8 @@ import { MOCK_PROPERTIES } from '@/mock-data/properties'
 import { DOCUMENT_TYPES } from '@/constants/options'
 import { truncateHash, formatDate } from '@/lib/utils'
 import type { DocumentRecord, DocumentType } from '@/types/document'
+import type { Property } from '@/types/property'
+import { propertyService } from '@/services/propertyService'
 
 function createDocumentRecord(
   propertyId: string,
@@ -43,14 +45,32 @@ function createDocumentRecord(
 
 export const DocumentVerificationPage: React.FC = () => {
   const [documents, setDocuments] = useState<DocumentRecord[]>(MOCK_DOCUMENTS)
+  const [properties, setProperties] = useState<Property[]>(MOCK_PROPERTIES)
   const [selectedDoc, setSelectedDoc] = useState<DocumentRecord | null>(null)
   const [selectedPropertyId, setSelectedPropertyId] = useState(MOCK_PROPERTIES[0].propertyId)
   const [selectedDocType, setSelectedDocType] = useState<DocumentType>('Title Deed')
   const [dragActive, setDragActive] = useState(false)
   const [uploadNotice, setUploadNotice] = useState<string | null>(null)
 
+  useEffect(() => {
+    propertyService
+      .getProperties({ page_size: 100 })
+      .then((res) => {
+        if (res && res.items && res.items.length > 0) {
+          const dbIds = new Set(res.items.map((p) => p.propertyId || p.id))
+          const nonColliding = MOCK_PROPERTIES.filter(
+            (m) => !dbIds.has(m.propertyId) && !dbIds.has(m.id)
+          )
+          const combined = [...res.items, ...nonColliding]
+          setProperties(combined)
+          setSelectedPropertyId(combined[0].propertyId)
+        }
+      })
+      .catch(console.warn)
+  }, [])
+
   const handleSimulatedUpload = () => {
-    const matchedProp = MOCK_PROPERTIES.find((p) => p.propertyId === selectedPropertyId)
+    const matchedProp = properties.find((p) => p.propertyId === selectedPropertyId)
     const newDoc = createDocumentRecord(selectedPropertyId, selectedDocType, matchedProp)
     setDocuments([newDoc, ...documents])
     setUploadNotice('Document successfully staged for OCR pipeline & consensus anchoring.')
@@ -85,7 +105,7 @@ export const DocumentVerificationPage: React.FC = () => {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Select
               label="Associated Real Estate Parcel"
-              options={MOCK_PROPERTIES.map((p) => ({ value: p.propertyId, label: `${p.propertyId} - ${p.title}` }))}
+              options={properties.map((p) => ({ value: p.propertyId, label: `${p.propertyId} - ${p.title}` }))}
               value={selectedPropertyId}
               onChange={(e) => setSelectedPropertyId(e.target.value)}
             />

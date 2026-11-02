@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from 'react'
-import { Plus, LayoutGrid, List } from 'lucide-react'
+import React, { useState, useMemo, useEffect, useCallback } from 'react'
+import { Plus, LayoutGrid, List, Loader2 } from 'lucide-react'
 import { PageHeader } from '@/components/common/PageHeader'
 import { PropertyCard } from '@/components/common/PropertyCard'
 import { SearchFilterBar } from '@/components/common/SearchFilterBar'
@@ -13,34 +13,12 @@ import { MOCK_PROPERTIES } from '@/mock-data/properties'
 import { PROPERTY_TYPES, VERIFICATION_STATUSES } from '@/constants/options'
 import { formatCurrency } from '@/lib/utils'
 import type { Property } from '@/types/property'
-import type { PropertyRegistrationFormData } from '@/schemas/propertySchema'
+import { propertyService } from '@/services/propertyService'
 import { Link } from 'react-router-dom'
-
-function createPropertyRecord(formData: PropertyRegistrationFormData): Property {
-  const timestamp = Date.now()
-  return {
-    id: `prop-${timestamp}`,
-    propertyId: `PROP-${Math.floor(10000 + Math.random() * 90000)}`,
-    title: formData.title,
-    propertyType: formData.propertyType,
-    address: formData.address,
-    city: formData.city,
-    state: formData.state,
-    postalCode: formData.postalCode,
-    area: formData.area,
-    areaUnit: formData.areaUnit,
-    valuation: formData.valuation,
-    currentOwner: formData.ownerName,
-    ownerAddress: formData.ownerWallet,
-    registrationReference: formData.registrationReference,
-    verificationStatus: 'Pending',
-    registeredAt: new Date(timestamp).toISOString(),
-    description: formData.description || 'Newly submitted property parcel.',
-  }
-}
 
 export const PropertiesPage: React.FC = () => {
   const [properties, setProperties] = useState<Property[]>(MOCK_PROPERTIES)
+  const [isLoading, setIsLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [typeFilter, setTypeFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
@@ -49,19 +27,50 @@ export const PropertiesPage: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 6
 
+  const loadProperties = useCallback(async () => {
+    try {
+      const res = await propertyService.getProperties({ page_size: 100 })
+      if (res && res.items && res.items.length > 0) {
+        // Database properties at the top, followed by any non-colliding mocks
+        const dbIds = new Set(res.items.map((p) => p.propertyId || p.id))
+        const nonCollidingMocks = MOCK_PROPERTIES.filter(
+          (m) => !dbIds.has(m.propertyId) && !dbIds.has(m.id)
+        )
+        setProperties([...res.items, ...nonCollidingMocks])
+      } else {
+        setProperties(MOCK_PROPERTIES)
+      }
+    } catch (err) {
+      console.warn('Could not load properties from API, using fallback data:', err)
+      setProperties(MOCK_PROPERTIES)
+    } finally {
+      setIsLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    loadProperties()
+  }, [loadProperties])
+
   const filteredProperties = useMemo(() => {
     return properties.filter((prop) => {
+      const q = searchQuery.toLowerCase()
       const matchesSearch =
         searchQuery === '' ||
-        prop.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        prop.propertyId.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        prop.address.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        prop.city.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        prop.currentOwner.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        prop.ownerAddress.toLowerCase().includes(searchQuery.toLowerCase())
+        (prop.title && prop.title.toLowerCase().includes(q)) ||
+        (prop.propertyId && prop.propertyId.toLowerCase().includes(q)) ||
+        (prop.address && prop.address.toLowerCase().includes(q)) ||
+        (prop.city && prop.city.toLowerCase().includes(q)) ||
+        (prop.currentOwner && prop.currentOwner.toLowerCase().includes(q)) ||
+        (prop.ownerAddress && prop.ownerAddress.toLowerCase().includes(q))
 
-      const matchesType = typeFilter === '' || prop.propertyType === typeFilter
-      const matchesStatus = statusFilter === '' || prop.verificationStatus === statusFilter
+      const matchesType =
+        typeFilter === '' ||
+        (prop.propertyType && prop.propertyType.toLowerCase() === typeFilter.toLowerCase())
+      
+      const matchesStatus =
+        statusFilter === '' ||
+        (prop.verificationStatus && prop.verificationStatus.toLowerCase() === statusFilter.toLowerCase())
 
       return matchesSearch && matchesType && matchesStatus
     })
@@ -72,11 +81,17 @@ export const PropertiesPage: React.FC = () => {
     return filteredProperties.slice(start, start + itemsPerPage)
   }, [filteredProperties, currentPage])
 
-  const totalPages = Math.ceil(filteredProperties.length / itemsPerPage)
+  const totalPages = Math.max(1, Math.ceil(filteredProperties.length / itemsPerPage))
 
-  const handleRegisterSuccess = (formData: PropertyRegistrationFormData) => {
-    const newProperty = createPropertyRecord(formData)
-    setProperties([newProperty, ...properties])
+  const handleRegisterSuccess = (newProperty: Property) => {
+    setProperties((prev) => [
+      newProperty,
+      ...prev.filter(
+        (p) => p.id !== newProperty.id && p.propertyId !== newProperty.propertyId
+      ),
+    ])
+    // Re-sync with database in background
+    loadProperties()
   }
 
   const handleResetFilters = () => {
@@ -137,7 +152,12 @@ export const PropertiesPage: React.FC = () => {
         onReset={handleResetFilters}
       />
 
-      {filteredProperties.length === 0 ? (
+      {isLoading ? (
+        <div className="flex flex-col items-center justify-center py-20 text-slate-400 gap-3">
+          <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+          <p className="text-sm font-medium">Loading properties from database...</p>
+        </div>
+      ) : filteredProperties.length === 0 ? (
         <EmptyState
           title="No Matching Real Estate Found"
           description="Try broadening your search query or reset active filters."
@@ -147,7 +167,7 @@ export const PropertiesPage: React.FC = () => {
       ) : viewMode === 'grid' ? (
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
           {paginatedProperties.map((prop) => (
-            <PropertyCard key={prop.id} property={prop} />
+            <PropertyCard key={prop.id || prop.propertyId} property={prop} />
           ))}
         </div>
       ) : (
@@ -167,7 +187,7 @@ export const PropertiesPage: React.FC = () => {
             </TableHeader>
             <TableBody>
               {paginatedProperties.map((prop) => (
-                <TableRow key={prop.id}>
+                <TableRow key={prop.id || prop.propertyId}>
                   <TableCell className="font-mono text-xs font-semibold text-slate-900">
                     {prop.propertyId}
                   </TableCell>
@@ -197,7 +217,7 @@ export const PropertiesPage: React.FC = () => {
                   </TableCell>
                   <TableCell className="text-right">
                     <Link
-                      to={`/properties/${prop.id}`}
+                      to={`/properties/${prop.id || prop.propertyId}`}
                       className="text-xs font-semibold text-blue-600 hover:text-blue-800"
                     >
                       Inspect
@@ -226,3 +246,4 @@ export const PropertiesPage: React.FC = () => {
     </div>
   )
 }
+export default PropertiesPage

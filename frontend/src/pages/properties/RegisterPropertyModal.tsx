@@ -1,17 +1,20 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
+import { AlertCircle } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { Button } from '@/components/ui/Button'
 import { propertyRegistrationSchema, type PropertyRegistrationFormData } from '@/schemas/propertySchema'
 import { PROPERTY_TYPES } from '@/constants/options'
+import { propertyService } from '@/services/propertyService'
+import type { Property } from '@/types/property'
 
 export interface RegisterPropertyModalProps {
   isOpen: boolean
   onClose: () => void
-  onSuccess: (data: PropertyRegistrationFormData) => void
+  onSuccess: (newProperty: Property) => void
 }
 
 export const RegisterPropertyModal: React.FC<RegisterPropertyModalProps> = ({
@@ -19,6 +22,7 @@ export const RegisterPropertyModal: React.FC<RegisterPropertyModalProps> = ({
   onClose,
   onSuccess,
 }) => {
+  const [serverError, setServerError] = useState<string | null>(null)
   const {
     register,
     handleSubmit,
@@ -32,21 +36,81 @@ export const RegisterPropertyModal: React.FC<RegisterPropertyModalProps> = ({
     },
   })
 
-  const onSubmit = (data: PropertyRegistrationFormData) => {
-    onSuccess(data)
-    reset()
+  const onSubmit = async (data: PropertyRegistrationFormData) => {
+    setServerError(null)
+    try {
+      const areaUnitMap: Record<string, string> = {
+        'sq ft': 'SQ_FT',
+        'acres': 'ACRE',
+        'sq m': 'SQ_M',
+      }
+      const typeUpper = data.propertyType.toUpperCase()
+      const category =
+        typeUpper === 'LAND'
+          ? 'LAND'
+          : typeUpper === 'COMMERCIAL'
+          ? 'OFFICE'
+          : typeUpper === 'INDUSTRIAL'
+          ? 'WAREHOUSE'
+          : 'APARTMENT'
+
+      const payload = {
+        title: data.title,
+        description: data.description || `${data.title} located at ${data.address}, ${data.city}`,
+        property_type: typeUpper,
+        property_category: category,
+        country: 'United States',
+        state: data.state,
+        city: data.city,
+        street_address: data.address,
+        postal_code: data.postalCode,
+        land_area: Number(data.area),
+        area_unit: areaUnitMap[data.areaUnit] || 'SQ_FT',
+        valuation: Number(data.valuation),
+        registration_number: data.registrationReference,
+        survey_number: data.registrationReference,
+      }
+
+      const created = await propertyService.registerProperty(payload)
+      onSuccess(created)
+      reset()
+      onClose()
+    } catch (err: unknown) {
+      if (err && typeof err === 'object' && 'response' in err) {
+        const axiosErr = err as { response?: { data?: { message?: string } } }
+        setServerError(
+          axiosErr.response?.data?.message || 'Failed to register property in database. Please check fields.'
+        )
+      } else {
+        setServerError('Unable to connect to property registration service. Please verify server status.')
+      }
+    }
+  }
+
+  const handleModalClose = () => {
+    setServerError(null)
     onClose()
   }
 
   return (
     <Modal
       isOpen={isOpen}
-      onClose={onClose}
+      onClose={handleModalClose}
       title="Register Real Estate Parcel"
       description="Initialize digital deed record for verification and tokenization."
       maxWidth="xl"
     >
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+        {serverError && (
+          <div className="rounded-xl border border-red-200 bg-red-50 p-3.5 text-xs text-red-800 flex items-start gap-2.5">
+            <AlertCircle className="h-4 w-4 text-red-600 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-semibold text-red-900">Registration Error</p>
+              <p className="mt-0.5 text-red-700">{serverError}</p>
+            </div>
+          </div>
+        )}
+
         <Input
           label="Property Title / Commercial Name"
           placeholder="e.g. Skyline Commercial Center - Tower A"
@@ -153,7 +217,7 @@ export const RegisterPropertyModal: React.FC<RegisterPropertyModalProps> = ({
         </div>
 
         <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
-          <Button type="button" variant="outline" onClick={onClose}>
+          <Button type="button" variant="outline" onClick={handleModalClose}>
             Cancel
           </Button>
           <Button type="submit" isLoading={isSubmitting}>

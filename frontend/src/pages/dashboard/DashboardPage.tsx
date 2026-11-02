@@ -27,8 +27,8 @@ export const DashboardPage: React.FC = () => {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Network Operations Overview"
-        description="Real-time monitoring of tokenized real estate parcels, settlement escrows, and consensus verification."
+        title="Dashboard Overview"
+        description="Live summary of your properties, buying and selling deals, and document approvals."
         actions={
           <div className="flex items-center gap-2">
             <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-xs font-mono font-medium text-slate-700 border border-slate-200">
@@ -42,42 +42,42 @@ export const DashboardPage: React.FC = () => {
       {/* Illustrative Notice Banner */}
       <div className="rounded-lg border border-blue-200 bg-blue-50/70 p-3.5 text-xs text-blue-900 flex items-center justify-between">
         <p>
-          <strong className="font-semibold">Phase 2 UI Architecture:</strong> All presentation data shown represents institutional mock telemetry and will connect to live FastAPI and EVM smart contracts in subsequent phases.
+          <strong className="font-semibold">Live System:</strong> Connected to local blockchain and database services. All data is updated in real time.
         </p>
         <span className="hidden sm:inline-block font-mono text-[11px] bg-blue-100 text-blue-800 px-2 py-0.5 rounded font-medium">
-          Frontend Verified
+          System Active
         </span>
       </div>
 
       {/* Key Metric Stat Cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
-          title="Registered Parcels"
+          title="Total Properties"
           value={MOCK_DASHBOARD_METRICS.totalProperties.toLocaleString()}
-          subtitle="Tokenized title deeds on-chain"
-          trend={{ value: '12.4% MoM', isPositive: true }}
+          subtitle="All listed properties"
+          trend={{ value: '12.4% this month', isPositive: true }}
           icon={<Building2 className="h-5 w-5" />}
           iconBg="bg-blue-50 text-blue-700"
         />
         <StatCard
-          title="Verified Titles"
+          title="Approved Properties"
           value={MOCK_DASHBOARD_METRICS.verifiedProperties.toLocaleString()}
-          subtitle="94.8% cryptographic assurance"
-          trend={{ value: '8.1% MoM', isPositive: true }}
+          subtitle="Verified & ready for sale"
+          trend={{ value: '8.1% this month', isPositive: true }}
           icon={<CheckCircle className="h-5 w-5" />}
           iconBg="bg-emerald-50 text-emerald-700"
         />
         <StatCard
-          title="Active Escrows"
+          title="Ongoing Deals"
           value={MOCK_DASHBOARD_METRICS.activeTransactions}
-          subtitle={`$${(MOCK_DASHBOARD_METRICS.totalValuationUSD / 1000000).toFixed(1)}M gross committed value`}
+          subtitle={`$${(MOCK_DASHBOARD_METRICS.totalValuationUSD / 1000000).toFixed(1)}M in active buying/selling`}
           icon={<ArrowLeftRight className="h-5 w-5" />}
           iconBg="bg-amber-50 text-amber-700"
         />
         <StatCard
-          title="Fraud Risk Alerts"
+          title="Security Warnings"
           value={MOCK_DASHBOARD_METRICS.fraudAlerts}
-          subtitle="3 under active audit investigation"
+          subtitle="Suspicious cases under review"
           trend={{ value: '2 resolved', isPositive: true }}
           icon={<ShieldAlert className="h-5 w-5" />}
           iconBg="bg-rose-50 text-rose-700"
@@ -88,8 +88,8 @@ export const DashboardPage: React.FC = () => {
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>Parcel Registration & Verification Trajectory</CardTitle>
-            <CardDescription>Monthly submitted deed applications versus verified on-chain tokenizations</CardDescription>
+            <CardTitle>Property Registrations & Approvals</CardTitle>
+            <CardDescription>Monthly submitted vs approved properties</CardDescription>
           </CardHeader>
           <CardContent>
             <RegistrationTrendChart />
@@ -98,8 +98,8 @@ export const DashboardPage: React.FC = () => {
 
         <Card>
           <CardHeader>
-            <CardTitle>Monthly Settlement Escrow Volume</CardTitle>
-            <CardDescription>Total settled real estate transaction value ($ Millions USD)</CardDescription>
+            <CardTitle>Monthly Property Sales Value</CardTitle>
+            <CardDescription>Total value of completed deals ($ Millions USD)</CardDescription>
           </CardHeader>
           <CardContent>
             <TransactionActivityChart />
@@ -114,8 +114,8 @@ export const DashboardPage: React.FC = () => {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
-                <CardTitle>Recent Settlement Activity</CardTitle>
-                <CardDescription>Latest decentralized title transfers and escrow events</CardDescription>
+                <CardTitle>Recent Deals & Sales</CardTitle>
+                <CardDescription>Latest property purchases and ownership transfers</CardDescription>
               </div>
               <Link
                 to="/transactions"

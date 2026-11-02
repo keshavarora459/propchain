@@ -95,10 +95,10 @@ export const Sidebar: React.FC = () => {
                 : 'text-amber-400/80 hover:bg-slate-800/60 hover:text-amber-300'
             )
           }
-          title={sidebarCollapsed ? 'User Governance' : undefined}
+          title={sidebarCollapsed ? 'User Management' : undefined}
         >
           <Users className="h-5 w-5 shrink-0" />
-          {!sidebarCollapsed && <span className="truncate">User Governance</span>}
+          {!sidebarCollapsed && <span className="truncate">User Management</span>}
         </NavLink>
       )}
     </nav>

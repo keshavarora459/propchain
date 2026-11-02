@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import {
   MapPin,
@@ -16,11 +16,28 @@ import { MOCK_PROPERTIES } from '@/mock-data/properties'
 import { MOCK_OWNERSHIP_RECORDS } from '@/mock-data/ownership'
 import { MOCK_DOCUMENTS } from '@/mock-data/documents'
 import { formatCurrency, formatDate } from '@/lib/utils'
+import { propertyService } from '@/services/propertyService'
+import type { Property } from '@/types/property'
 
 export const PropertyDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>()
 
-  const property = MOCK_PROPERTIES.find((p) => p.id === id) || MOCK_PROPERTIES[0]
+  const [property, setProperty] = useState<Property>(() => {
+    return MOCK_PROPERTIES.find((p) => p.id === id || p.propertyId === id) || MOCK_PROPERTIES[0]
+  })
+
+  useEffect(() => {
+    if (!id) return
+    propertyService
+      .getPropertyById(id)
+      .then((data) => {
+        if (data) setProperty(data)
+      })
+      .catch(() => {
+        const mock = MOCK_PROPERTIES.find((p) => p.id === id || p.propertyId === id)
+        if (mock) setProperty(mock)
+      })
+  }, [id])
   const ownership = MOCK_OWNERSHIP_RECORDS.find((o) => o.propertyId === property.propertyId)
   const documents = MOCK_DOCUMENTS.filter((d) => d.propertyId === property.propertyId)
 

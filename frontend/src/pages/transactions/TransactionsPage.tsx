@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Plus, Search, Eye } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -14,6 +14,8 @@ import { MOCK_PROPERTIES } from '@/mock-data/properties'
 import { initiateTransactionSchema, type InitiateTransactionFormData } from '@/schemas/transactionSchema'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import type { Transaction } from '@/types/transaction'
+import type { Property } from '@/types/property'
+import { propertyService } from '@/services/propertyService'
 
 function createTransactionRecord(
   data: InitiateTransactionFormData,
@@ -23,7 +25,7 @@ function createTransactionRecord(
   return {
     id: `txn-${timestamp}`,
     transactionId: `TXN-${Math.floor(1000 + Math.random() * 9000)}`,
-    propertyId: selectedProp ? selectedProp.propertyId : 'PROP-CUSTOM',
+    propertyId: selectedProp ? (selectedProp.propertyId || selectedProp.id) : 'PROP-CUSTOM',
     propertyTitle: selectedProp ? selectedProp.title : 'New Title Transfer',
     buyerName: data.buyerName,
     buyerWallet: data.buyerWallet,
@@ -40,9 +42,25 @@ function createTransactionRecord(
 
 export const TransactionsPage: React.FC = () => {
   const [transactions, setTransactions] = useState<Transaction[]>(MOCK_TRANSACTIONS)
+  const [properties, setProperties] = useState<Property[]>(MOCK_PROPERTIES)
   const [selectedTxn, setSelectedTxn] = useState<Transaction | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
+
+  useEffect(() => {
+    propertyService
+      .getProperties({ page_size: 100 })
+      .then((res) => {
+        if (res && res.items && res.items.length > 0) {
+          const dbIds = new Set(res.items.map((p) => p.propertyId || p.id))
+          const nonColliding = MOCK_PROPERTIES.filter(
+            (m) => !dbIds.has(m.propertyId) && !dbIds.has(m.id)
+          )
+          setProperties([...res.items, ...nonColliding])
+        }
+      })
+      .catch(console.warn)
+  }, [])
 
   const {
     register,
@@ -58,7 +76,7 @@ export const TransactionsPage: React.FC = () => {
   })
 
   const onSubmitInitiate = (data: InitiateTransactionFormData) => {
-    const selectedProp = MOCK_PROPERTIES.find((p) => p.id === data.propertyId)
+    const selectedProp = properties.find((p) => p.id === data.propertyId || p.propertyId === data.propertyId)
     const newTxn = createTransactionRecord(data, selectedProp)
     setTransactions([newTxn, ...transactions])
     reset()
@@ -170,7 +188,7 @@ export const TransactionsPage: React.FC = () => {
         <form onSubmit={handleSubmit(onSubmitInitiate)} className="space-y-4">
           <Select
             label="Target Real Estate Parcel"
-            options={MOCK_PROPERTIES.map((p) => ({ value: p.id, label: `${p.propertyId} - ${p.title}` }))}
+            options={properties.map((p) => ({ value: p.id || p.propertyId, label: `${p.propertyId} - ${p.title}` }))}
             required
             error={errors.propertyId?.message}
             {...register('propertyId')}
