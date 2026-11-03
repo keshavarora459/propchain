@@ -24,7 +24,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@
 import { Button } from '@/components/ui/Button'
 import { Tabs } from '@/components/ui/Tabs'
 import { Input } from '@/components/ui/Input'
-import { formatCurrency, formatDate, truncateHash } from '@/lib/utils'
+import { formatCurrency, formatDate, truncateHash, getPropertyLabel } from '@/lib/utils'
 import { useAuth } from '@/hooks/useAuth'
 import { useWallet } from '@/context/WalletContext'
 import apiClient from '@/lib/axios'
@@ -114,7 +114,7 @@ export const BuyerDashboard: React.FC = () => {
             </Button>
             <Link to="/properties">
               <Button size="sm" leftIcon={<Search className="h-4 w-4" />}>
-                Explore All Parcels
+                Explore All Properties
               </Button>
             </Link>
           </div>
@@ -124,7 +124,7 @@ export const BuyerDashboard: React.FC = () => {
       {/* Buyer Quick Stat Cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
-          title="Verified Available Parcels"
+          title="Verified Available Properties"
           value={browseProperties.length.toString()}
           subtitle="Deed & title verified by county registrars"
           icon={<Building2 className="h-5 w-5" />}
@@ -147,7 +147,7 @@ export const BuyerDashboard: React.FC = () => {
         <StatCard
           title="Saved Favorites"
           value={savedPropertyIds.length.toString()}
-          subtitle="Quick access to parcels of interest"
+          subtitle="Quick access to properties of interest"
           icon={<BookmarkCheck className="h-5 w-5" />}
           iconBg="bg-indigo-50 text-indigo-600"
         />
@@ -182,7 +182,7 @@ export const BuyerDashboard: React.FC = () => {
               />
             </div>
             <div className="text-xs text-slate-500 font-mono">
-              Showing {filteredBrowse.length} verified & active real estate parcels
+              Showing {filteredBrowse.length} verified & active properties
             </div>
           </div>
 
@@ -204,7 +204,7 @@ export const BuyerDashboard: React.FC = () => {
                           <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
                             {prop.propertyType}
                           </span>
-                          <h4 className="font-semibold text-slate-900 mt-1 text-sm line-clamp-1">{prop.title}</h4>
+                          <h4 className="font-semibold text-slate-900 mt-1 text-sm line-clamp-1">{getPropertyLabel(prop)}</h4>
                           <p className="text-xs text-slate-500">{prop.city}, {prop.state}</p>
                         </div>
                         <button
@@ -256,7 +256,7 @@ export const BuyerDashboard: React.FC = () => {
             <Card className="p-12 text-center">
               <Bookmark className="h-10 w-10 text-slate-300 mx-auto mb-2" />
               <p className="text-sm font-semibold text-slate-700">No saved properties yet</p>
-              <p className="text-xs text-slate-400 mt-1">Browse active parcels and click the bookmark icon to save them here for quick review.</p>
+              <p className="text-xs text-slate-400 mt-1">Browse active properties and click the bookmark icon to save them here for quick review.</p>
               <Button size="sm" onClick={() => setActiveTab('browse')} className="mt-4">
                 Browse Properties
               </Button>
@@ -270,7 +270,7 @@ export const BuyerDashboard: React.FC = () => {
                       <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
                         {prop.propertyType}
                       </span>
-                      <h4 className="font-semibold text-slate-900 mt-1 text-sm">{prop.title}</h4>
+                      <h4 className="font-semibold text-slate-900 mt-1 text-sm">{getPropertyLabel(prop)}</h4>
                       <p className="text-xs text-slate-500">{prop.city}, {prop.state}</p>
                     </div>
                     <button
@@ -316,7 +316,7 @@ export const BuyerDashboard: React.FC = () => {
               <div className="p-12 text-center text-xs text-slate-400">
                 <Clock className="h-8 w-8 mx-auto text-slate-300 mb-2" />
                 <p className="text-sm font-medium text-slate-700">No active purchase offers</p>
-                <p className="mt-1">When you make an offer on a verified parcel, it will be tracked here in real time.</p>
+                <p className="mt-1">When you make an offer on a verified property, it will be tracked here in real time.</p>
                 <Button size="sm" onClick={() => setActiveTab('browse')} className="mt-4">
                   Browse Properties to Buy
                 </Button>
@@ -338,7 +338,7 @@ export const BuyerDashboard: React.FC = () => {
                   {myOffers.map((offer: any) => (
                     <TableRow key={offer.id}>
                       <TableCell className="font-mono text-xs font-semibold text-blue-600">{offer.transaction_number}</TableCell>
-                      <TableCell className="font-medium text-slate-900 text-xs">{offer.property_title}</TableCell>
+                      <TableCell className="font-medium text-slate-900 text-xs">{getPropertyLabel(offer)}</TableCell>
                       <TableCell className="text-xs text-slate-600">{offer.seller_name}</TableCell>
                       <TableCell className="font-mono text-xs font-bold text-slate-900">{formatCurrency(offer.amount)}</TableCell>
                       <TableCell><StatusBadge status={offer.status} /></TableCell>
@@ -389,7 +389,7 @@ export const BuyerDashboard: React.FC = () => {
                   {myTransactions.map((tx: any) => (
                     <TableRow key={tx.id}>
                       <TableCell className="font-mono text-xs font-semibold text-blue-600">{tx.transaction_number}</TableCell>
-                      <TableCell className="font-medium text-slate-900 text-xs">{tx.property_title}</TableCell>
+                      <TableCell className="font-medium text-slate-900 text-xs">{getPropertyLabel(tx)}</TableCell>
                       <TableCell className="font-mono text-xs font-bold text-slate-900">{formatCurrency(tx.amount)}</TableCell>
                       <TableCell><StatusBadge status={tx.status} /></TableCell>
                       <TableCell className="font-mono text-xs text-slate-500">
@@ -432,13 +432,13 @@ export const BuyerDashboard: React.FC = () => {
                       <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-300">
                         Title Registered
                       </span>
-                      <h4 className="font-semibold text-slate-900 mt-1 text-sm">{p.title}</h4>
+                      <h4 className="font-semibold text-slate-900 mt-1 text-sm">{getPropertyLabel(p)}</h4>
                       <p className="text-xs text-slate-500">{p.city}, {p.state}</p>
                     </div>
                     <CheckCircle2 className="h-5 w-5 text-emerald-600" />
                   </div>
                   <div className="pt-2 border-t border-slate-200 flex items-center justify-between text-xs">
-                    <span className="font-mono text-slate-500">Deed: {p.property_number}</span>
+                    <span className="font-mono text-slate-500">Parcel ID: {p.property_number}</span>
                     <span className="font-mono font-bold text-slate-900">{formatCurrency(p.valuation)}</span>
                   </div>
                   <Link to={`/properties/${p.id}`}>
@@ -580,7 +580,7 @@ export const BuyerDashboard: React.FC = () => {
                           {ev.event_type}
                         </span>
                       </TableCell>
-                      <TableCell className="text-xs font-medium text-slate-900">{ev.property_title || ev.property_number || 'Parcel'}</TableCell>
+                      <TableCell className="text-xs font-medium text-slate-900">{getPropertyLabel(ev)}</TableCell>
                       <TableCell className="font-mono text-xs text-blue-600">{truncateHash(ev.tx_hash)}</TableCell>
                       <TableCell className="font-mono text-xs text-slate-600">#{ev.block_number || 1}</TableCell>
                       <TableCell className="text-xs text-slate-500">{formatDate(ev.created_at)}</TableCell>

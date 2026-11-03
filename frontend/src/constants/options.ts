@@ -19,8 +19,6 @@ export const DOCUMENT_TYPES = [
   'Cadastral Survey',
   'Tax Clearance',
   'Encumbrance Certificate',
-  'Identity Proof (KYC)',
-  'Sale Agreement',
 ] as const
 
 export const TRANSACTION_STATUSES = [

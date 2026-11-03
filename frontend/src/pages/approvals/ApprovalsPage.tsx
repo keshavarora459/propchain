@@ -6,7 +6,7 @@ import { Tabs } from '@/components/ui/Tabs'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
-import { formatDate, formatCurrency } from '@/lib/utils'
+import { formatDate, formatCurrency, getPropertyLabel } from '@/lib/utils'
 import type { ApprovalRequest } from '@/types/approval'
 import apiClient from '@/lib/axios'
 
@@ -35,14 +35,14 @@ export const ApprovalsPage: React.FC = () => {
             approvalId: a.transaction_number || `APR-${(a.id || '').slice(0, 6).toUpperCase()}`,
             category: categoryLabel,
             propertyId: a.property_number || a.property_id || 'PROP-PARCEL',
-            propertyTitle: a.property_title || 'Real Estate Parcel',
+            propertyTitle: a.property_title || 'Real Estate Property',
             submittedBy: a.buyer_name ? `${a.buyer_name} (Buyer)` : (a.action_by_role || 'Buyer / Stakeholder'),
             submittedAt: a.created_at || new Date().toISOString(),
             priority: isSellerAcceptance ? 'Critical' : 'High',
             status: a.status === 'PENDING' ? 'Pending' : (a.status === 'APPROVED' ? 'Approved' : 'Rejected'),
             assignedApprover: a.seller_name ? `${a.seller_name} (Seller)` : (a.approver_user_id || 'Assigned Authority'),
             description: isSellerAcceptance
-              ? `Purchase offer of ${formatCurrency(Number(a.proposed_amount) || 0)} initiated by ${a.buyer_name || 'Buyer'} for parcel ${a.property_title || ''}.`
+              ? `Purchase offer of ${formatCurrency(Number(a.proposed_amount) || 0)} initiated by ${a.buyer_name || 'Buyer'} for property ${getPropertyLabel(a)}.`
               : (a.comments || 'Stakeholder clearance workflow.'),
             transactionId: a.transaction_id,
             transactionNumber: a.transaction_number,
@@ -159,7 +159,7 @@ export const ApprovalsPage: React.FC = () => {
               <TableRow>
                 <TableHead>Tx / Approval ID</TableHead>
                 <TableHead>Request Type</TableHead>
-                <TableHead>Property Parcel</TableHead>
+                <TableHead>Property</TableHead>
                 <TableHead>Buyer / Requester</TableHead>
                 <TableHead>Offer Amount</TableHead>
                 <TableHead>Status</TableHead>
@@ -177,8 +177,8 @@ export const ApprovalsPage: React.FC = () => {
                     <span className="text-[10px] text-slate-400">{formatDate(apr.submittedAt)}</span>
                   </TableCell>
                   <TableCell>
-                    <p className="font-semibold text-slate-900">{apr.propertyTitle}</p>
-                    <span className="text-[11px] font-mono text-slate-400">{apr.propertyId}</span>
+                    <p className="font-semibold text-slate-900">{getPropertyLabel(apr)}</p>
+                    <span className="text-[11px] font-mono text-slate-400">Parcel ID: {apr.propertyId}</span>
                   </TableCell>
                   <TableCell className="text-xs text-slate-800">
                     <p className="font-medium">{apr.submittedBy}</p>
@@ -247,9 +247,15 @@ export const ApprovalsPage: React.FC = () => {
                 <span className="font-semibold text-slate-900">{selectedApproval.category}</span>
               </div>
               <div className="flex justify-between items-center pb-2 border-b border-slate-200/60">
-                <span className="text-slate-500 font-medium">Target Parcel:</span>
+                <span className="text-slate-500 font-medium">Property:</span>
                 <span className="font-semibold text-slate-900">
-                  {selectedApproval.propertyTitle} ({selectedApproval.propertyId})
+                  {getPropertyLabel(selectedApproval)}
+                </span>
+              </div>
+              <div className="flex justify-between items-center pb-2 border-b border-slate-200/60">
+                <span className="text-slate-500 font-medium">Parcel ID:</span>
+                <span className="font-mono text-slate-600">
+                  {selectedApproval.propertyId}
                 </span>
               </div>
               <div className="flex justify-between items-center pb-2 border-b border-slate-200/60">

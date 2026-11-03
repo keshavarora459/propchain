@@ -10,7 +10,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@
 import { Button } from '@/components/ui/Button'
 import { RegisterPropertyModal } from './RegisterPropertyModal'
 import { PROPERTY_TYPES, VERIFICATION_STATUSES } from '@/constants/options'
-import { formatCurrency } from '@/lib/utils'
+import { formatCurrency, getPropertyLabel } from '@/lib/utils'
 import type { Property } from '@/types/property'
 import { propertyService } from '@/services/propertyService'
 import { useAuth } from '@/hooks/useAuth'
@@ -122,7 +122,7 @@ export const PropertiesPage: React.FC = () => {
             </div>
             {(user?.role === 'PROPERTY_OWNER' || user?.role === 'ADMIN') && (
               <Button onClick={() => setIsModalOpen(true)} leftIcon={<Plus className="h-4 w-4" />}>
-                Register Parcel
+                Register Property
               </Button>
             )}
           </div>
@@ -174,7 +174,7 @@ export const PropertiesPage: React.FC = () => {
             <TableHeader>
               <TableRow>
                 <TableHead>Parcel ID</TableHead>
-                <TableHead>Title & Location</TableHead>
+                <TableHead>Property</TableHead>
                 <TableHead>Type</TableHead>
                 <TableHead>Area</TableHead>
                 <TableHead>Valuation</TableHead>
@@ -186,11 +186,11 @@ export const PropertiesPage: React.FC = () => {
             <TableBody>
               {paginatedProperties.map((prop) => (
                 <TableRow key={prop.id || prop.propertyId}>
-                  <TableCell className="font-mono text-xs font-semibold text-slate-900">
+                  <TableCell className="font-mono text-xs text-slate-400">
                     {prop.propertyId}
                   </TableCell>
                   <TableCell>
-                    <p className="font-semibold text-slate-900">{prop.title}</p>
+                    <p className="font-semibold text-slate-900">{getPropertyLabel(prop)}</p>
                     <p className="text-xs text-slate-500">
                       {prop.address}, {prop.city}, {prop.state}
                     </p>

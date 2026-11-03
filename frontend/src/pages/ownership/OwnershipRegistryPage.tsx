@@ -5,7 +5,7 @@ import { Timeline, type TimelineEvent } from '@/components/common/Timeline'
 import { HashDisplay } from '@/components/common/HashDisplay'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card'
 import { Input } from '@/components/ui/Input'
-import { formatCurrency, formatDate } from '@/lib/utils'
+import { formatCurrency, formatDate, getPropertyLabel } from '@/lib/utils'
 import { propertyService } from '@/services/propertyService'
 import type { Property } from '@/types/property'
 import apiClient from '@/lib/axios'
@@ -100,10 +100,10 @@ export const OwnershipRegistryPage: React.FC = () => {
       })
     }
 
-    // Always ensure the root deed anchor / cadastral creation is represented
+    // Always ensure the root deed anchor / creation is represented
     timelineEvents.push({
       id: `origin-${activeProperty.id}`,
-      title: `Cadastral Registration & Deed Anchor: ${activeProperty.currentOwner}`,
+      title: `Property Registration & Deed Anchor: ${activeProperty.currentOwner}`,
       description: `Assessed Value: ${formatCurrency(activeProperty.valuation)} • Ref: ${activeProperty.registrationReference || 'REG-PENDING'}`,
       date: formatDate(activeProperty.registeredAt),
       actor: 'Municipal Land Registrar',
@@ -125,7 +125,7 @@ export const OwnershipRegistryPage: React.FC = () => {
     <div className="space-y-6">
       <PageHeader
         title="Immutable Title & Ownership Registry"
-        description="Chronological, cryptographically verifiable deed provenance traced to original cadastral grant."
+        description="Chronological, cryptographically verifiable deed provenance traced to original property grant."
       />
 
       {isLoading ? (
@@ -143,7 +143,7 @@ export const OwnershipRegistryPage: React.FC = () => {
         </Card>
       ) : (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-          {/* Left: Parcel Ownership Selector */}
+          {/* Left: Property Ownership Selector */}
           <div className="space-y-4">
             <Input
               placeholder="Search ownership registry..."
@@ -166,16 +166,16 @@ export const OwnershipRegistryPage: React.FC = () => {
                     }`}
                   >
                     <div className="flex items-center justify-between">
-                      <span className="font-mono text-xs font-semibold text-slate-800">
-                        {rec.propertyId}
-                      </span>
-                      <span className="text-[11px] font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                      <h4 className="text-xs font-bold text-slate-900 line-clamp-1">
+                        {getPropertyLabel(rec)}
+                      </h4>
+                      <span className="text-[11px] font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 shrink-0 ml-2">
                         {rec.verificationStatus}
                       </span>
                     </div>
-                    <h4 className="text-xs font-bold text-slate-900 mt-1 line-clamp-1">
-                      {rec.title}
-                    </h4>
+                    <span className="font-mono text-[10px] text-slate-400 mt-1 block">
+                      Parcel ID: {rec.propertyId}
+                    </span>
                     <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between text-xs text-slate-600">
                       <span className="truncate max-w-[160px]">{rec.currentOwner}</span>
                       <span className="font-semibold text-slate-900">
@@ -194,9 +194,9 @@ export const OwnershipRegistryPage: React.FC = () => {
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between">
                   <div>
-                    <CardTitle>{activeProperty.title}</CardTitle>
+                    <CardTitle>{getPropertyLabel(activeProperty)}</CardTitle>
                     <CardDescription>
-                      Parcel {activeProperty.propertyId} • Current Legal Title Holder:{' '}
+                      Parcel ID: {activeProperty.propertyId} • Current Legal Title Holder:{' '}
                       <strong className="text-slate-800">{activeProperty.currentOwner}</strong>
                     </CardDescription>
                   </div>

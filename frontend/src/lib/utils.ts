@@ -39,3 +39,36 @@ export function formatDate(dateString: string): string {
   }).format(date)
 }
 
+/**
+ * Return a simple, human-readable label for a property: "<Title> – <City>"
+ * If there is no city, returns only the title.
+ */
+export function getPropertyLabel(property?: {
+  title?: string | null
+  property_title?: string | null
+  propertyTitle?: string | null
+  name?: string | null
+  city?: string | null
+  property_number?: string | null
+  propertyNumber?: string | null
+  propertyId?: string | null
+  id?: string | null
+} | string | null): string {
+  if (!property) return ''
+  if (typeof property === 'string') {
+    const cleaned = property.replace(/^PROP-[\w-]+(?:\s*[-–:]\s*|\s+)/i, '').trim()
+    return cleaned || property
+  }
+  const rawTitle = property.title || property.property_title || property.propertyTitle || property.name
+  let cleanTitle = rawTitle ? rawTitle.replace(/^PROP-[\w-]+(?:\s*[-–:]\s*|\s+)/i, '').trim() : ''
+  if (!cleanTitle) {
+    cleanTitle = rawTitle || property.property_number || property.propertyNumber || property.propertyId || 'Property'
+  }
+  const city = property.city?.trim()
+  if (city) {
+    return `${cleanTitle} – ${city}`
+  }
+  return cleanTitle
+}
+
+

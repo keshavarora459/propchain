@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { MapPin, Maximize2, ShieldCheck, ArrowRight } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/Card'
 import { StatusBadge } from './StatusBadge'
-import { formatCurrency } from '@/lib/utils'
+import { formatCurrency, getPropertyLabel } from '@/lib/utils'
 import type { Property } from '@/types/property'
 
 export interface PropertyCardProps {
@@ -23,8 +23,8 @@ export const PropertyCard: React.FC<PropertyCardProps> = ({ property }) => {
         <div className="absolute inset-0 opacity-10 bg-[radial-gradient(#fff_1px,transparent_1px)] [background-size:16px_16px]" />
         
         <div className="relative z-10 flex items-center justify-between">
-          <span className="text-[11px] font-mono font-semibold tracking-wider bg-white/10 text-white px-2 py-0.5 rounded backdrop-blur-xs">
-            {property.propertyId}
+          <span className="text-[10px] font-mono text-slate-300 bg-white/10 px-2 py-0.5 rounded backdrop-blur-xs">
+            Parcel ID: {property.propertyId}
           </span>
           <StatusBadge status={property.verificationStatus} />
         </div>
@@ -42,7 +42,7 @@ export const PropertyCard: React.FC<PropertyCardProps> = ({ property }) => {
       <CardContent className="p-4 space-y-3">
         <div>
           <h4 className="text-sm font-semibold text-slate-900 line-clamp-1 group-hover:text-blue-600 transition-colors">
-            {property.title}
+            {getPropertyLabel(property)}
           </h4>
           <p className="flex items-center text-xs text-slate-500 mt-1 line-clamp-1">
             <MapPin className="h-3.5 w-3.5 mr-1 text-slate-400 shrink-0" />

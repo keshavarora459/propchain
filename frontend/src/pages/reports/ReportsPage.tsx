@@ -22,7 +22,7 @@ export const ReportsPage: React.FC = () => {
 
   const reportsSummary = [
     {
-      title: 'Parcel Title Tokenization Report',
+      title: 'Property Title Tokenization Report',
       count: '1,248 Records',
       description: 'Historical breakdown of registered and verified ERC-721 real estate deeds.',
       lastGenerated: 'Oct 28, 2024',

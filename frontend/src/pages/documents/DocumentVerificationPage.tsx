@@ -6,6 +6,7 @@ import {
   XCircle,
   Eye,
   Loader2,
+  Check,
 } from 'lucide-react'
 import { PageHeader } from '@/components/common/PageHeader'
 import { StatusBadge } from '@/components/common/StatusBadge'
@@ -15,14 +16,20 @@ import { Button } from '@/components/ui/Button'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import { Modal } from '@/components/ui/Modal'
 import { Select } from '@/components/ui/Select'
-import { DOCUMENT_TYPES } from '@/constants/options'
-import { truncateHash, formatDate } from '@/lib/utils'
+import { truncateHash, formatDate, getPropertyLabel } from '@/lib/utils'
 import type { DocumentRecord, DocumentType } from '@/types/document'
 import type { Property } from '@/types/property'
 import { propertyService } from '@/services/propertyService'
 import { ownershipService } from '@/services/ownershipService'
 import apiClient from '@/lib/axios'
 import { useAuth } from '@/hooks/useAuth'
+
+export const REQUIRED_DOCUMENT_TYPES = [
+  { id: 'TITLE_DEED', label: 'Title Deed' },
+  { id: 'CADASTRAL_SURVEY', label: 'Cadastral Survey' },
+  { id: 'TAX_CLEARANCE', label: 'Tax Clearance' },
+  { id: 'ENCUMBRANCE_CERTIFICATE', label: 'Encumbrance Certificate' },
+] as const
 
 export const DocumentVerificationPage: React.FC = () => {
   const { user } = useAuth()
@@ -35,8 +42,72 @@ export const DocumentVerificationPage: React.FC = () => {
   const [uploadNotice, setUploadNotice] = useState<string | null>(null)
   const [isUpdating, setIsUpdating] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
+  const [isSubmittingReview, setIsSubmittingReview] = useState(false)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const selectedProperty = properties.find(
+    (p) => p.propertyId === selectedPropertyId || p.id === selectedPropertyId
+  )
+
+  const propertyDocuments = documents.filter((d) => {
+    if (!selectedPropertyId) return false
+    return (
+      d.propertyId === selectedPropertyId ||
+      d.property_id === selectedPropertyId ||
+      (selectedProperty && (d.propertyId === selectedProperty.id || d.property_id === selectedProperty.id))
+    )
+  })
+
+  const getDocForType = (typeLabel: string): DocumentRecord | undefined => {
+    return propertyDocuments.find((d) => {
+      const docType = (d.documentType || '').toLowerCase()
+      const target = typeLabel.toLowerCase()
+      if (docType === target) return true
+      if (target === 'title deed' && (docType.includes('title') || docType.includes('sale'))) return true
+      if (target === 'cadastral survey' && (docType.includes('survey') || docType.includes('cadastral'))) return true
+      if (target === 'tax clearance' && docType.includes('tax')) return true
+      if (target === 'encumbrance certificate' && docType.includes('encumbrance')) return true
+      return false
+    })
+  }
+
+  const uploadedCount = REQUIRED_DOCUMENT_TYPES.filter(
+    (req) => !!getDocForType(req.label)
+  ).length
+
+  const docClassificationOptions = REQUIRED_DOCUMENT_TYPES.map((t) => {
+    const existing = getDocForType(t.label)
+    return {
+      value: t.label,
+      label: existing ? `${t.label} (uploaded)` : t.label,
+    }
+  })
+
+  const handleSubmitForVerification = async () => {
+    if (!selectedProperty?.id) return
+    setIsSubmittingReview(true)
+    try {
+      await apiClient.post(`/properties/${selectedProperty.id}/submit-for-verification`)
+      setUploadNotice(
+        `✓ Property "${getPropertyLabel(selectedProperty)}" submitted for verifier review successfully!`
+      )
+      setProperties((prev) =>
+        prev.map((p) =>
+          p.id === selectedProperty.id
+            ? { ...p, verificationStatus: 'Pending', status: 'Under Review' }
+            : p
+        )
+      )
+      setTimeout(() => setUploadNotice(null), 7000)
+    } catch (err: any) {
+      const errMsg = err.response?.data?.message || err.message || 'Failed to submit property for review'
+      setUploadNotice(`Error: ${errMsg}`)
+      setTimeout(() => setUploadNotice(null), 8000)
+    } finally {
+      setIsSubmittingReview(false)
+    }
+  }
 
   useEffect(() => {
     propertyService
@@ -59,10 +130,14 @@ export const DocumentVerificationPage: React.FC = () => {
                     propertyTitle: prop.title,
                     documentName: d.title || d.original_filename || 'Property Deed',
                     documentType:
-                      d.document_type === 'SALE_DEED'
+                      d.document_type === 'SALE_DEED' || d.document_type === 'TITLE_DEED'
                         ? 'Title Deed'
-                        : d.document_type === 'SURVEY_PLAN'
+                        : d.document_type === 'SURVEY_PLAN' || d.document_type === 'CADASTRAL_SURVEY'
                         ? 'Cadastral Survey'
+                        : d.document_type === 'TAX_CLEARANCE' || d.document_type === 'TAX_RECEIPT'
+                        ? 'Tax Clearance'
+                        : d.document_type === 'ENCUMBRANCE_CERTIFICATE'
+                        ? 'Encumbrance Certificate'
                         : 'Title Deed',
                     fileSize: d.file_size ? `${Math.round(d.file_size / 1024)} KB` : '150 KB',
                     uploadedAt: d.created_at || new Date().toISOString(),
@@ -95,6 +170,20 @@ export const DocumentVerificationPage: React.FC = () => {
   const handleProcessFile = async (file: File) => {
     if (!file) return
 
+    // Requirement 3: Ask to replace if already uploaded
+    const existingDoc = getDocForType(selectedDocType)
+    if (existingDoc) {
+      const confirmed = window.confirm(
+        `Replace the existing document?\n\nA ${selectedDocType} ("${existingDoc.documentName}") has already been uploaded for this property.`
+      )
+      if (!confirmed) {
+        if (fileInputRef.current) {
+          fileInputRef.current.value = ''
+        }
+        return
+      }
+    }
+
     setIsUploading(true)
     const matchedProp = properties.find(
       (p) => p.propertyId === selectedPropertyId || p.id === selectedPropertyId
@@ -116,16 +205,20 @@ export const DocumentVerificationPage: React.FC = () => {
       let backendDocId: string | null = null
       if (matchedProp && matchedProp.id) {
         try {
+          const backendDocType =
+            selectedDocType === 'Title Deed'
+              ? 'TITLE_DEED'
+              : selectedDocType === 'Cadastral Survey'
+              ? 'CADASTRAL_SURVEY'
+              : selectedDocType === 'Tax Clearance'
+              ? 'TAX_CLEARANCE'
+              : selectedDocType === 'Encumbrance Certificate'
+              ? 'ENCUMBRANCE_CERTIFICATE'
+              : 'TITLE_DEED'
+
           const formData = new FormData()
           formData.append('file', file)
-          formData.append(
-            'document_type',
-            selectedDocType === 'Title Deed'
-              ? 'SALE_DEED'
-              : selectedDocType === 'Cadastral Survey'
-              ? 'SURVEY_PLAN'
-              : 'TITLE_DEED'
-          )
+          formData.append('document_type', backendDocType)
           formData.append('title', file.name)
 
           const res = await apiClient.post(
@@ -159,7 +252,10 @@ export const DocumentVerificationPage: React.FC = () => {
         reviewNotes: `Cryptographic digest SHA-256 verified (${hashHex.slice(0, 16)}...). Document OCR parsed and ready for confirmation.`,
       }
 
-      setDocuments((prev) => [newDoc, ...prev])
+      setDocuments((prev) => {
+        const filtered = existingDoc ? prev.filter((d) => d.id !== existingDoc.id) : prev
+        return [newDoc, ...filtered]
+      })
       setUploadNotice(
         `✓ File "${file.name}" uploaded successfully for ${matchedProp?.title || selectedPropertyId}! SHA-256: ${hashHex.slice(0, 16)}...`
       )
@@ -297,18 +393,132 @@ export const DocumentVerificationPage: React.FC = () => {
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Select
-              label="Associated Real Estate Parcel"
-              options={properties.map((p) => ({ value: p.propertyId, label: `${p.propertyId} - ${p.title}` }))}
+              label="Select Property"
+              options={properties.map((p) => ({ value: p.propertyId, label: getPropertyLabel(p) }))}
               value={selectedPropertyId}
               onChange={(e) => setSelectedPropertyId(e.target.value)}
             />
             <Select
               label="Document Classification"
-              options={DOCUMENT_TYPES}
+              options={docClassificationOptions}
               value={selectedDocType}
               onChange={(e) => setSelectedDocType(e.target.value as DocumentType)}
             />
           </div>
+
+          {/* Required Documents Checklist Card */}
+          {selectedProperty && (
+            <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4 space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                <div>
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800">
+                    Required Documents Checklist
+                  </h4>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    {user?.role === 'VERIFIER' || user?.role === 'ADMIN'
+                      ? 'Inspection Checklist: All 4 mandatory documents must be verified before on-chain conveyance.'
+                      : 'Upload all 4 mandatory document types to submit your property for verifier review.'}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-mono font-bold text-slate-800">
+                    {uploadedCount} of 4 required
+                  </span>
+                  {uploadedCount === 4 ? (
+                    <span className="px-2 py-0.5 text-[11px] font-semibold rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                      All Uploaded
+                    </span>
+                  ) : (
+                    <span className="px-2 py-0.5 text-[11px] font-semibold rounded-full bg-amber-100 text-amber-800 border border-amber-200">
+                      {4 - uploadedCount} Missing
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Progress Bar */}
+              <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+                <div
+                  className={`h-2 rounded-full transition-all duration-300 ${
+                    uploadedCount === 4 ? 'bg-emerald-500' : 'bg-blue-600'
+                  }`}
+                  style={{ width: `${(uploadedCount / 4) * 100}%` }}
+                />
+              </div>
+
+              {/* 4 Checklist Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 pt-1">
+                {REQUIRED_DOCUMENT_TYPES.map((req) => {
+                  const doc = getDocForType(req.label)
+                  const isUploaded = !!doc
+                  return (
+                    <div
+                      key={req.id}
+                      className={`p-3 rounded-lg border text-xs transition-all ${
+                        isUploaded
+                          ? 'border-emerald-200 bg-white shadow-2xs'
+                          : 'border-slate-200 bg-white/60'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 mb-1.5">
+                        {isUploaded ? (
+                          <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
+                            <Check className="h-3.5 w-3.5 stroke-[2.5]" />
+                          </div>
+                        ) : (
+                          <div className="h-4 w-4 shrink-0 rounded border border-slate-300 bg-slate-200" />
+                        )}
+                        <span className="font-semibold text-slate-800 text-xs">
+                          {req.label}
+                        </span>
+                      </div>
+
+                      <div className="pl-7 space-y-1">
+                        {isUploaded && doc ? (
+                          <>
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[10px] text-slate-500 font-medium">Status:</span>
+                              <StatusBadge status={doc.status} />
+                            </div>
+                            <p className="text-[11px] text-slate-600 truncate font-mono" title={doc.documentName}>
+                              {doc.documentName}
+                            </p>
+                          </>
+                        ) : (
+                          <div className="text-[11px] text-slate-400">
+                            Missing
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* Action row for Property Owner */}
+              {user?.role === 'PROPERTY_OWNER' && (
+                <div className="pt-2 flex flex-col sm:flex-row justify-between items-center gap-2 border-t border-slate-200">
+                  <p className="text-[11px] text-slate-500">
+                    {uploadedCount === 4
+                      ? 'Ready: Click below to submit this property for title verifier inspection.'
+                      : 'Upload the missing document types above to enable verifier review submission.'}
+                  </p>
+                  <Button
+                    size="sm"
+                    disabled={uploadedCount < 4 || isSubmittingReview || selectedProperty?.verificationStatus === 'VERIFIED'}
+                    onClick={handleSubmitForVerification}
+                    isLoading={isSubmittingReview}
+                  >
+                    {selectedProperty?.verificationStatus === 'VERIFIED'
+                      ? 'Property Verified'
+                      : uploadedCount === 4
+                      ? 'Submit for Verification'
+                      : `${4 - uploadedCount} Missing`}
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Drag & Drop Upload Zone - Clicking opens native file picker */}
           <div
@@ -385,7 +595,7 @@ export const DocumentVerificationPage: React.FC = () => {
             <TableHeader>
               <TableRow>
                 <TableHead>Document Name</TableHead>
-                <TableHead>Target Parcel</TableHead>
+                <TableHead>Property</TableHead>
                 <TableHead>Type</TableHead>
                 <TableHead>OCR Confidence</TableHead>
                 <TableHead>Status</TableHead>
@@ -405,9 +615,9 @@ export const DocumentVerificationPage: React.FC = () => {
                   </TableCell>
                   <TableCell>
                     <p className="font-semibold text-slate-800 truncate max-w-[180px]">
-                      {doc.propertyTitle}
+                      {getPropertyLabel(doc)}
                     </p>
-                    <span className="text-[11px] font-mono text-slate-400">{doc.propertyId}</span>
+                    <span className="text-[11px] font-mono text-slate-400">Parcel ID: {doc.propertyId}</span>
                   </TableCell>
                   <TableCell className="text-xs text-slate-600">{doc.documentType}</TableCell>
                   <TableCell>
@@ -483,11 +693,16 @@ export const DocumentVerificationPage: React.FC = () => {
         >
           <div className="space-y-4 text-xs">
             <div className="p-4 rounded-lg bg-slate-50 border border-slate-200/80 space-y-2">
-              <div className="flex justify-between">
-                <span className="text-slate-500">Parcel Target</span>
-                <span className="font-semibold text-slate-900">
-                  {selectedDoc.propertyId} — {selectedDoc.propertyTitle}
-                </span>
+              <div className="flex justify-between items-start">
+                <span className="text-slate-500">Property</span>
+                <div className="text-right">
+                  <span className="font-semibold text-slate-900 block">
+                    {getPropertyLabel(selectedDoc)}
+                  </span>
+                  <span className="text-[11px] text-slate-400 font-mono">
+                    Parcel ID: {selectedDoc.propertyId}
+                  </span>
+                </div>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-500">Classification</span>

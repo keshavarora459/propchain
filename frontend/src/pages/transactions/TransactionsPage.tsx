@@ -11,7 +11,7 @@ import { Modal } from '@/components/ui/Modal'
 import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { initiateTransactionSchema, type InitiateTransactionFormData, normalizeWalletAddress } from '@/schemas/transactionSchema'
-import { formatCurrency, formatDate } from '@/lib/utils'
+import { formatCurrency, formatDate, getPropertyLabel } from '@/lib/utils'
 import type { Transaction } from '@/types/transaction'
 import type { Property } from '@/types/property'
 import { propertyService } from '@/services/propertyService'
@@ -90,7 +90,7 @@ export const TransactionsPage: React.FC = () => {
             id: t.id,
             transactionId: t.transaction_number || `TXN-${t.id.slice(0, 6)}`,
             propertyId: t.property?.property_number || t.property_id || 'PROP-PARCEL',
-            propertyTitle: t.property?.title || 'Real Estate Parcel',
+            propertyTitle: t.property?.title || 'Real Estate Property',
             buyerName: t.buyer?.full_name || 'Buyer',
             buyerWallet: t.buyer_wallet_address || '0x0000000000000000000000000000000000000000',
             sellerName: t.seller?.full_name || 'Seller',
@@ -322,8 +322,8 @@ export const TransactionsPage: React.FC = () => {
                     {txn.transactionId}
                   </TableCell>
                   <TableCell>
-                    <p className="font-semibold text-slate-900">{txn.propertyTitle}</p>
-                    <span className="font-mono text-[11px] text-slate-400">{txn.propertyId}</span>
+                    <p className="font-semibold text-slate-900">{getPropertyLabel(txn)}</p>
+                    <span className="font-mono text-[11px] text-slate-400">Parcel ID: {txn.propertyId}</span>
                   </TableCell>
                   <TableCell>
                     <p className="text-xs font-medium text-slate-800">
@@ -377,12 +377,12 @@ export const TransactionsPage: React.FC = () => {
           )}
 
           <Select
-            label="Target Real Estate Parcel"
+            label="Select Property"
             options={[
-              { value: '', label: '-- Select a Real Estate Parcel --' },
+              { value: '', label: '-- Select Property --' },
               ...eligibleProperties.map((p) => ({
                 value: p.id || p.propertyId,
-                label: `${p.propertyId || (p as any).property_number || 'PROP'} - ${p.title} (${formatCurrency(p.valuation)}) - Verified`,
+                label: `${getPropertyLabel(p)} (${formatCurrency(p.valuation)})`,
               })),
             ]}
             required
@@ -470,9 +470,12 @@ export const TransactionsPage: React.FC = () => {
         >
           <div className="space-y-4 text-xs">
             <div className="p-3 bg-slate-50 rounded-lg space-y-2 border border-slate-100">
-              <div className="flex justify-between">
-                <span className="text-slate-400">Target Parcel:</span>
-                <span className="font-semibold text-slate-800">{selectedTxn.propertyTitle}</span>
+              <div className="flex justify-between items-start">
+                <span className="text-slate-400">Property:</span>
+                <div className="text-right">
+                  <span className="font-semibold text-slate-800 block">{getPropertyLabel(selectedTxn)}</span>
+                  <span className="font-mono text-[11px] text-slate-400">Parcel ID: {selectedTxn.propertyId}</span>
+                </div>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-400">Escrow Value:</span>

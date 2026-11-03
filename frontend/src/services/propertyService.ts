@@ -31,7 +31,7 @@ export function normalizeProperty(p: any): Property {
   return {
     ...p,
     id: p.id,
-    title: p.title || 'Real Estate Parcel',
+    title: p.title || 'Real Estate Property',
     propertyId,
     propertyType,
     address,

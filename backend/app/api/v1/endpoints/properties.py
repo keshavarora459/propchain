@@ -134,3 +134,45 @@ def update_property_status(
     service = PropertyService(db)
     return service.update_status(property_id, payload, current_user)
 
+
+@router.post(
+    "/{property_id}/submit-for-verification",
+    response_model=PropertyResponse,
+    summary="Submit property for verifier review once all required documents are uploaded",
+)
+def submit_for_verification(
+    property_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    service = PropertyService(db)
+    return service.submit_for_verification(property_id, current_user)
+
+
+@router.post(
+    "/{property_id}/submit",
+    response_model=PropertyResponse,
+    summary="Alias for submit property for verification",
+    include_in_schema=False,
+)
+def submit_property_alias(
+    property_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    service = PropertyService(db)
+    return service.submit_for_verification(property_id, current_user)
+
+
+@router.get(
+    "/{property_id}/required-documents",
+    summary="Check checklist of required documents for property verification",
+)
+def get_required_documents_status(
+    property_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    service = PropertyService(db)
+    return service.get_required_documents_status(property_id, current_user)
+

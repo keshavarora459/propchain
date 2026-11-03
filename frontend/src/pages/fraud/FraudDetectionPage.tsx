@@ -6,7 +6,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { StatusBadge } from '@/components/common/StatusBadge'
-import { formatDate } from '@/lib/utils'
+import { formatDate, getPropertyLabel } from '@/lib/utils'
 import { propertyService } from '@/services/propertyService'
 import type { Property } from '@/types/property'
 
@@ -157,7 +157,7 @@ export const FraudDetectionPage: React.FC = () => {
             <TableHeader>
               <TableRow>
                 <TableHead>Alert ID</TableHead>
-                <TableHead>Target Parcel</TableHead>
+                <TableHead>Property</TableHead>
                 <TableHead>Category</TableHead>
                 <TableHead>Risk Score</TableHead>
                 <TableHead>Status</TableHead>
@@ -173,9 +173,9 @@ export const FraudDetectionPage: React.FC = () => {
                   </TableCell>
                   <TableCell>
                     <p className="font-semibold text-slate-900 truncate max-w-[200px]">
-                      {alt.propertyTitle}
+                      {getPropertyLabel(alt)}
                     </p>
-                    <span className="text-[11px] font-mono text-slate-400">{alt.propertyId}</span>
+                    <span className="text-[11px] font-mono text-slate-400">Parcel ID: {alt.propertyId}</span>
                   </TableCell>
                   <TableCell className="text-xs text-slate-700">{alt.category}</TableCell>
                   <TableCell className="font-mono text-xs font-bold text-rose-600">
@@ -212,7 +212,10 @@ export const FraudDetectionPage: React.FC = () => {
           <div className="space-y-4 text-xs">
             <div className="p-3 bg-slate-50 rounded-lg space-y-1">
               <p className="text-slate-500">
-                Property Target: <strong className="text-slate-800">{selectedAlert.propertyTitle}</strong> ({selectedAlert.propertyId})
+                Property Target: <strong className="text-slate-800">{getPropertyLabel(selectedAlert)}</strong>
+              </p>
+              <p className="text-[11px] font-mono text-slate-400">
+                Parcel ID: {selectedAlert.propertyId}
               </p>
               <p className="text-slate-500">
                 Risk Classification:{' '}

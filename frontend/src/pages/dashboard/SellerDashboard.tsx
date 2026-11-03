@@ -20,7 +20,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@
 import { Button } from '@/components/ui/Button'
 import { Tabs } from '@/components/ui/Tabs'
 import { RegisterPropertyModal } from '@/pages/properties/RegisterPropertyModal'
-import { formatCurrency, formatDate } from '@/lib/utils'
+import { formatCurrency, formatDate, getPropertyLabel } from '@/lib/utils'
 import { HashDisplay } from '@/components/common/HashDisplay'
 import type { SellerDashboardData, SellerProperty, SellerOffer, SellerDocument } from '@/types/seller'
 import { useAuth } from '@/hooks/useAuth'
@@ -95,7 +95,7 @@ export const SellerDashboard: React.FC = () => {
     <div className="space-y-6">
       <PageHeader
         title={`Seller Console: ${user?.full_name || 'Property Owner'}`}
-        description="Manage listed real estate parcels, evaluate incoming buyer purchase offers, upload title deeds, and track escrow settlements."
+        description="Manage listed properties, evaluate incoming buyer purchase offers, upload title deeds, and track escrow settlements."
         actions={
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={loadSellerData} leftIcon={<RefreshCw className="h-3.5 w-3.5" />}>
@@ -175,7 +175,7 @@ export const SellerDashboard: React.FC = () => {
                     View All ({receivedOffers.length})
                   </Button>
                 </div>
-                <CardDescription>Bids placed by buyers on your registered parcels.</CardDescription>
+                <CardDescription>Bids placed by buyers on your registered properties.</CardDescription>
               </CardHeader>
               <CardContent className="p-0">
                 {receivedOffers.length === 0 ? (
@@ -196,7 +196,7 @@ export const SellerDashboard: React.FC = () => {
                     <TableBody>
                       {receivedOffers.slice(0, 4).map((offer: SellerOffer) => (
                         <TableRow key={offer.id}>
-                          <TableCell className="font-medium text-slate-900 text-xs">{offer.property_title}</TableCell>
+                          <TableCell className="font-medium text-slate-900 text-xs">{getPropertyLabel(offer)}</TableCell>
                           <TableCell className="text-xs text-slate-600">{offer.buyer_name}</TableCell>
                           <TableCell className="font-mono text-xs font-bold text-slate-900">{formatCurrency(offer.amount)}</TableCell>
                           <TableCell><StatusBadge status={offer.status} /></TableCell>
@@ -216,7 +216,7 @@ export const SellerDashboard: React.FC = () => {
                     Manage Properties
                   </Button>
                 </div>
-                <CardDescription>Parcels currently registered under your ownership profile.</CardDescription>
+                <CardDescription>Properties currently registered under your ownership profile.</CardDescription>
               </CardHeader>
               <CardContent className="p-0">
                 {myProperties.length === 0 ? (
@@ -224,7 +224,7 @@ export const SellerDashboard: React.FC = () => {
                     <Building2 className="h-8 w-8 mx-auto text-slate-300 mb-2" />
                     <p>You have not registered any properties yet.</p>
                     <Button size="sm" onClick={() => setIsRegisterModalOpen(true)} className="mt-3">
-                      Register First Parcel
+                      Register First Property
                     </Button>
                   </div>
                 ) : (
@@ -240,7 +240,7 @@ export const SellerDashboard: React.FC = () => {
                     <TableBody>
                       {myProperties.slice(0, 4).map((p: SellerProperty) => (
                         <TableRow key={p.id}>
-                          <TableCell className="font-medium text-slate-900 text-xs">{p.title}</TableCell>
+                          <TableCell className="font-medium text-slate-900 text-xs">{getPropertyLabel(p)}</TableCell>
                           <TableCell className="text-xs text-slate-500">{p.city}, {p.state}</TableCell>
                           <TableCell className="font-mono text-xs font-bold">{formatCurrency(p.valuation)}</TableCell>
                           <TableCell><StatusBadge status={p.verification_status} /></TableCell>
@@ -260,7 +260,7 @@ export const SellerDashboard: React.FC = () => {
         <div className="space-y-4">
           <div className="flex justify-between items-center bg-white p-4 rounded-xl border border-slate-200">
             <span className="text-xs font-mono text-slate-500">
-              {myProperties.length} total parcels registered by your account
+              {myProperties.length} total properties registered by your account
             </span>
             <Button size="sm" onClick={() => setIsRegisterModalOpen(true)} leftIcon={<Plus className="h-4 w-4" />}>
               Add New Property
@@ -271,7 +271,7 @@ export const SellerDashboard: React.FC = () => {
             <Card className="p-12 text-center">
               <Building2 className="h-10 w-10 text-slate-300 mx-auto mb-2" />
               <p className="text-sm font-semibold text-slate-700">No properties listed yet</p>
-              <p className="text-xs text-slate-400 mt-1">Register a real estate parcel to begin title verification and receive buyer bids.</p>
+              <p className="text-xs text-slate-400 mt-1">Register a property to begin title verification and receive buyer bids.</p>
               <Button size="sm" onClick={() => setIsRegisterModalOpen(true)} className="mt-4">
                 Register Property
               </Button>
@@ -285,14 +285,14 @@ export const SellerDashboard: React.FC = () => {
                       <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded bg-slate-100 text-slate-700">
                         {p.property_type}
                       </span>
-                      <h4 className="font-semibold text-slate-900 mt-1 text-sm">{p.title}</h4>
+                      <h4 className="font-semibold text-slate-900 mt-1 text-sm">{getPropertyLabel(p)}</h4>
                       <p className="text-xs text-slate-500">{p.city}, {p.state}</p>
                     </div>
                     <StatusBadge status={p.verification_status} />
                   </div>
                   <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
-                    <span className="text-slate-500">Cadastral Ref:</span>
-                    <span className="font-mono font-semibold text-slate-800">{p.property_number}</span>
+                    <span className="text-slate-500">Property No.:</span>
+                    <span className="font-mono text-slate-500">{p.property_number}</span>
                   </div>
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-slate-500">Valuation:</span>
@@ -387,7 +387,7 @@ export const SellerDashboard: React.FC = () => {
         <Card>
           <CardHeader>
             <CardTitle>Property Verification Pipeline</CardTitle>
-            <CardDescription>Current verification and cryptographic anchoring status of your listed parcels.</CardDescription>
+            <CardDescription>Current verification and cryptographic anchoring status of your listed properties.</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
@@ -395,8 +395,8 @@ export const SellerDashboard: React.FC = () => {
                 <div key={p.id} className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 space-y-3">
                   <div className="flex items-center justify-between">
                     <div>
-                      <h4 className="font-semibold text-slate-900 text-sm">{p.title}</h4>
-                      <p className="text-xs text-slate-500 font-mono">Parcel ID: {p.property_number}</p>
+                      <h4 className="font-semibold text-slate-900 text-sm">{getPropertyLabel(p)}</h4>
+                      <p className="text-xs text-slate-400 font-mono">Parcel ID: {p.property_number}</p>
                     </div>
                     <StatusBadge status={p.verification_status} />
                   </div>
@@ -441,7 +441,7 @@ export const SellerDashboard: React.FC = () => {
               <div className="p-12 text-center text-xs text-slate-400">
                 <ArrowLeftRight className="h-8 w-8 mx-auto text-slate-300 mb-2" />
                 <p className="text-sm font-medium text-slate-700">No buyer offers received yet</p>
-                <p className="mt-1">When buyers initiate purchase proposals on your verified parcels, you can review and accept them here.</p>
+                <p className="mt-1">When buyers initiate purchase proposals on your verified properties, you can review and accept them here.</p>
               </div>
             ) : (
               <Table>
@@ -463,7 +463,7 @@ export const SellerDashboard: React.FC = () => {
                     return (
                       <TableRow key={offer.id}>
                         <TableCell className="font-mono text-xs font-semibold text-blue-600">{offer.transaction_number}</TableCell>
-                        <TableCell className="font-medium text-slate-900 text-xs">{offer.property_title}</TableCell>
+                        <TableCell className="font-medium text-slate-900 text-xs">{getPropertyLabel(offer)}</TableCell>
                         <TableCell className="text-xs text-slate-600">{offer.buyer_name}</TableCell>
                         <TableCell className="font-mono text-xs font-bold text-slate-900">{formatCurrency(offer.amount)}</TableCell>
                         <TableCell><StatusBadge status={offer.status} /></TableCell>
@@ -531,7 +531,7 @@ export const SellerDashboard: React.FC = () => {
                   {receivedOffers.map((tx: SellerOffer) => (
                     <TableRow key={tx.id}>
                       <TableCell className="font-mono text-xs font-semibold text-blue-600">{tx.transaction_number}</TableCell>
-                      <TableCell className="font-medium text-slate-900 text-xs">{tx.property_title}</TableCell>
+                      <TableCell className="font-medium text-slate-900 text-xs">{getPropertyLabel(tx)}</TableCell>
                       <TableCell className="text-xs text-slate-600">{tx.buyer_name}</TableCell>
                       <TableCell className="font-mono text-xs font-bold">{formatCurrency(tx.amount)}</TableCell>
                       <TableCell><StatusBadge status={tx.status} /></TableCell>
@@ -561,7 +561,7 @@ export const SellerDashboard: React.FC = () => {
                   <div className="flex items-center justify-between">
                     <div>
                       <span className="font-mono text-xs font-bold text-blue-600">{tx.transaction_number}</span>
-                      <h4 className="font-semibold text-slate-900 text-sm">{tx.property_title}</h4>
+                      <h4 className="font-semibold text-slate-900 text-sm">{getPropertyLabel(tx)}</h4>
                     </div>
                     <StatusBadge status={tx.status} />
                   </div>

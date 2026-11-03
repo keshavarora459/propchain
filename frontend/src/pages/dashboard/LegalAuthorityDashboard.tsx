@@ -18,7 +18,7 @@ import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { Input } from '@/components/ui/Input'
 import { Tabs } from '@/components/ui/Tabs'
-import { formatCurrency, formatDate } from '@/lib/utils'
+import { formatCurrency, formatDate, getPropertyLabel } from '@/lib/utils'
 import { useAuth } from '@/hooks/useAuth'
 import apiClient from '@/lib/axios'
 
@@ -188,7 +188,7 @@ export const LegalAuthorityDashboard: React.FC = () => {
         <StatCard
           title="Platform Properties"
           value={(dashboardData?.total_properties ?? 0).toString()}
-          subtitle={`${dashboardData?.verified_properties ?? 0} Verified parcels`}
+          subtitle={`${dashboardData?.verified_properties ?? 0} Verified properties`}
           icon={<Building2 className="h-5 w-5" />}
           iconBg="bg-slate-100 text-slate-700"
         />
@@ -236,7 +236,7 @@ export const LegalAuthorityDashboard: React.FC = () => {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Transaction #</TableHead>
-                      <TableHead>Property Title</TableHead>
+                      <TableHead>Property</TableHead>
                       <TableHead>Buyer</TableHead>
                       <TableHead>Seller</TableHead>
                       <TableHead>Consideration</TableHead>
@@ -248,7 +248,7 @@ export const LegalAuthorityDashboard: React.FC = () => {
                     {pendingRequests.map((txn: any) => (
                       <TableRow key={txn.id}>
                         <TableCell className="font-mono text-xs font-semibold text-blue-600">{txn.transaction_number}</TableCell>
-                        <TableCell className="font-medium text-slate-900 text-xs">{txn.property_title}</TableCell>
+                        <TableCell className="font-medium text-slate-900 text-xs">{getPropertyLabel(txn)}</TableCell>
                         <TableCell className="text-xs text-slate-600">{txn.buyer_name}</TableCell>
                         <TableCell className="text-xs text-slate-600">{txn.seller_name}</TableCell>
                         <TableCell className="font-mono text-xs font-bold text-slate-900">{formatCurrency(txn.purchase_price)}</TableCell>
@@ -303,7 +303,7 @@ export const LegalAuthorityDashboard: React.FC = () => {
                   {pendingRequests.map((txn: any) => (
                     <TableRow key={txn.id}>
                       <TableCell className="font-mono text-xs font-semibold text-blue-600">{txn.transaction_number}</TableCell>
-                      <TableCell className="font-medium text-slate-900 text-xs">{txn.property_title}</TableCell>
+                      <TableCell className="font-medium text-slate-900 text-xs">{getPropertyLabel(txn)}</TableCell>
                       <TableCell className="text-xs text-slate-600">{txn.buyer_name}</TableCell>
                       <TableCell className="text-xs text-slate-600">{txn.seller_name}</TableCell>
                       <TableCell className="font-mono text-xs font-bold">{formatCurrency(txn.purchase_price)}</TableCell>
@@ -436,7 +436,7 @@ export const LegalAuthorityDashboard: React.FC = () => {
             <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg text-purple-900">
               <p className="font-semibold text-xs">Conveyance Transaction:</p>
               <p className="font-mono text-[11px] mt-0.5">
-                {selectedTxn?.transaction_number} — {selectedTxn?.property_title}
+                {selectedTxn?.transaction_number} — {getPropertyLabel(selectedTxn)}
               </p>
               <p className="text-[11px] text-purple-700 mt-0.5">
                 Buyer: <strong>{selectedTxn?.buyer_name}</strong> | Seller: <strong>{selectedTxn?.seller_name}</strong>

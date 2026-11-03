@@ -142,7 +142,7 @@ export const RegisterPage: React.FC = () => {
                 {...register('role')}
                 className="w-full rounded-lg border border-slate-800 bg-slate-900/90 py-2.5 px-3 text-sm text-white focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
               >
-                <option value="BUYER">Parcel Investor / Buyer (Acquire and transact deeds)</option>
+                <option value="BUYER">Property Buyer / Investor (Acquire and transact deeds)</option>
                 <option value="PROPERTY_OWNER">Property Owner / Seller (Register and convey deeds)</option>
               </select>
               {errors.role && (

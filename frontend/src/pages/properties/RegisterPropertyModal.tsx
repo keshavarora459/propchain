@@ -96,7 +96,7 @@ export const RegisterPropertyModal: React.FC<RegisterPropertyModalProps> = ({
     <Modal
       isOpen={isOpen}
       onClose={handleModalClose}
-      title="Register Real Estate Parcel"
+      title="Register Property"
       description="Initialize digital deed record for verification and tokenization."
       maxWidth="xl"
     >
@@ -128,7 +128,7 @@ export const RegisterPropertyModal: React.FC<RegisterPropertyModalProps> = ({
             {...register('propertyType')}
           />
           <Input
-            label="Government Registry Reference"
+            label="Reference No."
             placeholder="e.g. REG-NY-2024-9912"
             required
             error={errors.registrationReference?.message}

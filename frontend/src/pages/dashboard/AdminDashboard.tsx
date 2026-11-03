@@ -16,7 +16,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import { Button } from '@/components/ui/Button'
 import { Tabs } from '@/components/ui/Tabs'
-import { formatCurrency, formatDate, truncateHash } from '@/lib/utils'
+import { formatCurrency, formatDate, truncateHash, getPropertyLabel } from '@/lib/utils'
 import { useAuth } from '@/hooks/useAuth'
 import apiClient from '@/lib/axios'
 import authService from '@/services/authService'
@@ -92,7 +92,7 @@ export const AdminDashboard: React.FC = () => {
         <StatCard
           title="Cataloged Properties"
           value={(dashboardData?.total_properties ?? propertyList.length).toString()}
-          subtitle={`${dashboardData?.verified_properties ?? 0} Verified parcels`}
+          subtitle={`${dashboardData?.verified_properties ?? 0} Verified properties`}
           icon={<Building2 className="h-5 w-5" />}
           iconBg="bg-indigo-50 text-indigo-600"
         />
@@ -349,7 +349,7 @@ export const AdminDashboard: React.FC = () => {
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle>Network Properties Catalog</CardTitle>
-                <CardDescription>Administrative view of all registered land parcels.</CardDescription>
+                <CardDescription>Administrative view of all registered properties.</CardDescription>
               </div>
               <Link to="/properties">
                 <Button size="sm" variant="outline" className="text-xs">
@@ -363,7 +363,7 @@ export const AdminDashboard: React.FC = () => {
               <TableHeader>
                 <TableRow>
                   <TableHead>Parcel ID</TableHead>
-                  <TableHead>Title</TableHead>
+                  <TableHead>Property</TableHead>
                   <TableHead>Type</TableHead>
                   <TableHead>Location</TableHead>
                   <TableHead>Valuation</TableHead>
@@ -377,7 +377,7 @@ export const AdminDashboard: React.FC = () => {
                     <TableCell className="font-mono text-xs text-slate-700">{p.propertyId}</TableCell>
                     <TableCell className="font-medium text-slate-900 text-xs">
                       <Link to={`/properties/${p.id}`} className="hover:text-blue-600">
-                        {p.title}
+                        {getPropertyLabel(p)}
                       </Link>
                     </TableCell>
                     <TableCell className="text-xs text-slate-600">{p.propertyType}</TableCell>
@@ -431,7 +431,7 @@ export const AdminDashboard: React.FC = () => {
                   {recentTransactions.map((tx: any) => (
                     <TableRow key={tx.id}>
                       <TableCell className="font-mono text-xs font-semibold text-blue-600">{tx.transaction_number}</TableCell>
-                      <TableCell className="font-medium text-slate-900 text-xs">{tx.property_title}</TableCell>
+                      <TableCell className="font-medium text-slate-900 text-xs">{getPropertyLabel(tx)}</TableCell>
                       <TableCell className="text-xs text-slate-600">{tx.buyer_name}</TableCell>
                       <TableCell className="text-xs text-slate-600">{tx.seller_name}</TableCell>
                       <TableCell className="font-mono text-xs font-bold">{formatCurrency(tx.purchase_price)}</TableCell>
@@ -489,7 +489,7 @@ export const AdminDashboard: React.FC = () => {
                           {ev.event_type}
                         </span>
                       </TableCell>
-                      <TableCell className="text-xs font-medium text-slate-900">{ev.property_title || ev.property_number || 'Parcel'}</TableCell>
+                      <TableCell className="text-xs font-medium text-slate-900">{getPropertyLabel(ev)}</TableCell>
                       <TableCell className="font-mono text-xs text-blue-600">{truncateHash(ev.tx_hash)}</TableCell>
                       <TableCell className="font-mono text-xs text-slate-600">#{ev.block_number || 1}</TableCell>
                       <TableCell className="text-xs text-slate-500">{formatDate(ev.created_at)}</TableCell>

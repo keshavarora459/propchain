@@ -12,7 +12,7 @@ export const NotFoundPage: React.FC = () => {
       <h1 className="text-4xl font-extrabold tracking-tight text-slate-900">404</h1>
       <h2 className="mt-2 text-lg font-semibold text-slate-800">Ledger Entry Not Found</h2>
       <p className="mt-1 max-w-sm text-xs text-slate-500">
-        The requested parcel route, smart contract endpoint, or transaction record could not be located on this node.
+        The requested property route, smart contract endpoint, or transaction record could not be located on this node.
       </p>
       <div className="mt-6 flex items-center gap-3">
         <Link to="/dashboard">

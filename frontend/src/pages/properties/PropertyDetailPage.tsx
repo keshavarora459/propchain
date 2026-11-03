@@ -17,7 +17,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { Input } from '@/components/ui/Input'
-import { formatCurrency, formatDate } from '@/lib/utils'
+import { formatCurrency, formatDate, getPropertyLabel } from '@/lib/utils'
 import { propertyService } from '@/services/propertyService'
 import { ownershipService } from '@/services/ownershipService'
 import type { Property } from '@/types/property'
@@ -203,11 +203,11 @@ export const PropertyDetailPage: React.FC = () => {
       </div>
 
       <PageHeader
-        title={property.title}
-        description={`Government Registry Ref: ${property.registrationReference || 'REG-PENDING'}`}
+        title={getPropertyLabel(property)}
+        description={`Reference No.: ${property.registrationReference || 'REG-PENDING'}`}
         breadcrumbs={[
           { label: 'Properties', href: '/properties' },
-          { label: property.propertyId },
+          { label: getPropertyLabel(property) },
         ]}
         actions={
           <div className="flex items-center gap-2">
@@ -271,9 +271,9 @@ export const PropertyDetailPage: React.FC = () => {
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 pt-4 border-t border-slate-100">
                 <div>
                   <span className="text-[11px] font-medium text-slate-400 uppercase tracking-wider block">
-                    Property ID
+                    Parcel ID
                   </span>
-                  <span className="font-mono text-xs font-bold text-slate-800">
+                  <span className="font-mono text-xs text-slate-500">
                     {property.propertyId}
                   </span>
                 </div>
@@ -453,7 +453,7 @@ export const PropertyDetailPage: React.FC = () => {
       <Modal
         isOpen={isOfferModalOpen}
         onClose={() => setIsOfferModalOpen(false)}
-        title={`Make Purchase Offer: ${property.title}`}
+        title={`Make Purchase Offer: ${getPropertyLabel(property)}`}
         description="Submit a formal purchase proposal and escrow contract request directly to the deed owner."
         maxWidth="md"
       >
@@ -467,7 +467,7 @@ export const PropertyDetailPage: React.FC = () => {
           <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-1.5 text-xs">
             <div className="flex justify-between">
               <span className="text-slate-500">Parcel ID:</span>
-              <span className="font-mono font-semibold text-slate-900">{property.propertyId}</span>
+              <span className="font-mono text-slate-500">{property.propertyId}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-slate-500">Registered Owner:</span>

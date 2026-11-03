@@ -106,7 +106,7 @@ export const Header: React.FC = () => {
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
-            placeholder="Search parcels, tokens, tx hashes (e.g. 0x9e1f...)"
+            placeholder="Search properties, tokens, tx hashes (e.g. 0x9e1f...)"
             className="w-full rounded-lg border border-slate-200 bg-slate-50/70 py-1.5 pl-9 pr-4 text-xs text-slate-900 placeholder:text-slate-400 focus:border-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-slate-900 transition-all"
           />
         </div>
@@ -254,7 +254,7 @@ export const Header: React.FC = () => {
               <div className="divide-y divide-slate-100 text-xs py-1">
                 <div className="py-2">
                   <p className="font-medium text-slate-800">Critical Alert Detected</p>
-                  <p className="text-slate-500 text-[11px]">Parcel PROP-10045 flagged for signature anomaly.</p>
+                  <p className="text-slate-500 text-[11px]">Property PROP-10045 flagged for signature anomaly.</p>
                 </div>
                 <div className="py-2">
                   <p className="font-medium text-slate-800">Escrow Funded</p>

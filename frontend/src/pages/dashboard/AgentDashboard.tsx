@@ -16,7 +16,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import { Button } from '@/components/ui/Button'
 import { Tabs } from '@/components/ui/Tabs'
-import { formatCurrency, formatDate, truncateHash } from '@/lib/utils'
+import { formatCurrency, formatDate, truncateHash, getPropertyLabel } from '@/lib/utils'
 import { useAuth } from '@/hooks/useAuth'
 import apiClient from '@/lib/axios'
 import { propertyService } from '@/services/propertyService'
@@ -76,7 +76,7 @@ export const AgentDashboard: React.FC = () => {
     <div className="space-y-6">
       <PageHeader
         title={`Title Verification Console: ${user?.full_name || 'Agent Verifier'}`}
-        description="Review submitted cadastral records, perform deed verification, validate OCR documents, and approve real estate parcels for consensus settlement."
+        description="Review submitted cadastral records, perform deed verification, validate OCR documents, and approve properties for consensus settlement."
         actions={
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={loadAgentData} leftIcon={<RefreshCw className="h-3.5 w-3.5" />}>
@@ -156,7 +156,7 @@ export const AgentDashboard: React.FC = () => {
                     View All ({pendingProps.length})
                   </Button>
                 </div>
-                <CardDescription>Parcels with pending verification submitted by property owners.</CardDescription>
+                <CardDescription>Properties with pending verification submitted by property owners.</CardDescription>
               </CardHeader>
               <CardContent className="p-0">
                 {pendingProps.length === 0 ? (
@@ -177,7 +177,7 @@ export const AgentDashboard: React.FC = () => {
                     <TableBody>
                       {pendingProps.slice(0, 4).map((p: any) => (
                         <TableRow key={p.id}>
-                          <TableCell className="font-medium text-slate-900 text-xs">{p.title}</TableCell>
+                          <TableCell className="font-medium text-slate-900 text-xs">{getPropertyLabel(p)}</TableCell>
                           <TableCell className="text-xs text-slate-500">{p.city}, {p.state}</TableCell>
                           <TableCell className="font-mono text-xs font-bold">{formatCurrency(p.valuation)}</TableCell>
                           <TableCell className="text-right">
@@ -246,22 +246,22 @@ export const AgentDashboard: React.FC = () => {
       {activeTab === 'assigned' && (
         <Card>
           <CardHeader>
-            <CardTitle>Assigned Parcels Awaiting Title Clearance</CardTitle>
-            <CardDescription>Check registry boundaries, title deed consistency, and mark parcels as Verified.</CardDescription>
+            <CardTitle>Assigned Properties Awaiting Title Clearance</CardTitle>
+            <CardDescription>Check registry boundaries, title deed consistency, and mark properties as Verified.</CardDescription>
           </CardHeader>
           <CardContent className="p-0">
             {pendingProps.length === 0 ? (
               <div className="p-12 text-center text-xs text-slate-400">
                 <CheckCircle2 className="h-8 w-8 mx-auto text-emerald-500 mb-2" />
                 <p className="text-sm font-medium text-slate-700">No pending properties</p>
-                <p className="mt-1">All real estate parcel registrations have been verified.</p>
+                <p className="mt-1">All real estate property registrations have been verified.</p>
               </div>
             ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Parcel Reference</TableHead>
-                    <TableHead>Property Title</TableHead>
+                    <TableHead>Parcel ID</TableHead>
+                    <TableHead>Property</TableHead>
                     <TableHead>Location</TableHead>
                     <TableHead>Valuation</TableHead>
                     <TableHead>Current Status</TableHead>
@@ -272,7 +272,7 @@ export const AgentDashboard: React.FC = () => {
                   {pendingProps.map((p: any) => (
                     <TableRow key={p.id}>
                       <TableCell className="font-mono text-xs font-semibold text-slate-800">{p.property_number || p.propertyId}</TableCell>
-                      <TableCell className="font-medium text-slate-900 text-xs">{p.title}</TableCell>
+                      <TableCell className="font-medium text-slate-900 text-xs">{getPropertyLabel(p)}</TableCell>
                       <TableCell className="text-xs text-slate-600">{p.city}, {p.state}</TableCell>
                       <TableCell className="font-mono text-xs font-bold text-slate-900">{formatCurrency(p.valuation)}</TableCell>
                       <TableCell><StatusBadge status={p.verification_status || p.verificationStatus} /></TableCell>
@@ -309,7 +309,7 @@ export const AgentDashboard: React.FC = () => {
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle>Comprehensive Property Registry</CardTitle>
-                <CardDescription>Browse and inspect all parcels indexed across the PropChain network.</CardDescription>
+                <CardDescription>Browse and inspect all properties indexed across the PropChain network.</CardDescription>
               </div>
               <Link to="/properties">
                 <Button size="sm" variant="outline" className="text-xs">
@@ -322,8 +322,8 @@ export const AgentDashboard: React.FC = () => {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Property ID</TableHead>
-                  <TableHead>Title</TableHead>
+                  <TableHead>Parcel ID</TableHead>
+                  <TableHead>Property</TableHead>
                   <TableHead>Type</TableHead>
                   <TableHead>Location</TableHead>
                   <TableHead>Valuation</TableHead>
@@ -336,7 +336,7 @@ export const AgentDashboard: React.FC = () => {
                     <TableCell className="font-mono text-xs text-slate-600">{p.propertyId}</TableCell>
                     <TableCell className="font-medium text-slate-900 text-xs">
                       <Link to={`/properties/${p.id}`} className="hover:text-blue-600">
-                        {p.title}
+                        {getPropertyLabel(p)}
                       </Link>
                     </TableCell>
                     <TableCell className="text-xs text-slate-500">{p.propertyType}</TableCell>
@@ -420,7 +420,7 @@ export const AgentDashboard: React.FC = () => {
                   {dashboardData.recent_transactions.map((tx: any) => (
                     <TableRow key={tx.id}>
                       <TableCell className="font-mono text-xs font-semibold text-blue-600">{tx.transaction_number}</TableCell>
-                      <TableCell className="font-medium text-slate-900 text-xs">{tx.property_title}</TableCell>
+                      <TableCell className="font-medium text-slate-900 text-xs">{getPropertyLabel(tx)}</TableCell>
                       <TableCell className="text-xs text-slate-600">{tx.buyer_name}</TableCell>
                       <TableCell className="text-xs text-slate-600">{tx.seller_name}</TableCell>
                       <TableCell className="font-mono text-xs font-bold">{formatCurrency(tx.purchase_price)}</TableCell>
@@ -472,7 +472,7 @@ export const AgentDashboard: React.FC = () => {
                           {ev.event_type}
                         </span>
                       </TableCell>
-                      <TableCell className="text-xs font-medium text-slate-900">{ev.property_title || ev.property_number || 'Parcel'}</TableCell>
+                      <TableCell className="text-xs font-medium text-slate-900">{getPropertyLabel(ev)}</TableCell>
                       <TableCell className="font-mono text-xs text-blue-600">{truncateHash(ev.tx_hash)}</TableCell>
                       <TableCell className="font-mono text-xs text-slate-500">#{ev.block_number || 1}</TableCell>
                       <TableCell className="text-xs text-slate-500">{formatDate(ev.created_at)}</TableCell>

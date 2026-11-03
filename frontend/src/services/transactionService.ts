@@ -3,7 +3,7 @@ import type { Transaction } from '@/types/transaction'
 
 export function normalizeTransaction(t: any): Transaction {
   const transactionId = t.transactionId || t.transaction_number || t.id || 'TXN-0000'
-  const propertyTitle = t.propertyTitle || t.property_title || 'Real Estate Parcel'
+  const propertyTitle = t.propertyTitle || t.property_title || 'Real Estate Property'
   const buyerName = t.buyerName || t.buyer_name || 'Buyer'
   const sellerName = t.sellerName || t.seller_name || 'Seller'
   const amount = typeof t.amount === 'number' ? t.amount : Number(t.proposed_amount) || 0

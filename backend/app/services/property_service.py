@@ -4,11 +4,12 @@ Business logic service for Property Management in PropChain.
 import random
 import uuid
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import (
+    BadRequestError,
     ConflictError,
     ForbiddenError,
     NotFoundError,
@@ -17,6 +18,7 @@ from app.core.exceptions import (
 from app.core.permissions import UserRole, Permission, has_permission, assert_property_access
 from app.models.property import Property
 from app.models.user import User
+from app.repositories.document_repository import DocumentRepository
 from app.repositories.property_repository import PropertyRepository
 from app.schemas.property import (
     PropertyCreate,
@@ -33,10 +35,35 @@ def _generate_property_number() -> str:
     return f"PROP-{year}-{rand_id}"
 
 
+REQUIRED_PROPERTY_DOC_SPECS = [
+    {
+        "type": "TITLE_DEED",
+        "label": "Title Deed",
+        "aliases": {"TITLE_DEED", "SALE_DEED"},
+    },
+    {
+        "type": "CADASTRAL_SURVEY",
+        "label": "Cadastral Survey",
+        "aliases": {"CADASTRAL_SURVEY", "SURVEY_PLAN", "SURVEY_DOCUMENT"},
+    },
+    {
+        "type": "TAX_CLEARANCE",
+        "label": "Tax Clearance",
+        "aliases": {"TAX_CLEARANCE", "TAX_RECEIPT"},
+    },
+    {
+        "type": "ENCUMBRANCE_CERTIFICATE",
+        "label": "Encumbrance Certificate",
+        "aliases": {"ENCUMBRANCE_CERTIFICATE"},
+    },
+]
+
+
 class PropertyService:
     def __init__(self, db: Session):
         self.db = db
         self.repo = PropertyRepository(db)
+        self.doc_repo = DocumentRepository(db)
 
     def _to_response(self, prop: Property) -> PropertyResponse:
         owner_name = prop.current_owner.full_name if prop.current_owner else (
@@ -203,6 +230,95 @@ class PropertyService:
         updated = self.repo.update(prop)
         return self._to_response(updated)
 
+    def validate_required_documents(self, property_id: uuid.UUID) -> None:
+        """
+        Verify that all 4 mandatory document types (TITLE_DEED, CADASTRAL_SURVEY,
+        TAX_CLEARANCE, ENCUMBRANCE_CERTIFICATE) have been uploaded for the property.
+        Raises BadRequestError listing missing document types if incomplete.
+        """
+        docs = self.doc_repo.list_by_property(property_id)
+        valid_docs = [d for d in docs if (d.status or "").upper() != "REJECTED"]
+        uploaded_types = {d.document_type.upper() for d in valid_docs}
+
+        missing = []
+        for spec in REQUIRED_PROPERTY_DOC_SPECS:
+            if not (uploaded_types & spec["aliases"]):
+                missing.append(f"{spec['type']} ({spec['label']})")
+
+        if missing:
+            raise BadRequestError(
+                f"Cannot submit property for verification review. Missing required documents: {', '.join(missing)}"
+            )
+
+    def get_required_documents_status(
+        self, property_id: uuid.UUID, current_user: Optional[User] = None
+    ) -> Dict[str, Any]:
+        prop = self.repo.get_by_id(property_id)
+        if not prop:
+            raise NotFoundError(f"Property with ID '{property_id}' not found.")
+        if current_user is not None:
+            assert_property_access(current_user, prop, allow_marketplace=True)
+
+        docs = self.doc_repo.list_by_property(property_id)
+        valid_docs = [d for d in docs if (d.status or "").upper() != "REJECTED"]
+
+        checklist = []
+        missing = []
+        for spec in REQUIRED_PROPERTY_DOC_SPECS:
+            matching_docs = [
+                d for d in valid_docs if d.document_type.upper() in spec["aliases"]
+            ]
+            is_uploaded = len(matching_docs) > 0
+            doc_info = None
+            if is_uploaded:
+                latest = matching_docs[0]
+                doc_info = {
+                    "id": str(latest.id),
+                    "title": latest.title,
+                    "status": latest.status,
+                    "document_hash": latest.document_hash,
+                    "created_at": latest.created_at.isoformat() if latest.created_at else None,
+                }
+            else:
+                missing.append(f"{spec['type']} ({spec['label']})")
+
+            checklist.append({
+                "type": spec["type"],
+                "label": spec["label"],
+                "is_uploaded": is_uploaded,
+                "document": doc_info,
+            })
+
+        return {
+            "property_id": str(property_id),
+            "property_number": prop.property_number,
+            "verification_status": prop.verification_status,
+            "required_count": len(REQUIRED_PROPERTY_DOC_SPECS),
+            "uploaded_count": len(REQUIRED_PROPERTY_DOC_SPECS) - len(missing),
+            "all_uploaded": len(missing) == 0,
+            "checklist": checklist,
+            "missing": missing,
+        }
+
+    def submit_for_verification(
+        self, property_id: uuid.UUID, current_user: User
+    ) -> PropertyResponse:
+        prop = self.repo.get_by_id(property_id)
+        if not prop:
+            raise NotFoundError(f"Property with ID '{property_id}' not found.")
+
+        user_role = UserRole(current_user.role)
+        is_owner = prop.current_owner_id == current_user.id or prop.creator_user_id == current_user.id
+        if user_role != UserRole.ADMIN and not is_owner:
+            raise ForbiddenError("You are not authorized to submit this property for verification.")
+
+        self.validate_required_documents(property_id)
+
+        prop.verification_status = "PENDING"
+        prop.status = "UNDER_REVIEW"
+        updated = self.repo.update(prop)
+        return self._to_response(updated)
+
     def update_status(
         self,
         property_id: uuid.UUID,
@@ -219,14 +335,20 @@ class PropertyService:
         if data.verification_status is not None:
             if user_role not in {UserRole.ADMIN, UserRole.VERIFIER, UserRole.LEGAL_AUTHORITY}:
                 raise ForbiddenError("Only authorized verifiers or administrators can alter verification status.")
-            prop.verification_status = data.verification_status.upper()
+            target_v_status = data.verification_status.upper()
+            if target_v_status in {"VERIFIED", "IN_REVIEW", "UNDER_REVIEW"}:
+                self.validate_required_documents(property_id)
+            prop.verification_status = target_v_status
 
         # Property operational status (e.g. INACTIVE/ACTIVE) can be set by Admin or the owner
         if data.status is not None:
             is_owner = prop.current_owner_id == current_user.id or prop.creator_user_id == current_user.id
             if user_role != UserRole.ADMIN and not is_owner:
                 raise ForbiddenError("You are not authorized to change the operational status of this property.")
-            prop.status = data.status.upper()
+            target_op_status = data.status.upper()
+            if target_op_status in {"UNDER_REVIEW", "IN_REVIEW"}:
+                self.validate_required_documents(property_id)
+            prop.status = target_op_status
 
         updated = self.repo.update(prop)
         return self._to_response(updated)

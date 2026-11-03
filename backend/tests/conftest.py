@@ -18,6 +18,11 @@ sys.path = [p for p in sys.path if "payroll" not in p]
 os.environ["APP_ENV"] = "test"
 os.environ["DEBUG"] = "true"
 os.environ["MONGO_URI"] = ""
+os.environ["MONGODB_URI"] = ""
+
+if sys.platform == "win32":
+    import asyncio
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 from app.core.config import Settings, get_settings
 get_settings.cache_clear()
