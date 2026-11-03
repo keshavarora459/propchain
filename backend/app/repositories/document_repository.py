@@ -38,10 +38,13 @@ class DocumentRepository:
     def list_by_property(self, property_id: uuid.UUID) -> List[PropertyDocument]:
         stmt = (
             select(PropertyDocument)
+            .options(
+                joinedload(PropertyDocument.verification_records),
+            )
             .where(PropertyDocument.property_id == property_id)
             .order_by(PropertyDocument.created_at.desc())
         )
-        return list(self.db.scalars(stmt).all())
+        return list(self.db.scalars(stmt).unique().all())
 
     def save_processing_record(self, record: DocumentProcessingRecord) -> DocumentProcessingRecord:
         self.db.add(record)
@@ -59,4 +62,3 @@ class DocumentRepository:
         self.db.commit()
         self.db.refresh(doc)
         return doc
-

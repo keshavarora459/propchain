@@ -237,7 +237,10 @@ class PropertyService:
         Raises BadRequestError listing missing document types if incomplete.
         """
         docs = self.doc_repo.list_by_property(property_id)
-        valid_docs = [d for d in docs if (d.status or "").upper() != "REJECTED"]
+        valid_docs = [
+            d for d in docs
+            if (d.status or "").upper() not in {"REJECTED", "REPLACED", "CORRECTION_REQUESTED", "REQUIRES_CORRECTION"}
+        ]
         uploaded_types = {d.document_type.upper() for d in valid_docs}
 
         missing = []
@@ -260,7 +263,10 @@ class PropertyService:
             assert_property_access(current_user, prop, allow_marketplace=True)
 
         docs = self.doc_repo.list_by_property(property_id)
-        valid_docs = [d for d in docs if (d.status or "").upper() != "REJECTED"]
+        valid_docs = [
+            d for d in docs
+            if (d.status or "").upper() not in {"REJECTED", "REPLACED", "CORRECTION_REQUESTED", "REQUIRES_CORRECTION"}
+        ]
 
         checklist = []
         missing = []

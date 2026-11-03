@@ -5,8 +5,10 @@ import {
   CheckCircle,
   XCircle,
   Eye,
+  Download,
   Loader2,
   Check,
+  ShieldCheck,
 } from 'lucide-react'
 import { PageHeader } from '@/components/common/PageHeader'
 import { StatusBadge } from '@/components/common/StatusBadge'
@@ -20,6 +22,7 @@ import { truncateHash, formatDate, getPropertyLabel } from '@/lib/utils'
 import type { DocumentRecord, DocumentType } from '@/types/document'
 import type { Property } from '@/types/property'
 import { propertyService } from '@/services/propertyService'
+import { documentService } from '@/services/documentService'
 import { ownershipService } from '@/services/ownershipService'
 import apiClient from '@/lib/axios'
 import { useAuth } from '@/hooks/useAuth'
@@ -33,13 +36,18 @@ export const REQUIRED_DOCUMENT_TYPES = [
 
 export const DocumentVerificationPage: React.FC = () => {
   const { user } = useAuth()
+  const isSeller = user?.role === 'PROPERTY_OWNER'
+
   const [documents, setDocuments] = useState<DocumentRecord[]>([])
   const [properties, setProperties] = useState<Property[]>([])
   const [selectedDoc, setSelectedDoc] = useState<DocumentRecord | null>(null)
+  const [viewDoc, setViewDoc] = useState<DocumentRecord | null>(null)
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>('')
   const [selectedDocType, setSelectedDocType] = useState<DocumentType>('Title Deed')
   const [dragActive, setDragActive] = useState(false)
   const [uploadNotice, setUploadNotice] = useState<string | null>(null)
+  const [uploadError, setUploadError] = useState<string | null>(null)
+  const [showHistory, setShowHistory] = useState(false)
   const [isUpdating, setIsUpdating] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [isSubmittingReview, setIsSubmittingReview] = useState(false)
@@ -59,9 +67,25 @@ export const DocumentVerificationPage: React.FC = () => {
     )
   })
 
+  const isNeedsCorrection = (status?: string): boolean => {
+    if (!status) return false
+    const s = status.toUpperCase()
+    return (
+      s === 'NEEDS CORRECTION' ||
+      s === 'CORRECTION_REQUESTED' ||
+      s === 'REQUIRES_CORRECTION' ||
+      s === 'REJECTED'
+    )
+  }
+
+  const isActiveDoc = (d: DocumentRecord): boolean => {
+    const s = (d.status || '').toUpperCase()
+    return s !== 'REPLACED' && !isNeedsCorrection(d.status)
+  }
+
   const getDocForType = (typeLabel: string): DocumentRecord | undefined => {
-    return propertyDocuments.find((d) => {
-      const docType = (d.documentType || '').toLowerCase()
+    const matching = propertyDocuments.filter((d) => {
+      const docType = (d.documentType || d.document_type || '').toLowerCase()
       const target = typeLabel.toLowerCase()
       if (docType === target) return true
       if (target === 'title deed' && (docType.includes('title') || docType.includes('sale'))) return true
@@ -70,23 +94,105 @@ export const DocumentVerificationPage: React.FC = () => {
       if (target === 'encumbrance certificate' && docType.includes('encumbrance')) return true
       return false
     })
+    const active = matching.find(isActiveDoc)
+    if (active) return active
+    const nonReplaced = matching.find((d) => (d.status || '').toUpperCase() !== 'REPLACED')
+    return nonReplaced || matching[0]
   }
 
-  const uploadedCount = REQUIRED_DOCUMENT_TYPES.filter(
-    (req) => !!getDocForType(req.label)
-  ).length
+  const activeUploadedCount = REQUIRED_DOCUMENT_TYPES.filter((req) => {
+    const doc = getDocForType(req.label)
+    return doc && isActiveDoc(doc)
+  }).length
+
+  const allRequiredUploaded = activeUploadedCount === REQUIRED_DOCUMENT_TYPES.length
 
   const docClassificationOptions = REQUIRED_DOCUMENT_TYPES.map((t) => {
     const existing = getDocForType(t.label)
+    if (existing && isActiveDoc(existing)) {
+      return {
+        value: t.label,
+        label: `${t.label} (uploaded)`,
+        disabled: true,
+      }
+    }
+    if (existing && isNeedsCorrection(existing.status)) {
+      return {
+        value: t.label,
+        label: `${t.label} (needs correction - replace)`,
+        disabled: false,
+      }
+    }
     return {
       value: t.label,
-      label: existing ? `${t.label} (uploaded)` : t.label,
+      label: t.label,
+      disabled: false,
     }
   })
+
+  // Ensure selected classification option is selectable if current becomes disabled
+  useEffect(() => {
+    const currentOpt = docClassificationOptions.find((o) => o.value === selectedDocType)
+    if (currentOpt?.disabled) {
+      const firstAvailable = docClassificationOptions.find((o) => !o.disabled)
+      if (firstAvailable) {
+        setSelectedDocType(firstAvailable.value as DocumentType)
+      }
+    }
+  }, [selectedPropertyId, documents])
+
+  const getPlainStatus = (
+    status?: string
+  ): 'Waiting for review' | 'Approved' | 'Needs correction' | 'Rejected' | 'Replaced' => {
+    if (!status) return 'Waiting for review'
+    const s = status.toUpperCase()
+    if (s === 'VERIFIED' || s === 'APPROVED') return 'Approved'
+    if (s === 'REJECTED') return 'Rejected'
+    if (s === 'REQUIRES_CORRECTION' || s === 'CORRECTION_REQUESTED' || s === 'NEEDS CORRECTION') {
+      return 'Needs correction'
+    }
+    if (s === 'REPLACED') return 'Replaced'
+    return 'Waiting for review'
+  }
+
+  const getOnChainStatus = (doc: DocumentRecord): 'Recorded on blockchain' | 'Not yet recorded' => {
+    const prop = properties.find(
+      (p) => p.propertyId === doc.propertyId || p.id === doc.propertyId || p.id === doc.property_id
+    )
+    const isOnChain = !!(
+      doc.ipfsCid ||
+      (prop &&
+        (prop.blockchain_property_id ||
+          prop.blockchainTokenId ||
+          (prop.verification_status || '').toUpperCase() === 'VERIFIED'))
+    )
+    return isOnChain ? 'Recorded on blockchain' : 'Not yet recorded'
+  }
+
+  const handleDownload = async (doc: DocumentRecord) => {
+    if (!doc.id || doc.id.startsWith('doc-')) {
+      alert('Document download is unavailable for locally staged file.')
+      return
+    }
+    try {
+      const blob = await documentService.downloadDocument(doc.id)
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = doc.documentName || `${doc.documentType || 'document'}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(url)
+    } catch (err: any) {
+      alert(`Failed to download document: ${err.response?.data?.message || err.message}`)
+    }
+  }
 
   const handleSubmitForVerification = async () => {
     if (!selectedProperty?.id) return
     setIsSubmittingReview(true)
+    setUploadError(null)
     try {
       await apiClient.post(`/properties/${selectedProperty.id}/submit-for-verification`)
       setUploadNotice(
@@ -102,8 +208,8 @@ export const DocumentVerificationPage: React.FC = () => {
       setTimeout(() => setUploadNotice(null), 7000)
     } catch (err: any) {
       const errMsg = err.response?.data?.message || err.message || 'Failed to submit property for review'
-      setUploadNotice(`Error: ${errMsg}`)
-      setTimeout(() => setUploadNotice(null), 8000)
+      setUploadError(errMsg)
+      setTimeout(() => setUploadError(null), 8000)
     } finally {
       setIsSubmittingReview(false)
     }
@@ -117,7 +223,6 @@ export const DocumentVerificationPage: React.FC = () => {
           setProperties(res.items)
           setSelectedPropertyId(res.items[0].propertyId)
 
-          // Load real existing documents from backend for all properties
           const allDocs: DocumentRecord[] = []
           for (const prop of res.items) {
             try {
@@ -125,8 +230,9 @@ export const DocumentVerificationPage: React.FC = () => {
               if (Array.isArray(docRes.data)) {
                 docRes.data.forEach((d) => {
                   allDocs.push({
-                    id: d.id,
+                    id: String(d.id),
                     propertyId: prop.propertyId,
+                    property_id: prop.id,
                     propertyTitle: prop.title,
                     documentName: d.title || d.original_filename || 'Property Deed',
                     documentType:
@@ -138,19 +244,14 @@ export const DocumentVerificationPage: React.FC = () => {
                         ? 'Tax Clearance'
                         : d.document_type === 'ENCUMBRANCE_CERTIFICATE'
                         ? 'Encumbrance Certificate'
-                        : 'Title Deed',
+                        : d.document_type || 'Title Deed',
                     fileSize: d.file_size ? `${Math.round(d.file_size / 1024)} KB` : '150 KB',
                     uploadedAt: d.created_at || new Date().toISOString(),
-                    uploadedBy: 'County Title Officer',
-                    status:
-                      d.status === 'VERIFIED'
-                        ? 'Verified'
-                        : d.status === 'REJECTED'
-                        ? 'Rejected'
-                        : 'OCR Processed',
+                    uploadedBy: isSeller ? (user?.full_name || 'Property Owner') : 'County Title Officer',
+                    status: d.status || 'PENDING_REVIEW',
                     ocrConfidence: 96.8,
                     documentHash: d.document_hash || '',
-                    reviewNotes: `Cryptographic SHA-256 digest verified. Document anchored for ${prop.title}.`,
+                    reviewNotes: d.review_notes || undefined,
                   })
                 })
               }
@@ -164,24 +265,21 @@ export const DocumentVerificationPage: React.FC = () => {
         }
       })
       .catch(console.warn)
-  }, [])
+  }, [isSeller, user?.full_name])
 
   // Process selected or dropped file
   const handleProcessFile = async (file: File) => {
     if (!file) return
+    if (allRequiredUploaded) return
 
-    // Requirement 3: Ask to replace if already uploaded
+    setUploadError(null)
+    setUploadNotice(null)
+
     const existingDoc = getDocForType(selectedDocType)
-    if (existingDoc) {
-      const confirmed = window.confirm(
-        `Replace the existing document?\n\nA ${selectedDocType} ("${existingDoc.documentName}") has already been uploaded for this property.`
-      )
-      if (!confirmed) {
-        if (fileInputRef.current) {
-          fileInputRef.current.value = ''
-        }
-        return
-      }
+    if (existingDoc && isActiveDoc(existingDoc)) {
+      setUploadError(`An active ${selectedDocType} is already uploaded for this property.`)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+      return
     }
 
     setIsUploading(true)
@@ -190,7 +288,6 @@ export const DocumentVerificationPage: React.FC = () => {
     )
 
     try {
-      // 1. Calculate real SHA-256 cryptographic hash of the file
       const arrayBuffer = await file.arrayBuffer()
       const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer)
       const hashArray = Array.from(new Uint8Array(hashBuffer))
@@ -201,72 +298,83 @@ export const DocumentVerificationPage: React.FC = () => {
           ? `${(file.size / (1024 * 1024)).toFixed(1)} MB`
           : `${Math.max(1, Math.round(file.size / 1024))} KB`
 
-      // 2. Attempt backend upload to store on server if property ID is available
-      let backendDocId: string | null = null
+      let backendDoc: any = null
       if (matchedProp && matchedProp.id) {
+        const backendDocType =
+          selectedDocType === 'Title Deed'
+            ? 'TITLE_DEED'
+            : selectedDocType === 'Cadastral Survey'
+            ? 'CADASTRAL_SURVEY'
+            : selectedDocType === 'Tax Clearance'
+            ? 'TAX_CLEARANCE'
+            : selectedDocType === 'Encumbrance Certificate'
+            ? 'ENCUMBRANCE_CERTIFICATE'
+            : 'TITLE_DEED'
+
+        const formData = new FormData()
+        formData.append('file', file)
+        formData.append('document_type', backendDocType)
+        formData.append('title', file.name)
+
         try {
-          const backendDocType =
-            selectedDocType === 'Title Deed'
-              ? 'TITLE_DEED'
-              : selectedDocType === 'Cadastral Survey'
-              ? 'CADASTRAL_SURVEY'
-              : selectedDocType === 'Tax Clearance'
-              ? 'TAX_CLEARANCE'
-              : selectedDocType === 'Encumbrance Certificate'
-              ? 'ENCUMBRANCE_CERTIFICATE'
-              : 'TITLE_DEED'
-
-          const formData = new FormData()
-          formData.append('file', file)
-          formData.append('document_type', backendDocType)
-          formData.append('title', file.name)
-
           const res = await apiClient.post(
             `/properties/${matchedProp.id}/documents`,
             formData,
-            {
-              headers: { 'Content-Type': 'multipart/form-data' },
-            }
+            { headers: { 'Content-Type': 'multipart/form-data' } }
           )
-          if (res.data?.id) {
-            backendDocId = String(res.data.id)
-          }
-        } catch (backendErr) {
-          console.warn('Backend server upload fallback to local staging:', backendErr)
+          backendDoc = res.data
+        } catch (backendErr: any) {
+          const errMsg =
+            backendErr.response?.data?.message ||
+            backendErr.message ||
+            'Failed to upload document.'
+          setUploadError(errMsg)
+          setIsUploading(false)
+          if (fileInputRef.current) fileInputRef.current.value = ''
+          return
         }
       }
 
-      // 3. Stage document into verification queue
       const newDoc: DocumentRecord = {
-        id: backendDocId || `doc-${Date.now()}`,
+        id: backendDoc?.id ? String(backendDoc.id) : `doc-${Date.now()}`,
         propertyId: matchedProp ? matchedProp.propertyId : selectedPropertyId,
+        property_id: matchedProp?.id,
         propertyTitle: matchedProp ? matchedProp.title : 'Selected Property',
         documentName: file.name,
         documentType: selectedDocType,
         fileSize: sizeStr,
-        uploadedAt: new Date().toISOString(),
-        uploadedBy: 'County Title Officer',
-        status: 'OCR Processed',
+        uploadedAt: backendDoc?.created_at || new Date().toISOString(),
+        uploadedBy: isSeller ? (user?.full_name || 'Property Owner') : 'County Title Officer',
+        status: isSeller ? 'Waiting for review' : 'OCR Processed',
         ocrConfidence: 96.8,
-        documentHash: hashHex,
-        reviewNotes: `Cryptographic digest SHA-256 verified (${hashHex.slice(0, 16)}...). Document OCR parsed and ready for confirmation.`,
+        documentHash: backendDoc?.document_hash || hashHex,
+        reviewNotes: backendDoc?.review_notes || undefined,
       }
 
       setDocuments((prev) => {
-        const filtered = existingDoc ? prev.filter((d) => d.id !== existingDoc.id) : prev
-        return [newDoc, ...filtered]
+        // Mark previous document of same type as Replaced
+        const updated = prev.map((d) => {
+          const isSameProp =
+            d.propertyId === newDoc.propertyId ||
+            (newDoc.property_id && d.property_id === newDoc.property_id)
+          const isSameType =
+            (d.documentType || '').toLowerCase() === (newDoc.documentType || '').toLowerCase()
+          if (isSameProp && isSameType && d.id !== newDoc.id) {
+            return { ...d, status: 'Replaced' }
+          }
+          return d
+        })
+        return [newDoc, ...updated]
       })
+
       setUploadNotice(
-        `✓ File "${file.name}" uploaded successfully for ${matchedProp?.title || selectedPropertyId}! SHA-256: ${hashHex.slice(0, 16)}...`
+        `✓ File "${file.name}" uploaded successfully for ${matchedProp?.title || selectedPropertyId}!`
       )
       setTimeout(() => setUploadNotice(null), 6000)
     } catch (err: any) {
-      console.error('File parsing failed:', err)
-      setUploadNotice(`Failed to read file: ${err.message}`)
-      setTimeout(() => setUploadNotice(null), 5000)
+      setUploadError(err.message || 'Failed to process file')
     } finally {
       setIsUploading(false)
-      // Reset input value so same file can be re-selected if desired
       if (fileInputRef.current) {
         fileInputRef.current.value = ''
       }
@@ -284,7 +392,6 @@ export const DocumentVerificationPage: React.FC = () => {
     setIsUpdating(true)
     const targetDoc = documents.find((d) => d.id === id)
 
-    // Update document in local state
     setDocuments(
       documents.map((d) => (d.id === id ? { ...d, status: newStatus } : d))
     )
@@ -292,7 +399,6 @@ export const DocumentVerificationPage: React.FC = () => {
       setSelectedDoc(null)
     }
 
-    // Identify target property and update database
     const targetPropId = targetDoc?.propertyId || selectedPropertyId
     const matchedProp = properties.find(
       (p) => p.propertyId === targetPropId || p.id === targetPropId
@@ -309,7 +415,6 @@ export const DocumentVerificationPage: React.FC = () => {
           console.warn('Property status update notice:', e)
         }
 
-        // Update properties list in memory
         setProperties((prev) =>
           prev.map((p) =>
             p.id === matchedProp.id || p.propertyId === matchedProp.propertyId
@@ -318,7 +423,6 @@ export const DocumentVerificationPage: React.FC = () => {
           )
         )
 
-        // Also update backend document verification record if applicable
         if (targetDoc?.id && !targetDoc.id.startsWith('doc-')) {
           try {
             if (newStatus === 'Verified') {
@@ -335,7 +439,6 @@ export const DocumentVerificationPage: React.FC = () => {
           }
         }
 
-        // Anchor property on blockchain when verified
         let anchorTxNotice = ''
         if (newStatus === 'Verified') {
           try {
@@ -366,14 +469,22 @@ export const DocumentVerificationPage: React.FC = () => {
     setIsUpdating(false)
   }
 
+  const displayedDocuments = documents.filter((doc) => {
+    const s = (doc.status || '').toUpperCase()
+    if (!showHistory && s === 'REPLACED') {
+      return false
+    }
+    return true
+  })
+
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Document Verification & OCR Pipeline"
-        description="Ingestion, optical text parsing, and cryptographic hashing of property conveyances and surveys."
+        title="Document Verification & Integrity"
+        description="Ingestion, validation, and cryptographic hashing of property conveyance documents."
       />
 
-      {/* Hidden File Input Triggered by Click */}
+      {/* Hidden File Input */}
       <input
         ref={fileInputRef}
         type="file"
@@ -387,7 +498,7 @@ export const DocumentVerificationPage: React.FC = () => {
         <CardHeader>
           <CardTitle>Deed & Survey Ingestion Portal</CardTitle>
           <CardDescription>
-            Supported formats: PDF, TIFF, PNG, JPG (Max 50MB). Integrated with PyMuPDF & Tesseract OCR pipelines.
+            Supported formats: PDF, TIFF, PNG, JPG (Max 50MB). Upload mandatory title deeds and cadastral surveys.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -396,13 +507,20 @@ export const DocumentVerificationPage: React.FC = () => {
               label="Select Property"
               options={properties.map((p) => ({ value: p.propertyId, label: getPropertyLabel(p) }))}
               value={selectedPropertyId}
-              onChange={(e) => setSelectedPropertyId(e.target.value)}
+              onChange={(e) => {
+                setSelectedPropertyId(e.target.value)
+                setUploadError(null)
+                setUploadNotice(null)
+              }}
             />
             <Select
               label="Document Classification"
               options={docClassificationOptions}
               value={selectedDocType}
-              onChange={(e) => setSelectedDocType(e.target.value as DocumentType)}
+              onChange={(e) => {
+                setSelectedDocType(e.target.value as DocumentType)
+                setUploadError(null)
+              }}
             />
           </div>
 
@@ -422,15 +540,15 @@ export const DocumentVerificationPage: React.FC = () => {
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-mono font-bold text-slate-800">
-                    {uploadedCount} of 4 required
+                    {activeUploadedCount} of 4 required
                   </span>
-                  {uploadedCount === 4 ? (
+                  {allRequiredUploaded ? (
                     <span className="px-2 py-0.5 text-[11px] font-semibold rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
                       All Uploaded
                     </span>
                   ) : (
                     <span className="px-2 py-0.5 text-[11px] font-semibold rounded-full bg-amber-100 text-amber-800 border border-amber-200">
-                      {4 - uploadedCount} Missing
+                      {4 - activeUploadedCount} Missing
                     </span>
                   )}
                 </div>
@@ -440,9 +558,9 @@ export const DocumentVerificationPage: React.FC = () => {
               <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
                 <div
                   className={`h-2 rounded-full transition-all duration-300 ${
-                    uploadedCount === 4 ? 'bg-emerald-500' : 'bg-blue-600'
+                    allRequiredUploaded ? 'bg-emerald-500' : 'bg-blue-600'
                   }`}
-                  style={{ width: `${(uploadedCount / 4) * 100}%` }}
+                  style={{ width: `${(activeUploadedCount / 4) * 100}%` }}
                 />
               </div>
 
@@ -450,13 +568,16 @@ export const DocumentVerificationPage: React.FC = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 pt-1">
                 {REQUIRED_DOCUMENT_TYPES.map((req) => {
                   const doc = getDocForType(req.label)
-                  const isUploaded = !!doc
+                  const isUploaded = !!doc && isActiveDoc(doc)
+                  const needsFix = !!doc && isNeedsCorrection(doc.status)
                   return (
                     <div
                       key={req.id}
                       className={`p-3 rounded-lg border text-xs transition-all ${
                         isUploaded
                           ? 'border-emerald-200 bg-white shadow-2xs'
+                          : needsFix
+                          ? 'border-amber-300 bg-amber-50/50'
                           : 'border-slate-200 bg-white/60'
                       }`}
                     >
@@ -464,6 +585,10 @@ export const DocumentVerificationPage: React.FC = () => {
                         {isUploaded ? (
                           <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
                             <Check className="h-3.5 w-3.5 stroke-[2.5]" />
+                          </div>
+                        ) : needsFix ? (
+                          <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-600">
+                            <XCircle className="h-3.5 w-3.5 stroke-[2.5]" />
                           </div>
                         ) : (
                           <div className="h-4 w-4 shrink-0 rounded border border-slate-300 bg-slate-200" />
@@ -474,11 +599,11 @@ export const DocumentVerificationPage: React.FC = () => {
                       </div>
 
                       <div className="pl-7 space-y-1">
-                        {isUploaded && doc ? (
+                        {doc ? (
                           <>
                             <div className="flex items-center gap-1.5">
                               <span className="text-[10px] text-slate-500 font-medium">Status:</span>
-                              <StatusBadge status={doc.status} />
+                              <StatusBadge status={isSeller ? getPlainStatus(doc.status) : doc.status} />
                             </div>
                             <p className="text-[11px] text-slate-600 truncate font-mono" title={doc.documentName}>
                               {doc.documentName}
@@ -496,78 +621,105 @@ export const DocumentVerificationPage: React.FC = () => {
               </div>
 
               {/* Action row for Property Owner */}
-              {user?.role === 'PROPERTY_OWNER' && (
+              {isSeller && (
                 <div className="pt-2 flex flex-col sm:flex-row justify-between items-center gap-2 border-t border-slate-200">
                   <p className="text-[11px] text-slate-500">
-                    {uploadedCount === 4
+                    {allRequiredUploaded
                       ? 'Ready: Click below to submit this property for title verifier inspection.'
                       : 'Upload the missing document types above to enable verifier review submission.'}
                   </p>
                   <Button
                     size="sm"
-                    disabled={uploadedCount < 4 || isSubmittingReview || selectedProperty?.verificationStatus === 'VERIFIED'}
+                    disabled={!allRequiredUploaded || isSubmittingReview || selectedProperty?.verificationStatus === 'VERIFIED'}
                     onClick={handleSubmitForVerification}
                     isLoading={isSubmittingReview}
                   >
                     {selectedProperty?.verificationStatus === 'VERIFIED'
                       ? 'Property Verified'
-                      : uploadedCount === 4
+                      : allRequiredUploaded
                       ? 'Submit for Verification'
-                      : `${4 - uploadedCount} Missing`}
+                      : `${4 - activeUploadedCount} Missing`}
                   </Button>
                 </div>
               )}
             </div>
           )}
 
-          {/* Drag & Drop Upload Zone - Clicking opens native file picker */}
-          <div
-            onClick={() => fileInputRef.current?.click()}
-            onDragOver={(e) => {
-              e.preventDefault()
-              setDragActive(true)
-            }}
-            onDragLeave={() => setDragActive(false)}
-            onDrop={(e) => {
-              e.preventDefault()
-              setDragActive(false)
-              const file = e.dataTransfer.files?.[0]
-              if (file) handleProcessFile(file)
-            }}
-            className={`border-2 border-dashed rounded-xl p-8 text-center transition-all cursor-pointer ${
-              dragActive
-                ? 'border-slate-900 bg-slate-50'
-                : 'border-slate-300 bg-white hover:bg-slate-50 hover:border-blue-400'
-            }`}
-          >
-            <div className="flex h-12 w-12 mx-auto items-center justify-center rounded-full bg-blue-50 text-blue-600 mb-3">
-              {isUploading ? (
-                <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
-              ) : (
-                <UploadCloud className="h-6 w-6" />
-              )}
+          {/* Upload Drop Zone / Disabled Box */}
+          {allRequiredUploaded ? (
+            <div className="border-2 border-slate-200 bg-slate-50 rounded-xl p-8 text-center cursor-not-allowed">
+              <div className="flex h-12 w-12 mx-auto items-center justify-center rounded-full bg-emerald-100 text-emerald-600 mb-3">
+                <ShieldCheck className="h-6 w-6" />
+              </div>
+              <p className="text-sm font-semibold text-slate-800">
+                All documents uploaded
+              </p>
+              <p className="text-xs text-slate-500 mt-1">
+                All 4 required documents have been uploaded for this property. If a reviewer requests corrections, you can re-upload that document type.
+              </p>
+              <div className="mt-4">
+                <Button size="sm" disabled>
+                  All documents uploaded
+                </Button>
+              </div>
             </div>
-            <p className="text-sm font-semibold text-slate-800">
-              {isUploading
-                ? 'Processing & Hashing Document...'
-                : 'Click here or drag and drop title deed / survey to browse files'}
-            </p>
-            <p className="text-xs text-slate-400 mt-1">
-              Automated OCR parsing and Keccak-256 / SHA-256 hash generation is executed upon upload.
-            </p>
-            <div className="mt-4">
-              <Button
-                size="sm"
-                isLoading={isUploading}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  fileInputRef.current?.click()
-                }}
-              >
-                Select & Ingest Document
-              </Button>
+          ) : (
+            <div
+              onClick={() => fileInputRef.current?.click()}
+              onDragOver={(e) => {
+                e.preventDefault()
+                setDragActive(true)
+              }}
+              onDragLeave={() => setDragActive(false)}
+              onDrop={(e) => {
+                e.preventDefault()
+                setDragActive(false)
+                const file = e.dataTransfer.files?.[0]
+                if (file) handleProcessFile(file)
+              }}
+              className={`border-2 border-dashed rounded-xl p-8 text-center transition-all cursor-pointer ${
+                dragActive
+                  ? 'border-slate-900 bg-slate-50'
+                  : 'border-slate-300 bg-white hover:bg-slate-50 hover:border-blue-400'
+              }`}
+            >
+              <div className="flex h-12 w-12 mx-auto items-center justify-center rounded-full bg-blue-50 text-blue-600 mb-3">
+                {isUploading ? (
+                  <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
+                ) : (
+                  <UploadCloud className="h-6 w-6" />
+                )}
+              </div>
+              <p className="text-sm font-semibold text-slate-800">
+                {isUploading
+                  ? 'Uploading & Hashing Document...'
+                  : 'Click here or drag and drop document to browse files'}
+              </p>
+              <p className="text-xs text-slate-400 mt-1">
+                Upload your {selectedDocType} for this property. Cryptographic SHA-256 verification hash is generated.
+              </p>
+              <div className="mt-4">
+                <Button
+                  size="sm"
+                  isLoading={isUploading}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    fileInputRef.current?.click()
+                  }}
+                >
+                  Select & Ingest Document
+                </Button>
+              </div>
             </div>
-          </div>
+          )}
+
+          {/* Duplicate Error Message under upload box */}
+          {uploadError && (
+            <div className="rounded-lg bg-rose-50 border border-rose-200 p-3 text-xs text-rose-800 font-medium flex items-center gap-2">
+              <XCircle className="h-4 w-4 shrink-0 text-rose-600" />
+              <span>{uploadError}</span>
+            </div>
+          )}
 
           {uploadNotice && (
             <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-3 text-xs text-emerald-800 font-medium">
@@ -579,18 +731,131 @@ export const DocumentVerificationPage: React.FC = () => {
 
       {/* Document Listing & Verification State */}
       <div className="bg-white rounded-xl border border-slate-200/80 shadow-xs overflow-hidden">
-        <div className="p-4 border-b border-slate-100 flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-slate-900">Ingested Deeds & Verification Queue</h3>
-          <span className="text-xs text-slate-500 font-mono">{documents.length} Records</span>
+        <div className="p-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <h3 className="text-sm font-semibold text-slate-900">
+              {isSeller ? 'My Property Documents' : 'Ingested Deeds & Verification Queue'}
+            </h3>
+            <p className="text-xs text-slate-500">
+              {isSeller
+                ? 'Your uploaded documents, review statuses, and cryptographic blockchain proof.'
+                : 'Verifier review queue with optical text parsing and on-chain verification.'}
+            </p>
+          </div>
+          <div className="flex items-center gap-4">
+            <label className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={showHistory}
+                onChange={(e) => setShowHistory(e.target.checked)}
+                className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-3.5 w-3.5"
+              />
+              <span>Show history</span>
+            </label>
+            <span className="text-xs text-slate-500 font-mono">{displayedDocuments.length} Records</span>
+          </div>
         </div>
-        {documents.length === 0 ? (
+
+        {displayedDocuments.length === 0 ? (
           <div className="py-12 text-center text-xs text-slate-400">
-            <p className="font-medium text-slate-600">No documents in verification queue</p>
+            <p className="font-medium text-slate-600">No documents found</p>
             <p className="mt-1">
               Select a property above and click &quot;Select &amp; Ingest Document&quot; to stage documents.
             </p>
           </div>
+        ) : isSeller ? (
+          /* Seller View Table (Requirement 5) */
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Document Name</TableHead>
+                <TableHead>Type</TableHead>
+                <TableHead>Property</TableHead>
+                <TableHead>Uploaded At</TableHead>
+                <TableHead>File Size</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Verifier Message</TableHead>
+                <TableHead>Hash Proof</TableHead>
+                <TableHead>On-Chain Status</TableHead>
+                <TableHead className="text-right">Action</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {displayedDocuments.map((doc) => {
+                const plainStatus = getPlainStatus(doc.status)
+                const onChainStatus = getOnChainStatus(doc)
+                const showMessage = (plainStatus === 'Needs correction' || plainStatus === 'Rejected')
+                const verifierMsg = doc.reviewNotes || (plainStatus === 'Needs correction' ? 'Correction requested by reviewer' : plainStatus === 'Rejected' ? 'Document rejected by reviewer' : null)
+                const matchedProp = properties.find(
+                  (p) => p.propertyId === doc.propertyId || p.id === doc.propertyId || p.id === doc.property_id
+                )
+                const simplePropName = matchedProp ? getPropertyLabel(matchedProp) : (doc.propertyTitle || 'Property')
+
+                return (
+                  <TableRow key={doc.id}>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <FileText className="h-4 w-4 text-slate-400 shrink-0" />
+                        <span className="font-medium text-slate-900">{doc.documentName}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-xs text-slate-700 font-medium">{doc.documentType}</TableCell>
+                    <TableCell>
+                      <p className="font-semibold text-slate-800 truncate max-w-[160px]" title={simplePropName}>
+                        {simplePropName}
+                      </p>
+                    </TableCell>
+                    <TableCell className="text-xs text-slate-500 whitespace-nowrap">
+                      {formatDate(doc.uploadedAt)}
+                    </TableCell>
+                    <TableCell className="text-xs text-slate-500 font-mono">{doc.fileSize}</TableCell>
+                    <TableCell>
+                      <StatusBadge status={plainStatus} />
+                    </TableCell>
+                    <TableCell className="max-w-[180px]">
+                      {showMessage && verifierMsg ? (
+                        <p className="text-xs text-amber-800 bg-amber-50 rounded px-2 py-1 border border-amber-200/60 truncate" title={verifierMsg}>
+                          {verifierMsg}
+                        </p>
+                      ) : (
+                        <span className="text-slate-400 text-xs">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="max-w-[220px]">
+                      <div className="overflow-x-auto max-w-[220px]">
+                        <HashDisplay value={doc.documentHash} truncate={false} explorerLink />
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <StatusBadge status={onChainStatus} />
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setViewDoc(doc)}
+                          leftIcon={<Eye className="h-3 w-3" />}
+                        >
+                          View
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleDownload(doc)}
+                          leftIcon={<Download className="h-3 w-3" />}
+                        >
+                          Download
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                )
+              })}
+            </TableBody>
+          </Table>
         ) : (
+          /* Verifier / Admin Table (Unchanged current view) */
           <Table>
             <TableHeader>
               <TableRow>
@@ -604,7 +869,7 @@ export const DocumentVerificationPage: React.FC = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {documents.map((doc) => (
+              {displayedDocuments.map((doc) => (
                 <TableRow key={doc.id}>
                   <TableCell>
                     <div className="flex items-center gap-2">
@@ -682,7 +947,81 @@ export const DocumentVerificationPage: React.FC = () => {
         )}
       </div>
 
-      {/* Document Audit Detail Modal */}
+      {/* Seller View Document Modal */}
+      {viewDoc && (
+        <Modal
+          isOpen={!!viewDoc}
+          onClose={() => setViewDoc(null)}
+          title={`Document Details: ${viewDoc.documentName}`}
+          description={`Uploaded on ${formatDate(viewDoc.uploadedAt)}`}
+          maxWidth="lg"
+        >
+          <div className="space-y-4 text-xs">
+            <div className="p-4 rounded-lg bg-slate-50 border border-slate-200/80 space-y-2">
+              <div className="flex justify-between items-start">
+                <span className="text-slate-500">Property</span>
+                <span className="font-semibold text-slate-900 text-right">
+                  {getPropertyLabel(viewDoc)}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Classification</span>
+                <span className="font-medium text-slate-800">{viewDoc.documentType}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">File Size</span>
+                <span className="font-mono text-slate-800">{viewDoc.fileSize}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Document Status</span>
+                <StatusBadge status={getPlainStatus(viewDoc.status)} />
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Blockchain Ledger</span>
+                <StatusBadge status={getOnChainStatus(viewDoc)} />
+              </div>
+            </div>
+
+            <div className="p-3 rounded-lg bg-slate-900 text-white font-mono text-[11px] space-y-1.5">
+              <p className="text-slate-400">Cryptographic Digest (SHA-256):</p>
+              <HashDisplay
+                value={viewDoc.documentHash}
+                truncate={false}
+                explorerLink
+                className="bg-slate-800 text-blue-300 border-slate-700"
+              />
+              {viewDoc.ipfsCid && (
+                <p className="text-slate-400 pt-1">IPFS CID: {viewDoc.ipfsCid}</p>
+              )}
+            </div>
+
+            {viewDoc.reviewNotes && (
+              <div className="p-3 rounded-lg border border-amber-200 bg-amber-50">
+                <span className="text-amber-800 font-bold uppercase tracking-wider text-[10px] block">
+                  Reviewer Notes & Instructions
+                </span>
+                <p className="text-amber-900 mt-1">{viewDoc.reviewNotes}</p>
+              </div>
+            )}
+
+            <div className="flex justify-between items-center pt-3 border-t border-slate-100">
+              <Button
+                size="sm"
+                variant="primary"
+                onClick={() => handleDownload(viewDoc)}
+                leftIcon={<Download className="h-3.5 w-3.5" />}
+              >
+                Download Document
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setViewDoc(null)}>
+                Close
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Verifier / Admin Document Audit Detail Modal */}
       {selectedDoc && (
         <Modal
           isOpen={!!selectedDoc}
@@ -720,7 +1059,12 @@ export const DocumentVerificationPage: React.FC = () => {
 
             <div className="p-3 rounded-lg bg-slate-900 text-white font-mono text-[11px] space-y-1.5">
               <p className="text-slate-400">Cryptographic Digest (SHA-256):</p>
-              <HashDisplay value={selectedDoc.documentHash} truncate={false} explorerLink className="bg-slate-800 text-blue-300 border-slate-700" />
+              <HashDisplay
+                value={selectedDoc.documentHash}
+                truncate={false}
+                explorerLink
+                className="bg-slate-800 text-blue-300 border-slate-700"
+              />
               {selectedDoc.ipfsCid && (
                 <p className="text-slate-400 pt-1">IPFS CID: {selectedDoc.ipfsCid}</p>
               )}

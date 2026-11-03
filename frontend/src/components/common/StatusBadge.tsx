@@ -53,6 +53,31 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({ status, className }) =
       variant = 'success'
       break
 
+    case 'Waiting for review':
+      variant = 'warning'
+      label = 'Waiting for review'
+      break
+
+    case 'Needs correction':
+      variant = 'warning'
+      label = 'Needs correction'
+      break
+
+    case 'Replaced':
+      variant = 'neutral'
+      label = 'Replaced'
+      break
+
+    case 'Recorded on blockchain':
+      variant = 'success'
+      label = 'Recorded on blockchain'
+      break
+
+    case 'Not yet recorded':
+      variant = 'neutral'
+      label = 'Not yet recorded'
+      break
+
     case 'Pending':
     case 'In Review':
     case 'In Escrow':
@@ -65,7 +90,6 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({ status, className }) =
     case 'Rejected':
     case 'Disputed':
     case 'Tamper Suspect':
-    case 'Cancelled':
       variant = 'danger'
       break
 

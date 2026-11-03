@@ -23,6 +23,7 @@ class DocumentResponse(BaseModel):
     status: str
     created_at: datetime
     updated_at: datetime
+    review_notes: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -66,4 +67,3 @@ class DocumentRejectRequest(BaseModel):
 
 class DocumentCorrectionRequest(BaseModel):
     correction_notes: str = Field(..., min_length=3, max_length=1000, description="Specific instructions for correction")
-

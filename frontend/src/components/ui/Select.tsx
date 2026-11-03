@@ -4,6 +4,7 @@ import { cn } from '@/lib/utils'
 export interface SelectOption {
   value: string
   label: string
+  disabled?: boolean
 }
 
 export interface SelectProps extends React.SelectHTMLAttributes<HTMLSelectElement> {
@@ -45,7 +46,7 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
               )
             }
             return (
-              <option key={opt.value} value={opt.value}>
+              <option key={opt.value} value={opt.value} disabled={opt.disabled}>
                 {opt.label}
               </option>
             )
@@ -58,4 +59,3 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
 )
 
 Select.displayName = 'Select'
-
