@@ -37,8 +37,9 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({ status, className }) =
       label = 'Completed'
       break
     case 'REJECTED':
+    case 'Rejected':
       variant = 'danger'
-      label = 'Seller Rejected'
+      label = 'Rejected'
       break
     case 'CANCELLED':
       variant = 'danger'
@@ -46,21 +47,33 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({ status, className }) =
       break
 
     // Verification & Approval
+    case 'SUBMITTED':
+    case 'Submitted':
+    case 'Waiting for verifier':
+      variant = 'info'
+      label = 'Waiting for verifier'
+      break
+
+    case 'SUBMITTED_FOR_REVIEW':
+      variant = 'info'
+      label = 'Submitted for review'
+      break
+
+    case 'CORRECTION_REQUESTED':
+    case 'REQUIRES_CORRECTION':
+    case 'Correction Requested':
+    case 'Needs correction':
+      variant = 'warning'
+      label = 'Needs correction'
+      break
+
+    case 'VERIFIED':
     case 'Verified':
     case 'Approved':
     case 'Completed':
     case 'Resolved':
       variant = 'success'
-      break
-
-    case 'Waiting for review':
-      variant = 'warning'
-      label = 'Waiting for review'
-      break
-
-    case 'Needs correction':
-      variant = 'warning'
-      label = 'Needs correction'
+      label = status === 'VERIFIED' ? 'Verified' : status
       break
 
     case 'Replaced':
@@ -69,8 +82,22 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({ status, className }) =
       break
 
     case 'Recorded on blockchain':
+    case 'BLOCKCHAIN_REGISTERED':
+    case 'Registered On-Chain':
       variant = 'success'
-      label = 'Recorded on blockchain'
+      label = 'Registered On-Chain'
+      break
+
+    case 'BLOCKCHAIN_PENDING':
+    case 'Blockchain Pending':
+      variant = 'warning'
+      label = 'Blockchain Pending'
+      break
+
+    case 'BLOCKCHAIN_FAILED':
+    case 'Blockchain Failed':
+      variant = 'danger'
+      label = 'Blockchain Failed'
       break
 
     case 'Not yet recorded':

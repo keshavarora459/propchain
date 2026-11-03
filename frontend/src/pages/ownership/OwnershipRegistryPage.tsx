@@ -9,6 +9,7 @@ import { formatCurrency, formatDate, getPropertyLabel } from '@/lib/utils'
 import { propertyService } from '@/services/propertyService'
 import type { Property } from '@/types/property'
 import apiClient from '@/lib/axios'
+import { useAuth } from '@/hooks/useAuth'
 
 interface BackendOwnershipEvent {
   id: string
@@ -27,6 +28,8 @@ interface BackendOwnershipEvent {
 }
 
 export const OwnershipRegistryPage: React.FC = () => {
+  const { user } = useAuth()
+  const isSeller = user?.role === 'PROPERTY_OWNER'
   const [properties, setProperties] = useState<Property[]>([])
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>('')
   const [searchQuery, setSearchQuery] = useState('')
@@ -36,13 +39,29 @@ export const OwnershipRegistryPage: React.FC = () => {
   useEffect(() => {
     setIsLoading(true)
     Promise.all([
-      propertyService.getProperties({ page_size: 100 }),
+      propertyService.getProperties({ page_size: 100, mine: isSeller ? true : undefined }),
       apiClient.get<{ items: BackendOwnershipEvent[] }>('/ownership/history').catch(() => ({ data: { items: [] } })),
     ])
       .then(([propsRes, eventsRes]) => {
         if (propsRes && propsRes.items && propsRes.items.length > 0) {
-          setProperties(propsRes.items)
-          setSelectedPropertyId(propsRes.items[0].id)
+          let items = propsRes.items
+          if (isSeller && user?.id) {
+            const uid = String(user.id).toLowerCase()
+            items = items.filter((p: any) => {
+              const ownerId = p.current_owner_id ? String(p.current_owner_id).toLowerCase() : ''
+              const creatorId = p.creator_user_id ? String(p.creator_user_id).toLowerCase() : ''
+              return ownerId === uid || creatorId === uid
+            })
+          }
+          setProperties(items)
+          if (items.length > 0) {
+            setSelectedPropertyId(items[0].id)
+          } else {
+            setSelectedPropertyId('')
+          }
+        } else {
+          setProperties([])
+          setSelectedPropertyId('')
         }
         if (eventsRes && eventsRes.data && Array.isArray(eventsRes.data.items)) {
           setOwnershipEvents(eventsRes.data.items)
@@ -54,7 +73,7 @@ export const OwnershipRegistryPage: React.FC = () => {
       .finally(() => {
         setIsLoading(false)
       })
-  }, [])
+  }, [isSeller, user?.id])
 
   const filteredProperties = properties.filter(
     (rec) =>

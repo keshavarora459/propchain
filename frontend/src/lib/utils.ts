@@ -71,4 +71,32 @@ export function getPropertyLabel(property?: {
   return cleanTitle
 }
 
+/**
+ * Return a user-friendly label for roles.
+ * PROPERTY_OWNER -> "Seller", BUYER -> "Buyer", VERIFIER -> "Verifier",
+ * LEGAL_AUTHORITY -> "Legal Authority", ADMIN -> "Admin".
+ */
+export function getRoleLabel(role?: string | null): string {
+  if (!role) return ''
+  const normalized = role.toUpperCase().trim()
+  switch (normalized) {
+    case 'PROPERTY_OWNER':
+    case 'SELLER':
+      return 'Seller'
+    case 'BUYER':
+      return 'Buyer'
+    case 'VERIFIER':
+      return 'Verifier'
+    case 'LEGAL_AUTHORITY':
+      return 'Legal Authority'
+    case 'ADMIN':
+      return 'Admin'
+    default:
+      return role
+        .split('_')
+        .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+        .join(' ')
+  }
+}
+
 

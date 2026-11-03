@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { ShieldAlert, ArrowLeft } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { useAuth } from '@/hooks/useAuth'
+import { getRoleLabel } from '@/lib/utils'
 
 export const UnauthorizedPage: React.FC = () => {
   const { user } = useAuth()
@@ -25,7 +26,7 @@ export const UnauthorizedPage: React.FC = () => {
 
       <p className="max-w-md text-sm text-slate-500 mb-6">
         Your current role (
-        <span className="font-mono font-semibold text-slate-800">{user?.role || 'UNAUTHENTICATED'}</span>
+        <span className="font-sans font-semibold text-slate-800">{getRoleLabel(user?.role) || 'Guest'}</span>
         ) is not authorized to access this specific ledger operation or governance module.
       </p>
 

@@ -12,6 +12,7 @@ from app.dependencies.auth import get_current_user
 from app.dependencies.database import get_db
 from app.dependencies.permissions import require_permission
 from app.models.user import User
+from pydantic import BaseModel
 from app.schemas.property import (
     PropertyCreate,
     PropertyListResponse,
@@ -53,6 +54,7 @@ def list_properties(
     verification_status: Optional[str] = Query(None, description="Filter by verification status"),
     state: Optional[str] = Query(None, description="Filter by state"),
     city: Optional[str] = Query(None, description="Filter by city"),
+    mine: Optional[bool] = Query(False, description="Filter only properties owned or created by current user"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -66,6 +68,7 @@ def list_properties(
         verification_status=verification_status,
         state=state,
         city=city,
+        mine=mine,
         current_user=current_user,
     )
 
@@ -150,6 +153,40 @@ def submit_for_verification(
 
 
 @router.post(
+    "/{property_id}/verify",
+    response_model=PropertyResponse,
+    summary="Approve all 4 documents and verify property, anchoring on blockchain (Verifier or Admin)",
+)
+def verify_property(
+    property_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    service = PropertyService(db)
+    return service.verify_property(property_id, current_user)
+
+
+class RejectPropertyRequest(BaseModel):
+    reason: Optional[str] = None
+
+
+@router.post(
+    "/{property_id}/reject",
+    response_model=PropertyResponse,
+    summary="Reject property verification (Verifier or Admin)",
+)
+def reject_property(
+    property_id: uuid.UUID,
+    payload: Optional[RejectPropertyRequest] = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    service = PropertyService(db)
+    reason = payload.reason if payload else None
+    return service.reject_property(property_id, reason, current_user)
+
+
+@router.post(
     "/{property_id}/submit",
     response_model=PropertyResponse,
     summary="Alias for submit property for verification",
@@ -176,3 +213,16 @@ def get_required_documents_status(
     service = PropertyService(db)
     return service.get_required_documents_status(property_id, current_user)
 
+
+@router.post(
+    "/{property_id}/retry-blockchain",
+    response_model=PropertyResponse,
+    summary="Retry anchoring verified property on blockchain (Owner, Verifier, or Admin)",
+)
+def retry_blockchain_registration(
+    property_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    service = PropertyService(db)
+    return service.retry_blockchain_registration(property_id, current_user)

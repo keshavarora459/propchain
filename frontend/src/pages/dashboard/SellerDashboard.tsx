@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import {
   Building2,
   Plus,
@@ -29,6 +29,7 @@ import apiClient from '@/lib/axios'
 
 export const SellerDashboard: React.FC = () => {
   const { user } = useAuth()
+  const navigate = useNavigate()
 
   const [activeTab, setActiveTab] = useState<'overview' | 'properties' | 'documents' | 'verification' | 'offers' | 'transactions' | 'transfer' | 'blockchain'>('overview')
   const [dashboardData, setDashboardData] = useState<SellerDashboardData | null>(null)
@@ -103,7 +104,7 @@ export const SellerDashboard: React.FC = () => {
   return (
     <div className="space-y-6">
       <PageHeader
-        title={`Seller Console: ${user?.full_name || 'Property Owner'}`}
+        title={`Seller Console: ${user?.full_name || 'Seller'}`}
         description="Manage listed properties, evaluate incoming buyer purchase offers, upload title deeds, and track escrow settlements."
         actions={
           <div className="flex items-center gap-2">
@@ -355,14 +356,14 @@ export const SellerDashboard: React.FC = () => {
                 </Link>
               </div>
             ) : (
-              <Table>
+              <Table className="min-w-[700px]">
                 <TableHeader>
                   <TableRow>
                     <TableHead>Document Title</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>SHA-256 Hash</TableHead>
-                    <TableHead>Uploaded</TableHead>
+                    <TableHead className="whitespace-nowrap">Type</TableHead>
+                    <TableHead className="whitespace-nowrap">Status</TableHead>
+                    <TableHead className="min-w-[180px] whitespace-nowrap">SHA-256 Hash</TableHead>
+                    <TableHead className="whitespace-nowrap">Uploaded</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -376,12 +377,12 @@ export const SellerDashboard: React.FC = () => {
                           </div>
                         )}
                       </TableCell>
-                      <TableCell className="text-xs text-slate-600">{doc.document_type}</TableCell>
-                      <TableCell><StatusBadge status={doc.status} /></TableCell>
-                      <TableCell>
+                      <TableCell className="text-xs text-slate-600 whitespace-nowrap">{doc.document_type}</TableCell>
+                      <TableCell className="whitespace-nowrap"><StatusBadge status={doc.status} /></TableCell>
+                      <TableCell className="min-w-[180px] whitespace-nowrap">
                         <HashDisplay value={doc.document_hash} explorerLink label="SHA-256" />
                       </TableCell>
-                      <TableCell className="text-xs text-slate-500">{doc.created_at ? formatDate(doc.created_at) : 'N/A'}</TableCell>
+                      <TableCell className="text-xs text-slate-500 whitespace-nowrap">{doc.created_at ? formatDate(doc.created_at) : 'N/A'}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -525,26 +526,26 @@ export const SellerDashboard: React.FC = () => {
                 <p>No transactions recorded yet.</p>
               </div>
             ) : (
-              <Table>
+              <Table className="min-w-[750px]">
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Transaction #</TableHead>
+                    <TableHead className="whitespace-nowrap">Transaction #</TableHead>
                     <TableHead>Property</TableHead>
                     <TableHead>Buyer</TableHead>
-                    <TableHead>Amount</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Settlement Hash</TableHead>
+                    <TableHead className="whitespace-nowrap">Amount</TableHead>
+                    <TableHead className="whitespace-nowrap">Status</TableHead>
+                    <TableHead className="min-w-[180px] whitespace-nowrap">Settlement Hash</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {receivedOffers.map((tx: SellerOffer) => (
                     <TableRow key={tx.id}>
-                      <TableCell className="font-mono text-xs font-semibold text-blue-600">{tx.transaction_number}</TableCell>
+                      <TableCell className="font-mono text-xs font-semibold text-blue-600 whitespace-nowrap">{tx.transaction_number}</TableCell>
                       <TableCell className="font-medium text-slate-900 text-xs">{getPropertyLabel(tx)}</TableCell>
                       <TableCell className="text-xs text-slate-600">{tx.buyer_name}</TableCell>
-                      <TableCell className="font-mono text-xs font-bold">{formatCurrency(tx.amount)}</TableCell>
-                      <TableCell><StatusBadge status={tx.status} /></TableCell>
-                      <TableCell>
+                      <TableCell className="font-mono text-xs font-bold whitespace-nowrap">{formatCurrency(tx.amount)}</TableCell>
+                      <TableCell className="whitespace-nowrap"><StatusBadge status={tx.status} /></TableCell>
+                      <TableCell className="min-w-[180px] whitespace-nowrap">
                         <HashDisplay value={tx.blockchain_tx_hash} explorerLink pendingText="Pending Settlement" />
                       </TableCell>
                     </TableRow>
@@ -729,9 +730,13 @@ export const SellerDashboard: React.FC = () => {
       <RegisterPropertyModal
         isOpen={isRegisterModalOpen}
         onClose={() => setIsRegisterModalOpen(false)}
-        onSuccess={() => {
+        onSuccess={(newProp) => {
           setIsRegisterModalOpen(false)
           loadSellerData()
+          const targetId = newProp?.propertyId || newProp?.id
+          if (targetId) {
+            navigate(`/documents?propertyId=${targetId}`)
+          }
         }}
       />
     </div>

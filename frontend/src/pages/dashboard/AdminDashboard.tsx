@@ -16,7 +16,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import { Button } from '@/components/ui/Button'
 import { Tabs } from '@/components/ui/Tabs'
-import { formatCurrency, formatDate, truncateHash, getPropertyLabel } from '@/lib/utils'
+import { formatCurrency, formatDate, truncateHash, getPropertyLabel, getRoleLabel } from '@/lib/utils'
 import { useAuth } from '@/hooks/useAuth'
 import apiClient from '@/lib/axios'
 import authService from '@/services/authService'
@@ -206,7 +206,7 @@ export const AdminDashboard: React.FC = () => {
                           <TableCell className="font-mono text-xs text-slate-600">{u.email}</TableCell>
                           <TableCell>
                             <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-700">
-                              {u.role}
+                              {getRoleLabel(u.role)}
                             </span>
                           </TableCell>
                           <TableCell><StatusBadge status={u.account_status} /></TableCell>
@@ -253,7 +253,7 @@ export const AdminDashboard: React.FC = () => {
                     <TableCell className="font-mono text-xs text-slate-600">{u.email}</TableCell>
                     <TableCell>
                       <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
-                        {u.role}
+                        {getRoleLabel(u.role)}
                       </span>
                     </TableCell>
                     <TableCell><StatusBadge status={u.account_status} /></TableCell>
@@ -279,11 +279,11 @@ export const AdminDashboard: React.FC = () => {
                 <thead>
                   <tr className="bg-slate-100 text-slate-700 font-semibold">
                     <th className="p-3 border border-slate-200">Permission</th>
-                    <th className="p-3 border border-slate-200 text-center">BUYER</th>
-                    <th className="p-3 border border-slate-200 text-center">PROPERTY_OWNER (Seller)</th>
-                    <th className="p-3 border border-slate-200 text-center">VERIFIER (Agent)</th>
-                    <th className="p-3 border border-slate-200 text-center">LEGAL_AUTHORITY</th>
-                    <th className="p-3 border border-slate-200 text-center">ADMIN</th>
+                    <th className="p-3 border border-slate-200 text-center">Buyer</th>
+                    <th className="p-3 border border-slate-200 text-center">Seller</th>
+                    <th className="p-3 border border-slate-200 text-center">Verifier</th>
+                    <th className="p-3 border border-slate-200 text-center">Legal Authority</th>
+                    <th className="p-3 border border-slate-200 text-center">Admin</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">

@@ -24,7 +24,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@
 import { Button } from '@/components/ui/Button'
 import { Tabs } from '@/components/ui/Tabs'
 import { Input } from '@/components/ui/Input'
-import { formatCurrency, formatDate, truncateHash, getPropertyLabel } from '@/lib/utils'
+import { formatCurrency, formatDate, truncateHash, getPropertyLabel, getRoleLabel } from '@/lib/utils'
 import { useAuth } from '@/hooks/useAuth'
 import { useWallet } from '@/context/WalletContext'
 import apiClient from '@/lib/axios'
@@ -234,11 +234,18 @@ export const BuyerDashboard: React.FC = () => {
                             View Deed Details
                           </Button>
                         </Link>
-                        <Link to={`/transactions?propertyId=${prop.id}&initiate=true`} className="flex-1">
-                          <Button size="sm" className="w-full text-xs">
-                            Make Offer
-                          </Button>
-                        </Link>
+                        {!(
+                          user?.id && (
+                            String(prop.current_owner_id || '').toLowerCase() === String(user.id).toLowerCase() ||
+                            String(prop.creator_user_id || '').toLowerCase() === String(user.id).toLowerCase()
+                          )
+                        ) && (
+                          <Link to={`/transactions?propertyId=${prop.id}&initiate=true`} className="flex-1">
+                            <Button size="sm" className="w-full text-xs">
+                              Make Offer
+                            </Button>
+                          </Link>
+                        )}
                       </div>
                     </div>
                   </Card>
@@ -517,7 +524,7 @@ export const BuyerDashboard: React.FC = () => {
                 <div className="flex justify-between py-2 border-b border-slate-100">
                   <span className="text-slate-500">Assigned Network Role</span>
                   <span className="font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
-                    BUYER
+                    {getRoleLabel(user?.role) || 'Buyer'}
                   </span>
                 </div>
                 <div className="flex justify-between py-2 border-b border-slate-100">

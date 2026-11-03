@@ -81,7 +81,7 @@ class PropertyUpdate(BaseModel):
 class PropertyStatusUpdate(BaseModel):
     """Schema for updating status or verification status."""
     status: Optional[str] = Field(None, description="ACTIVE, INACTIVE, DRAFT, UNDER_REVIEW, SOLD")
-    verification_status: Optional[str] = Field(None, description="PENDING, VERIFIED, REJECTED, REQUIRES_CORRECTION")
+    verification_status: Optional[str] = Field(None, description="PENDING, SUBMITTED, VERIFIED, REJECTED, CORRECTION_REQUESTED, REQUIRES_CORRECTION")
 
 
 class PropertyResponse(PropertyBase):
@@ -93,12 +93,20 @@ class PropertyResponse(PropertyBase):
     status: str
     verification_status: str
     blockchain_property_id: Optional[str] = None
+    submitted_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
 
     # Populated owner details
     owner_name: Optional[str] = None
     owner_email: Optional[str] = None
+
+    # Blockchain anchoring verification details
+    blockchain_tx_hash: Optional[str] = None
+    blockchain_block_number: Optional[int] = None
+    blockchain_contract_address: Optional[str] = None
+    blockchain_registration_timestamp: Optional[datetime] = None
+    blockchain_error: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 

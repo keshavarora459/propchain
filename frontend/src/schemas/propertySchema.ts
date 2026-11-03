@@ -13,7 +13,7 @@ export const propertyRegistrationSchema = z.object({
   area: z.number().positive('Area must be a positive number'),
   areaUnit: z.enum(['sq ft', 'acres', 'sq m']),
   valuation: z.number().positive('Valuation must be a positive number'),
-  ownerName: z.string().min(2, 'Owner full name is required'),
+  ownerName: z.string().optional(),
   ownerWallet: z.string().optional(),
   registrationReference: z
     .string()

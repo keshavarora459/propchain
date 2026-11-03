@@ -24,6 +24,10 @@ class DocumentResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     review_notes: Optional[str] = None
+    ocr_confidence: Optional[float] = None
+    is_cross_property_duplicate: bool = False
+    duplicate_property_name: Optional[str] = None
+    duplicate_warning: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 

@@ -29,12 +29,23 @@ def create_database_engine(database_url: Optional[str] = None) -> Engine:
 
     # Configure pooling strategy based on dialect
     if url.startswith("sqlite"):
+        is_memory = ":memory:" in url
         engine = create_engine(
             url,
-            connect_args={"check_same_thread": False},
-            poolclass=StaticPool,
+            connect_args={"check_same_thread": False, "timeout": 30},
+            poolclass=StaticPool if is_memory else NullPool,
             echo=settings.DEBUG and settings.is_development,
         )
+        if not is_memory:
+            from sqlalchemy import event
+
+            @event.listens_for(engine, "connect")
+            def set_sqlite_pragma(dbapi_connection, connection_record):
+                cursor = dbapi_connection.cursor()
+                cursor.execute("PRAGMA journal_mode=WAL")
+                cursor.execute("PRAGMA busy_timeout=5000")
+                cursor.execute("PRAGMA synchronous=NORMAL")
+                cursor.close()
     else:
         engine = create_engine(
             url,

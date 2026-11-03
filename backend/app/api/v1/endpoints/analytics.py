@@ -392,54 +392,89 @@ def get_dashboard_metrics(
         }
 
     elif user_role == UserRole.VERIFIER.value:
+        from app.models.document import DocumentVerificationRecord
+        verified_subq = (
+            select(PropertyDocument.property_id)
+            .join(DocumentVerificationRecord, DocumentVerificationRecord.document_id == PropertyDocument.id)
+            .where(DocumentVerificationRecord.verifier_user_id == current_user.id)
+        )
         pending_verification_props = list(
             db.scalars(
                 select(Property)
-                .where(Property.verification_status == "PENDING")
-                .order_by(Property.created_at.desc())
+                .options(joinedload(Property.creator), joinedload(Property.current_owner))
+                .where(
+                    or_(
+                        Property.verification_status.in_(["SUBMITTED", "CORRECTION_REQUESTED"]),
+                        and_(
+                            Property.verification_status == "VERIFIED",
+                            Property.id.in_(verified_subq),
+                        ),
+                    )
+                )
+                .order_by(Property.submitted_at.desc(), Property.created_at.desc())
             ).all()
         )
 
-        pending_docs_count = db.scalar(
-            select(func.count(PropertyDocument.id)).where(PropertyDocument.status == "PENDING")
-        ) or 0
-
-        recent_docs = list(
-            db.scalars(
-                select(PropertyDocument)
-                .order_by(PropertyDocument.created_at.desc())
-                .limit(10)
-            ).all()
+        submitted_prop_ids = [p.id for p in pending_verification_props]
+        submitted_docs = (
+            list(
+                db.scalars(
+                    select(PropertyDocument)
+                    .where(PropertyDocument.property_id.in_(submitted_prop_ids))
+                    .order_by(PropertyDocument.created_at.desc())
+                ).all()
+            )
+            if submitted_prop_ids
+            else []
         )
+
+        pending_docs_count = len([
+            d for d in submitted_docs
+            if (d.status or "").upper() in {"SUBMITTED_FOR_REVIEW", "PENDING_REVIEW", "UPLOADED"}
+        ])
+
+        prop_queue = []
+        for p in pending_verification_props:
+            p_docs = [d for d in submitted_docs if d.property_id == p.id]
+            approved_count = len([d for d in p_docs if (d.status or "").upper() == "VERIFIED"])
+            seller_name = p.creator.full_name if p.creator else (p.current_owner.full_name if p.current_owner else "Seller")
+            prop_queue.append({
+                "id": str(p.id),
+                "property_number": p.property_number,
+                "title": p.title,
+                "city": p.city,
+                "state": p.state,
+                "seller_name": seller_name,
+                "valuation": float(p.valuation) if p.valuation else 0.0,
+                "verification_status": p.verification_status,
+                "submitted_at": p.submitted_at.isoformat() if p.submitted_at else (p.created_at.isoformat() if p.created_at else None),
+                "created_at": p.created_at.isoformat() if p.created_at else None,
+                "approved_docs_count": approved_count,
+                "total_docs_count": 4,
+            })
+
+        docs_queue = [
+            {
+                "id": str(d.id),
+                "property_id": str(d.property_id),
+                "title": d.title or d.original_filename,
+                "document_type": d.document_type,
+                "file_name": d.original_filename,
+                "status": d.status,
+                "document_hash": d.document_hash,
+                "created_at": d.created_at.isoformat() if d.created_at else None,
+            }
+            for d in submitted_docs[:10]
+        ]
 
         payload["verifier_metrics"] = {
             "properties_to_verify_count": len(pending_verification_props),
             "documents_to_verify_count": pending_docs_count,
-            "properties_queue": [
-                {
-                    "id": str(p.id),
-                    "property_number": p.property_number,
-                    "title": p.title,
-                    "city": p.city,
-                    "state": p.state,
-                    "valuation": float(p.valuation) if p.valuation else 0.0,
-                    "verification_status": p.verification_status,
-                    "created_at": p.created_at.isoformat() if p.created_at else None,
-                }
-                for p in pending_verification_props
-            ],
-            "documents_queue": [
-                {
-                    "id": str(d.id),
-                    "property_id": str(d.property_id),
-                    "document_type": d.document_type,
-                    "file_name": d.file_name,
-                    "status": d.status,
-                    "document_hash": d.document_hash,
-                    "created_at": d.created_at.isoformat() if d.created_at else None,
-                }
-                for d in recent_docs
-            ],
+            "pending_documents_count": pending_docs_count,
+            "properties_to_verify": prop_queue,
+            "properties_queue": prop_queue,
+            "recent_documents": docs_queue,
+            "documents_queue": docs_queue,
         }
 
     elif user_role == UserRole.LEGAL_AUTHORITY.value:

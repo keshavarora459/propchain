@@ -129,7 +129,25 @@ class PropertyRepository:
                         Property.creator_user_id == current_user.id,
                     )
                 )
-            # ADMIN, VERIFIER, LEGAL_AUTHORITY remain unrestricted
+            elif user_role in {UserRole.VERIFIER.value, "VERIFIER"}:
+                # Item 7: Verifier property list must show ONLY properties with verification status
+                # SUBMITTED, CORRECTION_REQUESTED, or recently verified by this verifier.
+                from app.models.document import DocumentVerificationRecord, PropertyDocument
+                verified_by_me_subq = (
+                    select(PropertyDocument.property_id)
+                    .join(DocumentVerificationRecord, DocumentVerificationRecord.document_id == PropertyDocument.id)
+                    .where(DocumentVerificationRecord.verifier_user_id == current_user.id)
+                )
+                filters.append(
+                    or_(
+                        Property.verification_status.in_(["SUBMITTED", "CORRECTION_REQUESTED"]),
+                        and_(
+                            Property.verification_status == "VERIFIED",
+                            Property.id.in_(verified_by_me_subq),
+                        ),
+                    )
+                )
+            # ADMIN, LEGAL_AUTHORITY remain unrestricted
 
         if search and search.strip():
             term = f"%{search.strip()}%"

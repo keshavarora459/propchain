@@ -60,7 +60,7 @@ def _clear_refresh_cookie(response: Response) -> None:
     summary="User Registration",
     description="Register a new buyer or property owner account.",
 )
-async def register(
+def register(
     request_data: UserRegisterRequest,
     request: Request,
     db: Session = Depends(get_db),
@@ -82,7 +82,7 @@ async def register(
     summary="User Login",
     description="Authenticate with email and password to receive JWT access and refresh tokens.",
 )
-async def login(
+def login(
     request_data: UserLoginRequest,
     request: Request,
     response: Response,
@@ -108,7 +108,7 @@ async def login(
     summary="Refresh Access Token",
     description="Rotate refresh token and issue a fresh access token pair.",
 )
-async def refresh_token(
+def refresh_token(
     request: Request,
     response: Response,
     body: Optional[RefreshTokenRequest] = None,
@@ -141,7 +141,7 @@ async def refresh_token(
     summary="User Logout",
     description="Revoke the active refresh token session and clear authentication cookies.",
 )
-async def logout(
+def logout(
     request: Request,
     response: Response,
     body: Optional[RefreshTokenRequest] = None,

@@ -72,8 +72,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 except Exception as seed_exc:
                     logger.warning("Could not auto-seed demo accounts: %s", seed_exc)
 
-        # Setup real-time MongoDB Atlas replication for all mutations
-        setup_sqlalchemy_mongo_listener()
+        # Setup real-time MongoDB Atlas replication for all mutations only if connected
+        if mongo_ok:
+            setup_sqlalchemy_mongo_listener()
+        else:
+            logger.info("MongoDB Atlas replication listener skipped (cluster unavailable).")
 
     yield
 

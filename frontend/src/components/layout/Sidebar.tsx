@@ -24,7 +24,7 @@ import {
 import { useUI } from '@/hooks/useUI'
 import { useAuth } from '@/hooks/useAuth'
 import { getNavigationForRole, type NavItem } from '@/constants/navigation'
-import { cn } from '@/lib/utils'
+import { cn, getRoleLabel } from '@/lib/utils'
 
 export const Sidebar: React.FC = () => {
   const { sidebarCollapsed, toggleSidebar, mobileSidebarOpen, setMobileSidebarOpen } = useUI()
@@ -56,6 +56,8 @@ export const Sidebar: React.FC = () => {
         return <Settings className="h-5 w-5 shrink-0" />
       case 'Users':
         return <Users className="h-5 w-5 shrink-0" />
+      case 'ShoppingBag':
+        return <ShoppingBag className="h-5 w-5 shrink-0" />
       default:
         return <LayoutDashboard className="h-5 w-5 shrink-0" />
     }
@@ -64,16 +66,16 @@ export const Sidebar: React.FC = () => {
   const getRoleBadge = () => {
     switch (user?.role) {
       case 'ADMIN':
-        return { label: 'Administrator', icon: Shield, color: 'text-amber-400 bg-amber-500/10 border-amber-500/20' }
+        return { label: getRoleLabel('ADMIN'), icon: Shield, color: 'text-amber-400 bg-amber-500/10 border-amber-500/20' }
       case 'LEGAL_AUTHORITY':
-        return { label: 'Legal Registrar', icon: Scale, color: 'text-purple-400 bg-purple-500/10 border-purple-500/20' }
+        return { label: getRoleLabel('LEGAL_AUTHORITY'), icon: Scale, color: 'text-purple-400 bg-purple-500/10 border-purple-500/20' }
       case 'VERIFIER':
-        return { label: 'Title Verifier', icon: UserCheck, color: 'text-cyan-400 bg-cyan-500/10 border-cyan-500/20' }
+        return { label: getRoleLabel('VERIFIER'), icon: UserCheck, color: 'text-cyan-400 bg-cyan-500/10 border-cyan-500/20' }
       case 'PROPERTY_OWNER':
-        return { label: 'Property Owner', icon: Home, color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' }
+        return { label: getRoleLabel('PROPERTY_OWNER'), icon: Home, color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' }
       case 'BUYER':
       default:
-        return { label: 'Verified Buyer', icon: ShoppingBag, color: 'text-blue-400 bg-blue-500/10 border-blue-500/20' }
+        return { label: getRoleLabel('BUYER'), icon: ShoppingBag, color: 'text-blue-400 bg-blue-500/10 border-blue-500/20' }
     }
   }
 

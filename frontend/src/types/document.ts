@@ -47,11 +47,14 @@ export interface DocumentRecord {
   uploadedBy: string
   uploaded_by?: string
   status: DocumentVerificationStatus
-  ocrConfidence: number // percentage 0-100
+  ocrConfidence?: number | null // percentage 0-100 or null if not scanned
   documentHash: string // SHA-256 hash
   document_hash?: string
   ipfsCid?: string
   reviewNotes?: string
+  is_cross_property_duplicate?: boolean
+  duplicate_property_name?: string
+  duplicate_warning?: string
   extractedText?: string
   candidateFields?: Record<string, unknown>
 }

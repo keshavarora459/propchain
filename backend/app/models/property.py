@@ -3,11 +3,11 @@ SQLAlchemy 2.x Entity Model for Properties in PropChain.
 Represents registered land parcels and real estate assets.
 """
 import uuid
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional
 
-from sqlalchemy import Date, ForeignKey, Index, Numeric, String, Text, Uuid
+from sqlalchemy import Date, DateTime, ForeignKey, Index, Numeric, String, Text, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import BaseModel
@@ -75,6 +75,7 @@ class Property(BaseModel):
         index=True,
     )
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="ACTIVE", index=True)
+    submitted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     verification_status: Mapped[str] = mapped_column(
         String(32),
         nullable=False,

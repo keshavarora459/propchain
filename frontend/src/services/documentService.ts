@@ -15,7 +15,12 @@ export function normalizeDocument(doc: any): DocumentRecord {
     uploadedBy: doc.uploadedBy || 'Property Owner',
     status: doc.status || 'Pending Review',
     documentHash: doc.documentHash || doc.document_hash || 'SHA256-PENDING',
-    ocrConfidence: doc.ocrConfidence || 95,
+    ocrConfidence: typeof (doc.ocr_confidence ?? doc.ocrConfidence) === 'number'
+      ? Number(doc.ocr_confidence ?? doc.ocrConfidence)
+      : null,
+    is_cross_property_duplicate: Boolean(doc.is_cross_property_duplicate),
+    duplicate_property_name: doc.duplicate_property_name || undefined,
+    duplicate_warning: doc.duplicate_warning || undefined,
   }
 }
 

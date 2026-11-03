@@ -10,13 +10,16 @@ export function normalizeProperty(p: any): Property {
   const ownerAddress = p.ownerAddress || p.owner_email || ''
   
   const rawStatus = (p.verification_status || p.verificationStatus || 'Pending').toString()
+  const upperStatus = rawStatus.toUpperCase()
   const verificationStatus =
-    rawStatus.toUpperCase() === 'VERIFIED'
+    upperStatus === 'VERIFIED'
       ? 'Verified'
-      : rawStatus.toUpperCase() === 'REJECTED'
+      : upperStatus === 'SUBMITTED'
+      ? 'Submitted'
+      : upperStatus === 'REJECTED'
       ? 'Rejected'
-      : rawStatus.toUpperCase() === 'REQUIRES_CORRECTION'
-      ? 'Flagged'
+      : upperStatus === 'REQUIRES_CORRECTION' || upperStatus === 'CORRECTION_REQUESTED'
+      ? 'Needs correction'
       : 'Pending'
 
   const registeredAt = p.registeredAt || p.created_at || new Date().toISOString()
@@ -49,7 +52,17 @@ export function normalizeProperty(p: any): Property {
     ownerAddress,
     registrationReference,
     verificationStatus,
+    verification_status: upperStatus,
+    submitted_at: p.submitted_at || p.created_at,
+    seller_name: p.seller_name || p.owner_name || currentOwner,
     registeredAt,
+    creator_user_id: p.creator_user_id ? String(p.creator_user_id) : undefined,
+    current_owner_id: p.current_owner_id ? String(p.current_owner_id) : undefined,
+    blockchain_tx_hash: p.blockchain_tx_hash,
+    blockchain_block_number: p.blockchain_block_number,
+    blockchain_contract_address: p.blockchain_contract_address,
+    blockchain_registration_timestamp: p.blockchain_registration_timestamp,
+    blockchain_error: p.blockchain_error,
   }
 }
 
@@ -64,6 +77,7 @@ export const propertyService = {
       verification_status: filter?.verification_status || filter?.verificationStatus,
       state: filter?.state,
       city: filter?.city,
+      mine: filter?.mine,
     }
     const response = await apiClient.get<PropertyListResponse>('/properties', { params })
     return {
@@ -99,6 +113,26 @@ export const propertyService = {
 
   async updatePropertyStatus(id: string, data: { status?: string; verification_status?: string }): Promise<Property> {
     const response = await apiClient.patch<Property>(`/properties/${id}/status`, data)
+    return normalizeProperty(response.data)
+  },
+
+  async submitForVerification(propertyId: string): Promise<Property> {
+    const response = await apiClient.post<Property>(`/properties/${propertyId}/submit-for-verification`)
+    return normalizeProperty(response.data)
+  },
+
+  async verifyProperty(propertyId: string): Promise<Property> {
+    const response = await apiClient.post<Property>(`/properties/${propertyId}/verify`)
+    return normalizeProperty(response.data)
+  },
+
+  async rejectProperty(propertyId: string, reason?: string): Promise<Property> {
+    const response = await apiClient.post<Property>(`/properties/${propertyId}/reject`, { reason })
+    return normalizeProperty(response.data)
+  },
+
+  async retryBlockchain(propertyId: string): Promise<Property> {
+    const response = await apiClient.post<Property>(`/properties/${propertyId}/retry-blockchain`)
     return normalizeProperty(response.data)
   },
 }

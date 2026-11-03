@@ -8,9 +8,20 @@ from decimal import Decimal
 from typing import Any, Dict, Optional, Tuple
 import uuid
 
-import pymongo
-from pymongo import MongoClient
-from pymongo.database import Database
+try:
+    import pymongo
+    HAS_PYMONGO = True
+except ImportError:
+    pymongo = None
+    HAS_PYMONGO = False
+if HAS_PYMONGO:
+    from pymongo import MongoClient
+else:
+    MongoClient = Any
+if HAS_PYMONGO:
+    from pymongo.database import Database
+else:
+    Database = Any
 from sqlalchemy import event, inspect
 from sqlalchemy.orm import Session
 
@@ -21,6 +32,7 @@ logger = get_logger("core.mongo")
 
 _mongo_client: Optional[MongoClient] = None
 _mongo_db: Optional[Database] = None
+_mongo_available: Optional[bool] = None
 _mongo_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="mongo_sync")
 
 # Mapping SQLAlchemy model class names to MongoDB collections
@@ -41,17 +53,23 @@ COLLECTION_MAPPING = {
 }
 
 
-def get_mongo_client() -> MongoClient:
+def get_mongo_client() -> Optional[MongoClient]:
     """Obtain or initialize the singleton MongoClient."""
-    global _mongo_client
+    global _mongo_client, _mongo_available
+    if _mongo_available is False:
+        return None
     settings = get_settings()
     if settings.APP_ENV in {"test", "testing"}:
         return None
+    if not HAS_PYMONGO:
+        return None
+
     if _mongo_client is None:
         uri = settings.MONGODB_URI
         if not uri:
             logger.warning("No MONGODB_URI configured in environment.")
             return None
+
         logger.info("Initializing MongoDB client...")
         try:
             import certifi
@@ -77,11 +95,16 @@ def get_mongo_client() -> MongoClient:
 def get_mongo_db() -> Optional[Database]:
     """Obtain the configured MongoDB database."""
     global _mongo_db
+    settings = get_settings()
+    if settings.APP_ENV in {"test", "testing"}:
+        return None
+    if not HAS_PYMONGO:
+        return None
+
     if _mongo_db is None:
         client = get_mongo_client()
         if client is None:
             return None
-        settings = get_settings()
         _mongo_db = client[settings.MONGODB_DB_NAME]
     return _mongo_db
 
@@ -102,22 +125,35 @@ def close_mongo_client() -> None:
 
 def check_mongo_connection() -> Tuple[bool, str, Dict[str, Any]]:
     """Verify MongoDB connectivity and return current cluster telemetry."""
+    global _mongo_available
     settings = get_settings()
     if settings.APP_ENV in {"test", "testing"}:
+        _mongo_available = False
         return False, "MongoDB disabled in test environment", {}
+    if not HAS_PYMONGO:
+        _mongo_available = False
+        return False, "pymongo package is not installed", {}
     try:
         client = get_mongo_client()
+        if client is None:
+            _mongo_available = False
+            return False, "MongoDB client could not be initialized", {}
         info = client.server_info()
         db = get_mongo_db()
+        if db is None:
+            _mongo_available = False
+            return False, "MongoDB database unavailable", {}
         collections = db.list_collection_names()
         stats = {col: db[col].count_documents({}) for col in collections}
+        _mongo_available = True
         return True, f"MongoDB Connected (v{info.get('version', 'unknown')})", {
             "collections": collections,
             "counts": stats,
             "cluster_database": db.name,
         }
     except Exception as exc:
-        logger.error("MongoDB health check failed: %s", exc)
+        _mongo_available = False
+        logger.warning("MongoDB health check failed: %s", exc)
         return False, str(exc), {}
 
 
@@ -170,6 +206,8 @@ def sync_entity_to_mongo(entity: Any) -> None:
 
     try:
         db = get_mongo_db()
+        if db is None:
+            return
         doc = serialize_entity_for_mongo(entity)
         if "_id" in doc:
             db[collection_name].replace_one({"_id": doc["_id"]}, doc, upsert=True)
@@ -189,6 +227,8 @@ def delete_entity_from_mongo(entity: Any) -> None:
         entity_id = str(getattr(entity, "id", None))
         if entity_id:
             db = get_mongo_db()
+            if db is None:
+                return
             db[collection_name].delete_one({"_id": entity_id})
             logger.debug("Deleted %s [%s] from MongoDB collection '%s'", model_name, entity_id, collection_name)
     except Exception as exc:
@@ -200,6 +240,8 @@ def sync_all_to_mongo(session: Session) -> Dict[str, int]:
     logger.info("Executing comprehensive database -> MongoDB initial synchronization...")
     results: Dict[str, int] = {}
     db = get_mongo_db()
+    if db is None:
+        return results
 
     # Import models here to prevent circular dependency
     from app.models.approval import TransactionApproval
@@ -245,6 +287,9 @@ def setup_sqlalchemy_mongo_listener() -> None:
     settings = get_settings()
     if settings.APP_ENV in {"test", "testing"}:
         return
+    if not HAS_PYMONGO:
+        return
+
     @event.listens_for(Session, "after_flush")
     def receive_after_flush(session: Session, flush_context: Any) -> None:
         """Capture all new, modified, and deleted entities and replicate to MongoDB in background threads."""
@@ -304,6 +349,7 @@ def safe_uuid(val: Any) -> Optional[uuid.UUID]:
     """Safely convert any value to UUID, returning None if invalid or empty."""
     if not val:
         return None
+
     try:
         return uuid.UUID(str(val))
     except (ValueError, TypeError, AttributeError):
@@ -539,9 +585,3 @@ def hydrate_all_from_mongo(session: Session) -> Dict[str, int]:
     session.commit()
     logger.info("Successfully hydrated all data directly from MongoDB Atlas: %s", hydrated)
     return hydrated
-
-
-    session.commit()
-    logger.info("Successfully hydrated all data directly from MongoDB Atlas: %s", hydrated)
-    return hydrated
-

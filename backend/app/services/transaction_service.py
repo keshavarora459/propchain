@@ -71,10 +71,10 @@ class TransactionService:
         self.db.add(history)
 
     def initiate_transaction(self, data: TransactionCreate, current_user: User) -> TransactionResponse:
-        # Check buyer or owner permission
+        # Requirement 1: Only BUYER can make offers or initiate transactions
         user_role = UserRole(current_user.role) if isinstance(current_user.role, str) else current_user.role
-        if not has_permission(user_role, Permission.INITIATE_TRANSACTION) and user_role not in {UserRole.ADMIN, UserRole.BUYER, UserRole.PROPERTY_OWNER}:
-            raise ForbiddenError("You do not have permission to initiate property transactions.")
+        if user_role != UserRole.BUYER:
+            raise ForbiddenError("Only buyers can make offers or initiate transactions.")
 
         prop = None
         try:
@@ -104,18 +104,11 @@ class TransactionService:
 
         seller_id = prop.current_owner_id or prop.creator_user_id
         if seller_id == current_user.id:
-            # Current user is the owner/seller establishing the escrow proposal for a buyer
-            buyer_user = self.db.scalars(
-                select(User).where(User.id != current_user.id, User.role == "BUYER")
-            ).first()
-            if not buyer_user:
-                buyer_user = self.db.scalars(select(User).where(User.id != current_user.id)).first()
-            buyer_id = buyer_user.id if buyer_user else current_user.id
-        else:
-            buyer_id = current_user.id
-            if not seller_id:
-                other_user = self.db.scalars(select(User).where(User.id != current_user.id)).first()
-                seller_id = other_user.id if other_user else current_user.id
+            raise ForbiddenError("You cannot make an offer on your own property.")
+        buyer_id = current_user.id
+        if not seller_id:
+            other_user = self.db.scalars(select(User).where(User.id != current_user.id)).first()
+            seller_id = other_user.id if other_user else current_user.id
 
         # In the rare event buyer_id == seller_id, find an alternate counterparty
         if buyer_id == seller_id:

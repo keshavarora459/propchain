@@ -182,13 +182,20 @@ export const PropertyDetailPage: React.FC = () => {
     (property.verificationStatus || (property as any).verification_status || '').toString().toUpperCase() === 'VERIFIED'
   const isActive =
     !(property.status) || property.status.toString().toUpperCase() === 'ACTIVE'
-  const canMakeOffer =
-    user?.role === 'BUYER' || user?.role === 'PROPERTY_OWNER' || user?.role === 'ADMIN'
   const isOwner = Boolean(
-    user?.email &&
-      (user.email.toLowerCase() === (property.ownerAddress || '').toLowerCase() ||
-        user.email.toLowerCase() === (property.currentOwner || '').toLowerCase())
+    user?.id && (
+      (property.current_owner_id && String(property.current_owner_id).toLowerCase() === String(user.id).toLowerCase()) ||
+      (property.creator_user_id && String(property.creator_user_id).toLowerCase() === String(user.id).toLowerCase()) ||
+      ((property as any).owner_id && String((property as any).owner_id).toLowerCase() === String(user.id).toLowerCase())
+    ) || (
+      user?.email && (
+        (property.ownerAddress && property.ownerAddress.toLowerCase() === user.email.toLowerCase()) ||
+        (property.currentOwner && property.currentOwner.toLowerCase() === user.email.toLowerCase())
+      )
+    )
   )
+  // Item 1: Show Make Offer ONLY to BUYER role, and never on own property
+  const canMakeOffer = user?.role === 'BUYER' && !isOwner
 
   return (
     <div className="space-y-6">

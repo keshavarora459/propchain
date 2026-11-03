@@ -17,7 +17,7 @@ import { useUI } from '@/hooks/useUI'
 import { useAuth } from '@/hooks/useAuth'
 import { useWallet } from '@/context/WalletContext'
 import { Button } from '@/components/ui/Button'
-import { truncateHash } from '@/lib/utils'
+import { truncateHash, getRoleLabel } from '@/lib/utils'
 
 export const Header: React.FC = () => {
   const {
@@ -307,8 +307,8 @@ export const Header: React.FC = () => {
               <span className="block text-xs font-semibold text-slate-800 leading-tight">
                 {user?.full_name || 'Network User'}
               </span>
-              <span className="block text-[10px] text-slate-500 font-mono">
-                {user?.role || 'Guest'}
+              <span className="block text-[10px] text-slate-500 font-medium">
+                {getRoleLabel(user?.role) || 'Guest'}
               </span>
             </div>
             <ChevronDown className="h-3 w-3 text-slate-400 hidden lg:block" />
@@ -320,8 +320,8 @@ export const Header: React.FC = () => {
                 <p className="text-xs font-semibold text-slate-800">{user?.full_name || 'PropChain User'}</p>
                 <p className="text-[11px] text-slate-500 font-mono truncate">{user?.email || 'authenticated session'}</p>
                 <div className="mt-1">
-                  <span className="font-mono text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
-                    {user?.role || 'BUYER'}
+                  <span className="font-sans text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
+                    {getRoleLabel(user?.role) || 'Buyer'}
                   </span>
                 </div>
               </div>

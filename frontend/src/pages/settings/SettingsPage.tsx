@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/Button'
 import { userSettingsSchema, type UserSettingsFormData } from '@/schemas/settingsSchema'
 import { useWallet } from '@/context/WalletContext'
 import { useAuth } from '@/hooks/useAuth'
+import { getRoleLabel } from '@/lib/utils'
 
 export const SettingsPage: React.FC = () => {
   const { account } = useWallet()
@@ -24,7 +25,10 @@ export const SettingsPage: React.FC = () => {
     defaultValues: {
       fullName: user?.full_name || '',
       email: user?.email || '',
-      organization: '',
+      organization:
+        user?.role === 'PROPERTY_OWNER'
+          ? 'Property Seller Portfolio'
+          : 'Department of Real Estate & Cryptographic Land Registry',
       preferredWallet: account || '',
       notifyOnTransactions: true,
       notifyOnFraudAlerts: true,
@@ -58,11 +62,16 @@ export const SettingsPage: React.FC = () => {
         {/* Profile Details */}
         <Card>
           <CardHeader>
-            <div className="flex items-center gap-2">
-              <User className="h-4 w-4 text-slate-700" />
-              <CardTitle>Registrar Authority Profile</CardTitle>
+            <div className="flex items-center justify-between w-full">
+              <div className="flex items-center gap-2">
+                <User className="h-4 w-4 text-slate-700" />
+                <CardTitle>{getRoleLabel(user?.role) || 'User'} Profile</CardTitle>
+              </div>
+              <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-800 border border-slate-200">
+                {getRoleLabel(user?.role) || 'User'}
+              </span>
             </div>
-            <CardDescription>Personal identification and administrative registry credentials.</CardDescription>
+            <CardDescription>Personal identification and administrative credentials.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

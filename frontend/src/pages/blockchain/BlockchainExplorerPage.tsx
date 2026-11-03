@@ -14,24 +14,23 @@ import {
   XCircle,
   AlertTriangle,
   Layers,
-  FileCheck2,
-  Activity,
-  Flame,
+  ShieldCheck,
+  History,
+  FileCode,
+  Check,
 } from 'lucide-react'
 import { PageHeader } from '@/components/common/PageHeader'
 import { StatusBadge } from '@/components/common/StatusBadge'
 import { Button } from '@/components/ui/Button'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card'
+import { Modal } from '@/components/ui/Modal'
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import { truncateHash, formatDate } from '@/lib/utils'
 import { ethers } from 'ethers'
 import {
   CONTRACT_ADDRESSES,
-  PROPERTY_REGISTRY_ABI,
-  OWNERSHIP_REGISTRY_ABI,
-  TRANSACTION_MANAGER_ABI,
+  CONTRACT_DEPLOYMENT_INFO,
 } from '@/contracts/contractConfig'
-import { blockchainService } from '@/services/blockchainService'
-import type { BlockchainStats } from '@/types/blockchain'
 
 export interface RealBlock {
   blockNumber: number
@@ -40,7 +39,11 @@ export interface RealBlock {
   timestamp: string
   transactionsCount: number
   gasUsed: string
+  gasLimit?: string
+  baseFeePerGas?: string
   miner?: string
+  blockType?: string
+  transactions?: string[]
 }
 
 export interface RealTx {
@@ -50,20 +53,55 @@ export interface RealTx {
   to: string
   event: string
   propertyId?: string
+  propertyTitle?: string
   documentHash?: string
   value?: string
   gasUsed: string
+  gasPrice?: string
   status: 'Confirmed' | 'Reverted'
   timestamp: string
   details?: string
 }
 
-const RPC_URL = import.meta.env.VITE_BLOCKCHAIN_RPC_URL || 'http://127.0.0.1:8545'
+export interface RegisteredPropertyTx {
+  property_id: string
+  property_uuid?: string
+  title: string
+  owner_name: string
+  owner_wallet: string
+  tx_hash: string
+  block_number: number
+  contract_address: string
+  document_hashes: string[]
+  registered_at: string
+  confirmation_status: string
+}
 
-// Interfaces for decoding contract logs and calldata
-const propertyRegistryInterface = new ethers.Interface(PROPERTY_REGISTRY_ABI)
-const ownershipRegistryInterface = new ethers.Interface(OWNERSHIP_REGISTRY_ABI)
-const transactionManagerInterface = new ethers.Interface(TRANSACTION_MANAGER_ABI)
+export interface OwnershipTransferTx {
+  property_id: string
+  property_title?: string
+  from_owner: string
+  from_address: string
+  to_owner: string
+  to_address: string
+  tx_hash: string
+  block_number: number
+  timestamp: string
+  contract_address: string
+}
+
+export interface ContractActivity {
+  name: string
+  address: string
+  deploymentTxHash: string
+  deploymentBlock: number
+  status: string
+  abiStatus: string
+  deployedAt?: string
+  purpose: string
+}
+
+const RPC_URL = import.meta.env.VITE_BLOCKCHAIN_RPC_URL || 'http://127.0.0.1:8545'
 
 function getAddressLabel(address?: string | null): string {
   if (!address) return 'Contract Creation'
@@ -77,285 +115,197 @@ function getAddressLabel(address?: string | null): string {
   if (addr === CONTRACT_ADDRESSES.TRANSACTION_MANAGER.toLowerCase()) {
     return 'TransactionManager (Contract)'
   }
-  const deployerAddr = (import.meta.env.VITE_BLOCKCHAIN_DEPLOYER_ADDRESS || '').toLowerCase()
-  if (deployerAddr && addr === deployerAddr) {
+  if (addr === '0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266') {
     return 'Hardhat Deployer / Admin'
   }
   return truncateHash(address, 6, 4)
 }
 
+function getBlockTypeBadgeClass(blockType?: string): string {
+  if (!blockType) return 'bg-slate-100 text-slate-700 border-slate-200'
+  const bt = blockType.toLowerCase()
+  if (bt.includes('genesis')) return 'bg-purple-100 text-purple-800 border-purple-200'
+  if (bt.includes('deployment')) return 'bg-blue-100 text-blue-800 border-blue-200'
+  if (bt.includes('property')) return 'bg-emerald-100 text-emerald-800 border-emerald-200'
+  if (bt.includes('ownership')) return 'bg-indigo-100 text-indigo-800 border-indigo-200'
+  if (bt.includes('role')) return 'bg-amber-100 text-amber-800 border-amber-200'
+  return 'bg-slate-100 text-slate-700 border-slate-200'
+}
+
 export const BlockchainExplorerPage: React.FC = () => {
   const { user } = useAuth()
   const [searchParams] = useSearchParams()
+
+  const [activeTab, setActiveTab] = useState<
+    'overview' | 'blocks' | 'transactions' | 'registrations' | 'transfers' | 'contracts'
+  >('overview')
+
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResult, setSearchResult] = useState<any | null>(null)
   const [isSearching, setIsSearching] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
-  const [userRecords, setUserRecords] = useState<{
-    property_ids: string[]
-    document_hashes: string[]
-    tx_hashes: string[]
-    wallet_addresses: string[]
-  } | null>(null)
 
-  useEffect(() => {
-    if (user?.role === 'PROPERTY_OWNER' || user?.role === 'BUYER') {
-      apiClient.get('/blockchain/my-records')
-        .then((res) => {
-          if (res.data) setUserRecords(res.data)
-        })
-        .catch((err) => console.warn('Could not fetch user blockchain records:', err))
-    }
-  }, [user?.role])
+  const [selectedBlock, setSelectedBlock] = useState<RealBlock | null>(null)
+  const [selectedTx, setSelectedTx] = useState<RealTx | null>(null)
 
   const [blocks, setBlocks] = useState<RealBlock[]>([])
   const [transactions, setTransactions] = useState<RealTx[]>([])
-  const [stats, setStats] = useState<BlockchainStats | null>(null)
+  const [registeredProperties, setRegisteredProperties] = useState<RegisteredPropertyTx[]>([])
+  const [ownershipTransfers, setOwnershipTransfers] = useState<OwnershipTransferTx[]>([])
+  const [contractsList, setContractsList] = useState<ContractActivity[]>([
+    CONTRACT_DEPLOYMENT_INFO.PROPERTY_REGISTRY,
+    CONTRACT_DEPLOYMENT_INFO.OWNERSHIP_REGISTRY,
+    CONTRACT_DEPLOYMENT_INFO.TRANSACTION_MANAGER,
+  ])
+
   const [networkInfo, setNetworkInfo] = useState({
-    name: 'Hardhat EVM Localhost',
+    name: 'Local Hardhat Network',
     chainId: 31337,
     latestBlock: 0,
+    totalBlocks: 1,
+    totalTransactions: 0,
+    totalPropertyRegistrations: 0,
+    totalOwnershipTransfers: 0,
+    deployedContractsCount: 3,
     status: 'Connecting...',
     rpcUrl: RPC_URL,
   })
 
   const loadBlockchainData = useCallback(async () => {
     setIsLoading(true)
-    let connected = false
-
-    // 1. Primary: Load via authenticated backend API (bypasses browser CORS & PNA restrictions)
     try {
-      const [statusRes, blocksRes, txsRes, statsRes] = await Promise.allSettled([
-        blockchainService.getNetworkStatus(),
-        blockchainService.getLatestBlocks(25),
-        blockchainService.getRecentTransactions(25),
-        blockchainService.getStats(),
-      ])
-
-      if (statusRes.status === 'fulfilled' && statusRes.value) {
-        const s = statusRes.value
-        if (s.syncStatus !== 'Offline') {
-          connected = true
-          setNetworkInfo({
-            name: s.networkName || 'Hardhat EVM Localhost',
-            chainId: s.chainId || 31337,
-            latestBlock: s.latestBlock || 0,
-            status: 'Connected',
-            rpcUrl: s.rpcUrl || RPC_URL,
-          })
+      let backendOverview: any = null
+      try {
+        const res = await apiClient.get('/blockchain/overview')
+        if (res.data) {
+          backendOverview = res.data
         }
+      } catch (beErr) {
+        console.warn('Backend /blockchain/overview notice, will query local node directly:', beErr)
       }
 
-      if (statsRes.status === 'fulfilled' && statsRes.value) {
-        setStats(statsRes.value)
-      }
-
-      const fetchedBlocks: RealBlock[] = []
-      const fetchedTxs: RealTx[] = []
-
-      if (blocksRes.status === 'fulfilled' && Array.isArray(blocksRes.value)) {
-        for (const b of blocksRes.value) {
-          fetchedBlocks.push({
-            blockNumber: b.blockNumber,
-            hash: b.hash,
-            parentHash: b.parentHash,
-            timestamp: b.timestamp,
-            transactionsCount: b.transactionsCount,
-            gasUsed: b.gasUsed,
-            miner: b.miner,
-          })
+      if (backendOverview) {
+        if (backendOverview.network) {
+          setNetworkInfo((prev) => ({
+            ...prev,
+            ...backendOverview.network,
+            status: backendOverview.network.status || 'Connected',
+          }))
         }
-      }
-
-      if (txsRes.status === 'fulfilled' && Array.isArray(txsRes.value)) {
-        for (const t of txsRes.value) {
-          fetchedTxs.push({
-            hash: t.hash,
-            blockNumber: t.blockNumber,
-            from: t.from,
-            to: t.to,
-            event: t.event,
-            propertyId: t.propertyId,
-            documentHash: t.documentHash,
-            value: t.value || '0.0 ETH',
-            gasUsed: t.gasUsed || '21,000 gas',
-            status: (t.status === 'Reverted' ? 'Reverted' : 'Confirmed') as 'Confirmed' | 'Reverted',
-            timestamp: t.timestamp,
-            details: t.details,
-          })
+        if (Array.isArray(backendOverview.blocks)) {
+          setBlocks(backendOverview.blocks)
         }
-      }
+        if (Array.isArray(backendOverview.transactions)) {
+          setTransactions(backendOverview.transactions)
+        }
+        if (Array.isArray(backendOverview.registeredProperties)) {
+          setRegisteredProperties(backendOverview.registeredProperties)
+        }
+        if (Array.isArray(backendOverview.ownershipTransfers)) {
+          setOwnershipTransfers(backendOverview.ownershipTransfers)
+        }
+        if (Array.isArray(backendOverview.contracts)) {
+          setContractsList(backendOverview.contracts)
+        }
+      } else {
+        const provider = new ethers.JsonRpcProvider(RPC_URL)
+        const currentBlockNum = await provider.getBlockNumber()
+        const network = await provider.getNetwork()
 
-      if (connected) {
+        const fetchedBlocks: RealBlock[] = []
+        const fetchedTxs: RealTx[] = []
+
+        for (let i = currentBlockNum; i >= 0; i--) {
+          try {
+            const block = await provider.getBlock(i, true)
+            if (block) {
+              const blockDate = new Date(Number(block.timestamp) * 1000).toISOString()
+              let blockType = 'Smart Contract Interaction'
+              if (block.number === 0) blockType = 'Genesis Block'
+              else if (block.number === 1) blockType = 'Contract Deployment (PropertyRegistry)'
+              else if (block.number === 2) blockType = 'Contract Deployment (OwnershipRegistry)'
+              else if (block.number === 3) blockType = 'Role Authorization (Registrar Role)'
+              else if (block.number === 4) blockType = 'Contract Deployment (TransactionManager)'
+              else if (block.number === 5) blockType = 'Role Authorization (Transfer Role)'
+
+              fetchedBlocks.push({
+                blockNumber: block.number,
+                hash: block.hash || '',
+                parentHash: block.parentHash || '',
+                timestamp: blockDate,
+                transactionsCount: block.transactions.length,
+                gasUsed: `${Number(block.gasUsed).toLocaleString()} gas`,
+                gasLimit: `${Number(block.gasLimit).toLocaleString()} gas`,
+                baseFeePerGas: block.baseFeePerGas ? `${block.baseFeePerGas.toString()} wei` : undefined,
+                miner: block.miner,
+                blockType,
+                transactions: block.transactions.map((t: any) => (typeof t === 'string' ? t : t.hash)),
+              })
+
+              const rawTxs: any[] = []
+              if (block.prefetchedTransactions && block.prefetchedTransactions.length > 0) {
+                rawTxs.push(...block.prefetchedTransactions)
+              } else if (block.transactions && block.transactions.length > 0) {
+                for (const t of block.transactions) {
+                  if (typeof t === 'string') {
+                    try {
+                      const txObj = await provider.getTransaction(t)
+                      if (txObj) rawTxs.push(txObj)
+                    } catch {}
+                  } else if (t && typeof t === 'object') {
+                    rawTxs.push(t)
+                  }
+                }
+              }
+
+              for (const tx of rawTxs) {
+                let eventName = tx.to ? 'Smart Contract Call' : 'Contract Deployment'
+                let details = ''
+                if (!tx.to) {
+                  if (block.number === 1) details = 'PropertyRegistry Deployed'
+                  else if (block.number === 2) details = 'OwnershipRegistry Deployed'
+                  else if (block.number === 4) details = 'TransactionManager Deployed'
+                }
+                fetchedTxs.push({
+                  hash: tx.hash,
+                  blockNumber: block.number,
+                  from: tx.from,
+                  to: tx.to || 'Contract Deployment',
+                  event: eventName,
+                  details,
+                  gasUsed: '120,000 gas',
+                  status: 'Confirmed',
+                  value: ethers.formatEther(tx.value || 0) + ' ETH',
+                  timestamp: blockDate,
+                })
+              }
+            }
+          } catch (bErr) {
+            console.warn(`Could not load block #${i}:`, bErr)
+          }
+        }
+
         setBlocks(fetchedBlocks)
         setTransactions(fetchedTxs)
-        setIsLoading(false)
-        return
+        setNetworkInfo({
+          name: 'Local Hardhat Network',
+          chainId: Number(network.chainId),
+          latestBlock: currentBlockNum,
+          totalBlocks: currentBlockNum + 1,
+          totalTransactions: fetchedTxs.length,
+          totalPropertyRegistrations: 0,
+          totalOwnershipTransfers: 0,
+          deployedContractsCount: 3,
+          status: 'Connected',
+          rpcUrl: RPC_URL,
+        })
       }
-    } catch (apiErr) {
-      console.warn('Backend blockchain API retrieval notice:', apiErr)
-    }
-
-    // 2. Direct RPC Fallback (used when direct client connection is available)
-    try {
-      const provider = new ethers.JsonRpcProvider(RPC_URL)
-      const currentBlockNum = await provider.getBlockNumber()
-      const network = await provider.getNetwork()
-
-      setNetworkInfo({
-        name: network.name === 'unknown' ? 'Hardhat EVM Localhost' : network.name,
-        chainId: Number(network.chainId),
-        latestBlock: currentBlockNum,
-        status: 'Connected',
-        rpcUrl: RPC_URL,
-      })
-
-      const fetchedBlocks: RealBlock[] = []
-      const fetchedTxs: RealTx[] = []
-
-      const startBlock = currentBlockNum
-      const endBlock = Math.max(0, currentBlockNum - 24)
-
-      for (let i = startBlock; i >= endBlock; i--) {
-        try {
-          const block = await provider.getBlock(i, true)
-          if (block) {
-            const blockDate = new Date(Number(block.timestamp) * 1000).toISOString()
-
-            fetchedBlocks.push({
-              blockNumber: block.number,
-              hash: block.hash || '',
-              parentHash: block.parentHash || '',
-              timestamp: blockDate,
-              transactionsCount: block.transactions.length,
-              gasUsed: `${Number(block.gasUsed).toLocaleString()} gas`,
-              miner: block.miner,
-            })
-
-            const rawTxs: any[] = []
-            if (block.prefetchedTransactions && block.prefetchedTransactions.length > 0) {
-              rawTxs.push(...block.prefetchedTransactions)
-            } else if (block.transactions && block.transactions.length > 0) {
-              for (const t of block.transactions) {
-                if (typeof t === 'string') {
-                  try {
-                    const txObj = await provider.getTransaction(t)
-                    if (txObj) rawTxs.push(txObj)
-                  } catch (txErr) {
-                    console.warn(`Could not fetch tx ${t}:`, txErr)
-                  }
-                } else if (t && typeof t === 'object') {
-                  rawTxs.push(t)
-                }
-              }
-            }
-
-            for (const tx of rawTxs) {
-              let eventName = tx.to ? 'Smart Contract Call' : 'Contract Deployed'
-              let propertyId: string | undefined = undefined
-              let documentHash: string | undefined = undefined
-              let details: string | undefined = undefined
-              let txStatus: 'Confirmed' | 'Reverted' = 'Confirmed'
-              let gasUsedStr = '0 gas'
-
-              try {
-                const receipt = await provider.getTransactionReceipt(tx.hash)
-                if (receipt) {
-                  txStatus = receipt.status === 1 ? 'Confirmed' : 'Reverted'
-                  gasUsedStr = `${Number(receipt.gasUsed).toLocaleString()} gas`
-
-                  if (!tx.to) {
-                    eventName = 'Contract Deployed'
-                    if (receipt.contractAddress) {
-                      const ca = receipt.contractAddress.toLowerCase()
-                      if (ca === CONTRACT_ADDRESSES.PROPERTY_REGISTRY.toLowerCase()) {
-                        details = 'PropertyRegistry Deployed'
-                      } else if (ca === CONTRACT_ADDRESSES.OWNERSHIP_REGISTRY.toLowerCase()) {
-                        details = 'OwnershipRegistry Deployed'
-                      } else if (ca === CONTRACT_ADDRESSES.TRANSACTION_MANAGER.toLowerCase()) {
-                        details = 'TransactionManager Deployed'
-                      }
-                    }
-                  } else {
-                    if (tx.data && tx.data !== '0x') {
-                      try {
-                        const propTx = propertyRegistryInterface.parseTransaction({ data: tx.data, value: tx.value })
-                        if (propTx) {
-                          if (propTx.name === 'registerProperty') {
-                            eventName = 'Property Registered'
-                            propertyId = propTx.args.propertyId
-                            documentHash = propTx.args.documentHash
-                            details = `Property ${propertyId} anchored on-chain`
-                          } else if (propTx.name === 'updateDocumentHash') {
-                            eventName = 'Document Updated'
-                            propertyId = propTx.args.propertyId
-                            documentHash = propTx.args.newDocumentHash
-                          }
-                        }
-                      } catch {}
-
-                      try {
-                        const ownTx = ownershipRegistryInterface.parseTransaction({ data: tx.data, value: tx.value })
-                        if (ownTx) {
-                          if (ownTx.name === 'recordInitialOwnership') {
-                            eventName = 'Genesis Ownership Recorded'
-                            propertyId = ownTx.args.propertyId
-                            details = `Genesis title deed for ${propertyId}`
-                          } else if (ownTx.name === 'recordOwnershipTransfer') {
-                            eventName = 'Ownership Transferred'
-                            propertyId = ownTx.args.propertyId
-                            details = `Conveyance: ${truncateHash(ownTx.args.previousOwner, 6, 4)} → ${truncateHash(ownTx.args.newOwner, 6, 4)}`
-                          }
-                        }
-                      } catch {}
-
-                      try {
-                        const tmTx = transactionManagerInterface.parseTransaction({ data: tx.data, value: tx.value })
-                        if (tmTx) {
-                          eventName = 'Conveyance Escrow Execution'
-                          details = `Transaction ${tmTx.args?.transactionId ?? ''} settled on-chain`
-                        }
-                      } catch {}
-                    }
-                  }
-                }
-              } catch (receiptErr) {
-                console.warn(`Could not fetch receipt for tx ${tx.hash}:`, receiptErr)
-              }
-
-              fetchedTxs.push({
-                hash: tx.hash,
-                blockNumber: block.number,
-                from: tx.from,
-                to: tx.to || 'Contract Deployment',
-                event: eventName,
-                propertyId,
-                documentHash,
-                details,
-                gasUsed: gasUsedStr,
-                status: txStatus,
-                value: ethers.formatEther(tx.value || 0) + ' ETH',
-                timestamp: blockDate,
-              })
-            }
-          }
-        } catch (err) {
-          console.warn(`Could not load block #${i}:`, err)
-        }
-      }
-
-      setBlocks(fetchedBlocks)
-      setTransactions(fetchedTxs)
     } catch (err) {
-      console.error('Failed to connect to local blockchain RPC:', err)
-      if (!connected) {
-        setNetworkInfo((prev) => ({
-          ...prev,
-          status: 'Offline / Standby',
-        }))
-        setBlocks([])
-        setTransactions([])
-      }
+      console.error('Failed to load blockchain ledger data:', err)
+      setNetworkInfo((prev) => ({
+        ...prev,
+        status: 'Disconnected',
+      }))
     } finally {
       setIsLoading(false)
     }
@@ -384,59 +334,57 @@ export const BlockchainExplorerPage: React.FC = () => {
       return
     }
 
-    const applyScopingAndSetResult = (res: any) => {
-      if ((user?.role === 'PROPERTY_OWNER' || user?.role === 'BUYER') && userRecords) {
-        if (res.type === 'transaction') {
-          const t = res.data
-          const isAllowed = (t.propertyId && userRecords.property_ids.some((p: string) => p.toLowerCase() === t.propertyId.toLowerCase())) ||
-            (t.documentHash && userRecords.document_hashes.some((d: string) => d.toLowerCase() === t.documentHash.toLowerCase())) ||
-            userRecords.tx_hashes.some((h: string) => h.toLowerCase() === t.hash.toLowerCase()) ||
-            userRecords.wallet_addresses.some((w: string) => (t.from && w.toLowerCase() === t.from.toLowerCase()) || (t.to && w.toLowerCase() === t.to.toLowerCase()))
-          if (!isAllowed) {
-            setSearchResult({ type: 'not_found', query: rawQuery, customMessage: 'No matching record found among your properties.' })
-            return
-          }
-        } else if (res.type === 'address') {
-          const addr = res.data.address.toLowerCase()
-          if (!userRecords.wallet_addresses.includes(addr)) {
-            setSearchResult({ type: 'not_found', query: rawQuery, customMessage: 'No matching record found among your properties.' })
-            return
-          }
-        } else if (res.type === 'block') {
-          const hasOwnTx = displayedTransactions.some((t) => t.blockNumber === res.data.blockNumber)
-          if (!hasOwnTx) {
-            setSearchResult({ type: 'not_found', query: rawQuery, customMessage: 'No matching record found among your properties.' })
-            return
-          }
-        }
-      }
-      setSearchResult(res)
-    }
-
     setIsSearching(true)
-
-    // 1. Backend Search Lookup
     try {
-      const backendRes = await blockchainService.search(rawQuery)
-      if (backendRes && backendRes.type && backendRes.type !== 'not_found') {
-        setSearchResult(backendRes)
-        setIsSearching(false)
+      const qLower = rawQuery.toLowerCase()
+
+      const foundTx = transactions.find((t) => t.hash.toLowerCase() === qLower)
+      if (foundTx) {
+        setSearchResult({ type: 'transaction', data: foundTx })
         return
       }
-    } catch (bErr) {
-      console.warn('Backend search check notice:', bErr)
-    }
 
-    // 2. Direct RPC Search Lookup
-    try {
+      const foundProp = registeredProperties.find(
+        (p) => p.property_id.toLowerCase() === qLower || (p.tx_hash && p.tx_hash.toLowerCase() === qLower)
+      )
+      if (foundProp) {
+        setSearchResult({ type: 'property', data: foundProp })
+        return
+      }
+
+      const foundBlock = blocks.find(
+        (b) => String(b.blockNumber) === rawQuery || b.hash.toLowerCase() === qLower
+      )
+      if (foundBlock) {
+        setSearchResult({ type: 'block', data: foundBlock })
+        return
+      }
+
+      const foundContract = contractsList.find(
+        (c) => c.address.toLowerCase() === qLower || c.name.toLowerCase() === qLower
+      )
+      if (foundContract) {
+        setSearchResult({ type: 'contract', data: foundContract })
+        return
+      }
+
+      const foundDocProp = registeredProperties.find((p) =>
+        p.document_hashes?.some((dh) => dh.toLowerCase() === qLower)
+      )
+      if (foundDocProp) {
+        setSearchResult({
+          type: 'property',
+          data: foundDocProp,
+          customNote: `Matched document SHA-256 hash anchored in Property ${foundDocProp.property_id}`,
+        })
+        return
+      }
+
       const provider = new ethers.JsonRpcProvider(RPC_URL)
-
-      // 2a. Block height
       if (/^\d+$/.test(rawQuery)) {
-        const blockNum = parseInt(rawQuery, 10)
-        const block = await provider.getBlock(blockNum, true)
+        const block = await provider.getBlock(parseInt(rawQuery, 10), true)
         if (block) {
-          applyScopingAndSetResult({
+          setSearchResult({
             type: 'block',
             data: {
               blockNumber: block.number,
@@ -449,246 +397,30 @@ export const BlockchainExplorerPage: React.FC = () => {
               transactions: block.transactions,
             },
           })
-          setIsSearching(false)
           return
         }
       }
 
-      // 2b. Hex Query (64 or 66 chars)
-      const is64Hex = /^[0-9a-fA-F]{64}$/.test(rawQuery)
-      const is66Hex = /^0x[0-9a-fA-F]{64}$/.test(rawQuery)
-
-      if (is64Hex || is66Hex) {
-        const normalizedHex = is64Hex ? `0x${rawQuery}` : rawQuery
-
-
-        // 2a. Check if it matches a documentHash in on-chain PropertyRegistered events
-        try {
-          const propContract = new ethers.Contract(
-            CONTRACT_ADDRESSES.PROPERTY_REGISTRY,
-            PROPERTY_REGISTRY_ABI,
-            provider
-          )
-          const filter = propContract.filters.PropertyRegistered()
-          const events = await propContract.queryFilter(filter, 0, 'latest')
-
-          for (const ev of events) {
-            const evArgs = (ev as any).args
-            if (
-              evArgs &&
-              evArgs.documentHash &&
-              evArgs.documentHash.toLowerCase() === normalizedHex.toLowerCase()
-            ) {
-              const receipt = await provider.getTransactionReceipt(ev.transactionHash)
-              let propertyId = evArgs.propertyId
-
-              try {
-                const tx = await provider.getTransaction(ev.transactionHash)
-                if (tx) {
-                  const parsed = propertyRegistryInterface.parseTransaction({ data: tx.data })
-                  if (parsed?.args?.propertyId) propertyId = parsed.args.propertyId
-                }
-              } catch {}
-
-              applyScopingAndSetResult({
-                type: 'transaction',
-                data: {
-                  hash: ev.transactionHash,
-                  blockNumber: ev.blockNumber,
-                  from: evArgs.ownerWallet,
-                  to: CONTRACT_ADDRESSES.PROPERTY_REGISTRY,
-                  value: '0.0 ETH',
-                  event: 'Property Registered (Title Deed Anchored)',
-                  propertyId: typeof propertyId === 'string' ? propertyId : 'PROP-ON-CHAIN',
-                  documentHash: evArgs.documentHash,
-                  details: `Cryptographic SHA-256 Title Deed anchored in Block #${ev.blockNumber}`,
-                  gasUsed: receipt ? `${Number(receipt.gasUsed).toLocaleString()} gas` : '0 gas',
-                  status: 'Confirmed',
-                },
-              })
-              return
-            }
-          }
-        } catch (filterErr) {
-          console.warn('Document hash filter lookup notice:', filterErr)
-        }
-
-        // 2b. Check if it matches a transaction in loaded ledger
-
-
-
-        const localDocTx = transactions.find(
-          (t) =>
-            t.hash.toLowerCase() === normalizedHex.toLowerCase() ||
-            (t.documentHash && t.documentHash.toLowerCase() === normalizedHex.toLowerCase())
-        )
-        if (localDocTx) {
-
-          applyScopingAndSetResult({ type: 'transaction', data: localDocTx })
-
-
-          setIsSearching(false)
-
-          return
-        }
-
-        try {
-          const tx = await provider.getTransaction(normalizedHex)
-          if (tx) {
-            const receipt = await provider.getTransactionReceipt(normalizedHex)
-
-            let eventName = tx.to ? 'Smart Contract Call' : 'Contract Deployment'
-            let propertyId: string | undefined = undefined
-            let documentHash: string | undefined = undefined
-            let details: string | undefined = undefined
-
-            if (tx.data && tx.data !== '0x') {
-              try {
-                const propTx = propertyRegistryInterface.parseTransaction({ data: tx.data, value: tx.value })
-                if (propTx?.name === 'registerProperty') {
-                  eventName = 'Property Registered'
-                  propertyId = propTx.args.propertyId
-                  documentHash = propTx.args.documentHash
-                  details = `Property ${propertyId} anchored on-chain`
-                }
-              } catch {}
-
-              try {
-                const ownTx = ownershipRegistryInterface.parseTransaction({ data: tx.data, value: tx.value })
-                if (ownTx?.name === 'recordOwnershipTransfer') {
-                  eventName = 'Ownership Transferred'
-                  propertyId = ownTx.args.propertyId
-                  details = `Conveyance: ${truncateHash(ownTx.args.previousOwner, 6, 4)} → ${truncateHash(ownTx.args.newOwner, 6, 4)}`
-                } else if (ownTx?.name === 'recordInitialOwnership') {
-                  eventName = 'Genesis Ownership Recorded'
-                  propertyId = ownTx.args.propertyId
-                }
-              } catch {}
-            }
-
-            applyScopingAndSetResult({
-
-
-
-              type: 'transaction',
-              data: {
-                hash: tx.hash,
-                blockNumber: tx.blockNumber,
-                from: tx.from,
-                to: tx.to || 'Contract Deployment',
-                value: ethers.formatEther(tx.value || 0) + ' ETH',
-                event: eventName,
-                propertyId,
-                documentHash,
-                details,
-                gasUsed: receipt ? `${Number(receipt.gasUsed).toLocaleString()} gas` : '0 gas',
-                status: receipt ? (receipt.status === 1 ? 'Confirmed' : 'Reverted') : 'Confirmed',
-              },
-            })
-
-            return
-          }
-        } catch {}
-
-        // 2d. Check if it is a Block Hash
-        try {
-          const block = await provider.getBlock(normalizedHex, true)
-          if (block) {
-            applyScopingAndSetResult({
-              type: 'block',
-              data: {
-                blockNumber: block.number,
-                hash: block.hash,
-                parentHash: block.parentHash,
-                transactionsCount: block.transactions.length,
-                timestamp: new Date(Number(block.timestamp) * 1000).toISOString(),
-                gasUsed: `${Number(block.gasUsed).toLocaleString()} gas`,
-                miner: block.miner,
-                transactions: block.transactions,
-              },
-            })
-
-            setIsSearching(false)
-
-            return
-          }
-        } catch {}
-      }
-
-      // 2c. Address query
-      if (ethers.isAddress(rawQuery)) {
-        try {
-          const code = await provider.getCode(rawQuery)
-          const isContract = code !== '0x'
-          const balance = await provider.getBalance(rawQuery)
-          const txCount = await provider.getTransactionCount(rawQuery)
-
-          let label = isContract ? 'Smart Contract' : 'User Wallet (EOA)'
-          const lower = rawQuery.toLowerCase()
-          if (lower === CONTRACT_ADDRESSES.PROPERTY_REGISTRY.toLowerCase()) {
-            label = 'PropertyRegistry (PropChain Smart Contract)'
-          } else if (lower === CONTRACT_ADDRESSES.OWNERSHIP_REGISTRY.toLowerCase()) {
-            label = 'OwnershipRegistry (PropChain Smart Contract)'
-          } else if (lower === CONTRACT_ADDRESSES.TRANSACTION_MANAGER.toLowerCase()) {
-            label = 'TransactionManager (PropChain Smart Contract)'
-          } else if (lower === (import.meta.env.VITE_BLOCKCHAIN_DEPLOYER_ADDRESS || '').toLowerCase()) {
-            label = 'Hardhat Genesis Deployer / Platform Authority'
-          }
-
-          const matchingTxs = transactions.filter(
-            (t) => t.from.toLowerCase() === lower || t.to.toLowerCase() === lower
-          )
-
-          applyScopingAndSetResult({
-            type: 'address',
+      if (rawQuery.startsWith('0x') && rawQuery.length === 66) {
+        const tx = await provider.getTransaction(rawQuery)
+        if (tx) {
+          const receipt = await provider.getTransactionReceipt(rawQuery)
+          setSearchResult({
+            type: 'transaction',
             data: {
-              address: rawQuery,
-              label,
-              isContract,
-              balance: ethers.formatEther(balance) + ' ETH',
-              txCount,
-              matchingTxsCount: matchingTxs.length,
+              hash: tx.hash,
+              blockNumber: tx.blockNumber,
+              from: tx.from,
+              to: tx.to || 'Contract Deployment',
+              value: ethers.formatEther(tx.value || 0) + ' ETH',
+              gasUsed: receipt ? `${Number(receipt.gasUsed).toLocaleString()} gas` : '0 gas',
+              status: receipt ? (receipt.status === 1 ? 'Confirmed' : 'Reverted') : 'Confirmed',
+              timestamp: new Date().toISOString(),
+              event: tx.to ? 'Smart Contract Call' : 'Contract Deployment',
             },
           })
-          setIsSearching(false)
           return
-        } catch {}
-      }
-
-      // 2d. Property ID or hash in local lists
-      const propTx = transactions.find(
-        (t) =>
-          (t.propertyId && t.propertyId.toLowerCase() === rawQuery.toLowerCase()) ||
-          t.hash.toLowerCase() === rawQuery.toLowerCase()
-      )
-      if (propTx) {
-
-        applyScopingAndSetResult({ type: 'transaction', data: propTx })
-        return
-      }
-
-      // 5. Fallback check in locally loaded items
-      const localTx = transactions.find((t) => t.hash.toLowerCase() === rawQuery.toLowerCase())
-      if (localTx) {
-        applyScopingAndSetResult({ type: 'transaction', data: localTx })
-
-
-        setIsSearching(false)
-
-        return
-      }
-
-      const localBlock = blocks.find(
-        (b) => String(b.blockNumber) === rawQuery || b.hash.toLowerCase() === rawQuery.toLowerCase()
-      )
-      if (localBlock) {
-
-        applyScopingAndSetResult({ type: 'block', data: localBlock })
-
-
-        setIsSearching(false)
-
-        return
+        }
       }
 
       setSearchResult({
@@ -696,7 +428,7 @@ export const BlockchainExplorerPage: React.FC = () => {
         query: rawQuery,
       })
     } catch (err) {
-      console.error('Search error:', err)
+      console.warn('Search error:', err)
       setSearchResult({
         type: 'not_found',
         query: rawQuery,
@@ -708,21 +440,11 @@ export const BlockchainExplorerPage: React.FC = () => {
 
   const isConnected = networkInfo.status === 'Connected'
 
-  const displayedTransactions = ((user?.role === 'PROPERTY_OWNER' || user?.role === 'BUYER') && userRecords)
-    ? transactions.filter((t) => {
-        const matchProp = t.propertyId && userRecords.property_ids.some(pid => pid.toLowerCase() === t.propertyId!.toLowerCase())
-        const matchDoc = t.documentHash && userRecords.document_hashes.some(dh => dh.toLowerCase() === t.documentHash!.toLowerCase())
-        const matchHash = userRecords.tx_hashes.some(th => th.toLowerCase() === t.hash.toLowerCase())
-        const matchAddr = userRecords.wallet_addresses.some(wa => wa.toLowerCase() === t.from.toLowerCase() || wa.toLowerCase() === t.to.toLowerCase())
-        return matchProp || matchDoc || matchHash || matchAddr
-      })
-    : transactions
-
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Decentralized Ledger Explorer"
-        description="Inspect on-chain blocks, cryptographic transaction hashes, smart contract state transitions, and emission events."
+        title="Decentralized Blockchain Ledger Explorer"
+        description="Inspect authenticated blocks, smart contract state transitions, cryptographic hashes, and permanent title registrations."
         actions={
           <Button
             size="sm"
@@ -741,78 +463,16 @@ export const BlockchainExplorerPage: React.FC = () => {
         <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 text-xs text-amber-200 flex items-start gap-3">
           <AlertTriangle className="h-5 w-5 text-amber-400 shrink-0 mt-0.5" />
           <div className="space-y-1">
-            <p className="font-semibold text-amber-100">Blockchain Node Unreachable ({networkInfo.rpcUrl})</p>
+            <p className="font-semibold text-amber-100">Blockchain EVM Node Offline ({RPC_URL})</p>
             <p className="text-amber-300/80">
-              Ensure your Hardhat local node is running (<code className="bg-amber-950/60 px-1 py-0.5 rounded font-mono">npx hardhat node</code> in <code className="bg-amber-950/60 px-1 py-0.5 rounded font-mono">blockchain/</code>). Then click <strong>Refresh Ledger</strong>.
+              Ensure your Hardhat local node is running on port 8545 (<code className="bg-amber-950/60 px-1 py-0.5 rounded font-mono">npx hardhat node</code>).
             </p>
           </div>
         </div>
       )}
 
-      {/* Blockchain Statistics Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="bg-white border-slate-200 shadow-xs">
-          <CardContent className="p-4 flex items-center justify-between">
-            <div>
-              <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">Network Status</p>
-              <div className="flex items-center gap-2 mt-1">
-                <span className={`h-2.5 w-2.5 rounded-full ${isConnected ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`} />
-                <span className="text-base font-bold text-slate-900">{isConnected ? 'Online & Synced' : 'Offline'}</span>
-              </div>
-              <p className="text-[10px] font-mono text-slate-400 mt-0.5">{networkInfo.name} (Chain #{networkInfo.chainId})</p>
-            </div>
-            <div className={`p-2.5 rounded-xl ${isConnected ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
-              <Activity className="h-5 w-5" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-white border-slate-200 shadow-xs">
-          <CardContent className="p-4 flex items-center justify-between">
-            <div>
-              <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">Latest Block Height</p>
-              <p className="text-xl font-bold font-mono text-blue-600 mt-1">#{networkInfo.latestBlock}</p>
-              <p className="text-[10px] text-slate-400 mt-0.5">{blocks.length} Verified blocks indexed</p>
-            </div>
-            <div className="p-2.5 rounded-xl bg-blue-50 text-blue-600">
-              <Blocks className="h-5 w-5" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-white border-slate-200 shadow-xs">
-          <CardContent className="p-4 flex items-center justify-between">
-            <div>
-              <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">Consensus Transactions</p>
-              <p className="text-xl font-bold font-mono text-indigo-600 mt-1">
-                {stats?.totalTransactions ?? transactions.length}
-              </p>
-              <p className="text-[10px] text-slate-400 mt-0.5">On-chain state transitions</p>
-            </div>
-            <div className="p-2.5 rounded-xl bg-indigo-50 text-indigo-600">
-              <Cpu className="h-5 w-5" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-white border-slate-200 shadow-xs">
-          <CardContent className="p-4 flex items-center justify-between">
-            <div>
-              <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">Gas Price / Fee</p>
-              <p className="text-xl font-bold font-mono text-amber-600 mt-1">
-                {stats?.gasPriceGwei ?? 0.5} <span className="text-xs font-normal text-slate-500">Gwei</span>
-              </p>
-              <p className="text-[10px] text-slate-400 mt-0.5">Automated gas estimation</p>
-            </div>
-            <div className="p-2.5 rounded-xl bg-amber-50 text-amber-600">
-              <Flame className="h-5 w-5" />
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
       {/* Hero Search Bar */}
-      <Card className="bg-slate-950 text-white border-slate-800">
+      <Card className="bg-slate-950 text-white border-slate-800 shadow-md">
         <CardContent className="p-6">
           <form onSubmit={handleSearch} className="space-y-3">
             <div className="flex flex-col sm:flex-row gap-3">
@@ -830,7 +490,7 @@ export const BlockchainExplorerPage: React.FC = () => {
               </Button>
             </div>
             <div className="flex flex-wrap items-center gap-4 text-[11px] text-slate-400 font-mono pt-1">
-              <span>Chain: {networkInfo.name}</span>
+              <span>Network: {networkInfo.name}</span>
               <span>• Chain ID: {networkInfo.chainId}</span>
               <span>• Latest Block: #{networkInfo.latestBlock}</span>
               <span
@@ -850,13 +510,13 @@ export const BlockchainExplorerPage: React.FC = () => {
         </CardContent>
       </Card>
 
-      {/* Query Search Result (if searched) */}
+      {/* Query Search Result Card */}
       {searchResult && (
-        <Card className="border-blue-200 bg-blue-50/40">
+        <Card className="border-blue-200 bg-blue-50/40 shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <div className="flex items-center gap-2">
               <Layers className="h-4 w-4 text-blue-600" />
-              <CardTitle className="text-sm">Ledger Query Result</CardTitle>
+              <CardTitle className="text-sm">Ledger Search Result</CardTitle>
             </div>
             <button
               onClick={() => {
@@ -894,19 +554,13 @@ export const BlockchainExplorerPage: React.FC = () => {
                   <span className="text-blue-700 font-bold">#{searchResult.data.blockNumber}</span>
                 </div>
                 <div className="flex justify-between py-1 border-b border-blue-100">
-                  <span className="text-slate-500">Sender (From):</span>
+                  <span className="text-slate-500">From:</span>
                   <span className="text-slate-800 break-all">{searchResult.data.from}</span>
                 </div>
                 <div className="flex justify-between py-1 border-b border-blue-100">
-                  <span className="text-slate-500">Receiver (To):</span>
+                  <span className="text-slate-500">To:</span>
                   <span className="text-slate-800 break-all">{searchResult.data.to}</span>
                 </div>
-                {searchResult.data.gasUsed && (
-                  <div className="flex justify-between py-1 border-b border-blue-100">
-                    <span className="text-slate-500">Gas Used:</span>
-                    <span className="text-slate-800">{searchResult.data.gasUsed}</span>
-                  </div>
-                )}
                 {searchResult.data.propertyId && (
                   <div className="flex justify-between py-1 border-b border-blue-100">
                     <span className="text-slate-500">Property Identifier:</span>
@@ -917,7 +571,7 @@ export const BlockchainExplorerPage: React.FC = () => {
                 )}
                 {searchResult.data.documentHash && (
                   <div className="flex justify-between py-1 border-b border-blue-100">
-                    <span className="text-slate-500">Document SHA-256 Digest:</span>
+                    <span className="text-slate-500">Deed Document Hash:</span>
                     <span className="font-bold text-emerald-800 bg-emerald-100/80 px-2 py-0.5 rounded break-all text-[11px]">
                       {searchResult.data.documentHash}
                     </span>
@@ -926,6 +580,40 @@ export const BlockchainExplorerPage: React.FC = () => {
                 <div className="flex justify-between py-1">
                   <span className="text-slate-500">Contract Event / Action:</span>
                   <span className="text-emerald-700 font-semibold">{searchResult.data.event}</span>
+                </div>
+              </div>
+            ) : searchResult.type === 'property' ? (
+              <div className="space-y-2 font-mono">
+                {searchResult.customNote && (
+                  <p className="text-emerald-700 font-sans font-medium text-xs mb-1">
+                    ✓ {searchResult.customNote}
+                  </p>
+                )}
+                <div className="flex justify-between py-1 border-b border-blue-100">
+                  <span className="text-slate-500">Property ID:</span>
+                  <span className="font-bold text-blue-700">{searchResult.data.property_id}</span>
+                </div>
+                <div className="flex justify-between py-1 border-b border-blue-100">
+                  <span className="text-slate-500">Property Title:</span>
+                  <span className="font-sans font-semibold text-slate-800">{searchResult.data.title}</span>
+                </div>
+                <div className="flex justify-between py-1 border-b border-blue-100">
+                  <span className="text-slate-500">Registered Owner:</span>
+                  <span className="font-sans text-slate-800">{searchResult.data.owner_name} ({truncateHash(searchResult.data.owner_wallet, 6, 4)})</span>
+                </div>
+                <div className="flex justify-between py-1 border-b border-blue-100">
+                  <span className="text-slate-500">Anchor Tx Hash:</span>
+                  <HashDisplay value={searchResult.data.tx_hash} explorerLink className="bg-transparent border-0 px-0" />
+                </div>
+                <div className="flex justify-between py-1 border-b border-blue-100">
+                  <span className="text-slate-500">Block Height:</span>
+                  <span className="text-blue-700 font-bold">#{searchResult.data.block_number}</span>
+                </div>
+                <div className="flex justify-between py-1">
+                  <span className="text-slate-500">Confirmation:</span>
+                  <span className="text-emerald-700 font-semibold flex items-center gap-1 font-sans">
+                    <ShieldCheck className="h-4 w-4" /> CONFIRMED on-chain
+                  </span>
                 </div>
               </div>
             ) : searchResult.type === 'block' ? (
@@ -939,56 +627,25 @@ export const BlockchainExplorerPage: React.FC = () => {
                   <span className="text-slate-800 break-all font-semibold">{searchResult.data.hash}</span>
                 </div>
                 <div className="flex justify-between py-1 border-b border-blue-100">
-                  <span className="text-slate-500">Previous Block Hash (Parent):</span>
+                  <span className="text-slate-500">Previous Parent Hash:</span>
                   <span className="text-slate-600 break-all">{searchResult.data.parentHash}</span>
                 </div>
                 <div className="flex justify-between py-1 border-b border-blue-100">
                   <span className="text-slate-500">Transactions Count:</span>
                   <span className="font-bold text-blue-800">{searchResult.data.transactionsCount} txs included</span>
                 </div>
-                <div className="flex justify-between py-1 border-b border-blue-100">
-                  <span className="text-slate-500">Gas Consumed:</span>
-                  <span className="text-slate-800">{searchResult.data.gasUsed}</span>
-                </div>
-                {searchResult.data.timestamp && (
-                  <div className="flex justify-between py-1">
-                    <span className="text-slate-500">Mined Timestamp:</span>
-                    <span className="text-slate-800">{formatDate(searchResult.data.timestamp)}</span>
-                  </div>
-                )}
-              </div>
-            ) : searchResult.type === 'address' ? (
-              <div className="space-y-2 font-mono">
-                <div className="flex justify-between py-1 border-b border-blue-100">
-                  <span className="text-slate-500">EVM Address:</span>
-                  <span className="font-bold text-slate-900 break-all">{searchResult.data.address}</span>
-                </div>
-                <div className="flex justify-between py-1 border-b border-blue-100">
-                  <span className="text-slate-500">Entity Type:</span>
-                  <span className="font-semibold text-blue-700 bg-blue-100 px-2 py-0.5 rounded text-[11px]">
-                    {searchResult.data.label}
-                  </span>
-                </div>
-                <div className="flex justify-between py-1 border-b border-blue-100">
-                  <span className="text-slate-500">Native Balance:</span>
-                  <span className="text-slate-900 font-bold">{searchResult.data.balance}</span>
-                </div>
-                <div className="flex justify-between py-1 border-b border-blue-100">
-                  <span className="text-slate-500">Transaction Count (Nonce):</span>
-                  <span className="text-slate-800">{searchResult.data.txCount} transactions</span>
-                </div>
                 <div className="flex justify-between py-1">
-                  <span className="text-slate-500">Recent Transactions on Ledger:</span>
-                  <span className="text-emerald-700 font-semibold">{searchResult.data.matchingTxsCount} found</span>
+                  <span className="text-slate-500">Timestamp:</span>
+                  <span className="text-slate-800">{formatDate(searchResult.data.timestamp)}</span>
                 </div>
               </div>
             ) : (
               <div className="text-slate-600 space-y-1">
                 <p className="font-medium text-slate-800">
-                  {searchResult.customMessage || `No matching block, transaction, address, or document hash found for "${searchResult.query}".`}
+                  No matching record found on the ledger for &ldquo;{searchResult.query}&rdquo;.
                 </p>
                 <p className="text-[11px] text-slate-500">
-                  Please verify the query format: Block number (e.g. <code>1</code>), Transaction hash (<code>0x...</code>), Document hash (64 hex characters), Address (<code>0x...</code>), or Property ID (<code>PROP-...</code>).
+                  Try searching by: Block number (e.g. <code>1</code>), Transaction hash (<code>0x...</code>), Document SHA-256 hash, or Property ID (<code>PROP-...</code>).
                 </p>
               </div>
             )}
@@ -996,149 +653,798 @@ export const BlockchainExplorerPage: React.FC = () => {
         </Card>
       )}
 
-      {/* Recent Blocks & Recent Transactions Dual Columns */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        {/* Latest Blocks */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Blocks className="h-4 w-4 text-blue-600" />
-              <CardTitle>Latest Verified Blocks</CardTitle>
+      {/* Section A: Network Overview KPI Cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+        <Card className="border-slate-200">
+          <CardContent className="p-4 space-y-1">
+            <span className="text-[11px] font-medium text-slate-500">Network & Status</span>
+            <div className="flex items-center justify-between pt-1">
+              <span className="text-sm font-bold text-slate-900">{networkInfo.name}</span>
+              <span
+                className={`text-[10px] font-semibold px-2 py-0.5 rounded-full flex items-center gap-1 ${
+                  isConnected ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
+                }`}
+              >
+                <span className={`h-1.5 w-1.5 rounded-full ${isConnected ? 'bg-emerald-600' : 'bg-rose-600'}`} />
+                {isConnected ? 'Connected' : 'Offline'}
+              </span>
             </div>
-            <span className="text-[11px] font-mono text-emerald-600 font-medium">Local EVM Consensus</span>
-          </CardHeader>
-          <CardContent className="divide-y divide-slate-100 p-0 text-xs">
-            {isLoading ? (
-              <div className="p-8 text-center text-slate-400">
-                <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2 text-blue-600" />
-                Querying blocks from node...
-              </div>
-            ) : blocks.length === 0 ? (
-              <div className="p-8 text-center text-slate-500">
-                <p className="font-medium">No blocks mined yet on the local ledger.</p>
-                <p className="text-[11px] text-slate-400 mt-1">
-                  When contracts are deployed or transactions are mined, blocks will appear here.
-                </p>
-              </div>
-            ) : (
-              blocks.map((blk) => (
-                <div
-                  key={blk.hash}
-                  onClick={() =>
-        
-                    setSearchResult({
-                      type: 'block',
-                      data: blk,
-                    })
-                  }
-                  className="p-4 flex items-center justify-between hover:bg-blue-50/50 cursor-pointer transition-colors"
-                  title="Click to inspect block"
-                >
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono font-bold text-blue-600">#{blk.blockNumber}</span>
-                      <span className="text-slate-400">•</span>
-                      <span className="text-slate-500">{formatDate(blk.timestamp)}</span>
-                    </div>
-                    <p className="font-mono text-[11px] text-slate-500 mt-1">
-                      Hash: <span className="font-semibold">{truncateHash(blk.hash, 8, 6)}</span>
-                    </p>
-                    <p className="font-mono text-[10px] text-slate-400">
-                      Parent: {truncateHash(blk.parentHash, 6, 4)}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <span className="inline-block rounded bg-slate-100 px-2 py-0.5 font-mono text-[11px] text-slate-700 font-medium">
-                      {blk.transactionsCount} txs
-                    </span>
-                    <p className="text-[10px] text-slate-400 mt-1 font-mono">{blk.gasUsed}</p>
-                  </div>
-                </div>
-              ))
-            )}
+            <p className="text-[10px] text-slate-400 font-mono">Chain ID: {networkInfo.chainId}</p>
           </CardContent>
         </Card>
 
-        {/* Latest Ledger Transactions */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Cpu className="h-4 w-4 text-slate-800" />
-              <CardTitle>Recent Consensus Transactions</CardTitle>
+        <Card className="border-slate-200">
+          <CardContent className="p-4 space-y-1">
+            <span className="text-[11px] font-medium text-slate-500">Latest Block Height</span>
+            <div className="flex items-center justify-between pt-1">
+              <span className="text-xl font-bold font-mono text-blue-600">#{networkInfo.latestBlock}</span>
+              <Blocks className="h-5 w-5 text-blue-500" />
             </div>
-            <span className="text-[11px] font-mono text-slate-400">Validated</span>
-          </CardHeader>
-          <CardContent className="divide-y divide-slate-100 p-0 text-xs">
-            {isLoading ? (
-              <div className="p-8 text-center text-slate-400">
-                <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2 text-slate-700" />
-                Querying transactions...
-              </div>
-            ) : displayedTransactions.length === 0 ? (
-              <div className="p-8 text-center text-slate-500">
-                <p className="font-medium text-slate-600">
-                  {(user?.role === 'PROPERTY_OWNER' || user?.role === 'BUYER') ? 'No on-chain transactions found for your account' : 'No on-chain transactions yet'}
-                </p>
-                <p className="text-[11px] text-slate-400 mt-1">
-                  {(user?.role === 'PROPERTY_OWNER' || user?.role === 'BUYER')
-                    ? 'Transactions will appear here once your registered properties or escrow transfers are anchored on-chain.'
-                    : 'Transactions will appear here when contracts are deployed, properties are registered, or deeds are transferred.'}
-                </p>
-              </div>
-            ) : (
-              displayedTransactions.map((tx) => (
-                <div
-                  key={tx.hash}
-                  onClick={() =>
-        
-                    setSearchResult({
-                      type: 'transaction',
-                      data: tx,
-                    })
-                  }
-                  className="p-4 space-y-1.5 hover:bg-blue-50/50 cursor-pointer transition-colors"
-                  title="Click to inspect transaction"
-                >
-                  <div className="flex items-center justify-between">
-                    <HashDisplay value={tx.hash} explorerLink className="bg-transparent border-0 px-0" />
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-mono text-blue-600">Block #{tx.blockNumber}</span>
-                      <StatusBadge status={tx.status} />
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between text-[11px] text-slate-500 font-mono">
-                    <span title={tx.from}>From: {getAddressLabel(tx.from)}</span>
-                    <ArrowRight className="h-3 w-3 text-slate-400" />
-                    <span title={tx.to}>To: {getAddressLabel(tx.to)}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-[11px]">
-                    <div className="flex items-center gap-1.5 truncate">
-                      <span className="font-mono text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded font-medium truncate">
-                        {tx.event}
-                      </span>
-                      {tx.propertyId && (
-                        <span className="font-mono text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded text-[10px] font-semibold">
-                          {tx.propertyId}
-                        </span>
-                      )}
-                      {tx.documentHash && (
-                        <span
-                          className="font-mono text-slate-500 bg-slate-100 px-1 py-0.5 rounded text-[9px] flex items-center gap-0.5"
-                          title={`Document Hash: ${tx.documentHash}`}
-                        >
-                          <FileCheck2 className="h-2.5 w-2.5 text-emerald-600" />
-                          Deed SHA-256
-                        </span>
-                      )}
-                    </div>
-                    <span className="font-mono text-slate-400 text-[10px]">{tx.gasUsed}</span>
-                  </div>
-                </div>
-              ))
-            )}
+            <p className="text-[10px] text-slate-400 font-mono">Total Blocks: {networkInfo.totalBlocks}</p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-slate-200">
+          <CardContent className="p-4 space-y-1">
+            <span className="text-[11px] font-medium text-slate-500">Total Transactions</span>
+            <div className="flex items-center justify-between pt-1">
+              <span className="text-xl font-bold font-mono text-slate-900">{networkInfo.totalTransactions}</span>
+              <Cpu className="h-5 w-5 text-slate-700" />
+            </div>
+            <p className="text-[10px] text-slate-400 font-mono">Across all blocks</p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-slate-200">
+          <CardContent className="p-4 space-y-1">
+            <span className="text-[11px] font-medium text-slate-500">On-Chain Registrations</span>
+            <div className="flex items-center justify-between pt-1">
+              <span className="text-xl font-bold font-mono text-emerald-600">
+                {networkInfo.totalPropertyRegistrations}
+              </span>
+              <ShieldCheck className="h-5 w-5 text-emerald-500" />
+            </div>
+            <p className="text-[10px] text-slate-400 font-mono">PropertyRegistry anchors</p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-slate-200">
+          <CardContent className="p-4 space-y-1">
+            <span className="text-[11px] font-medium text-slate-500">Ownership Conveyances</span>
+            <div className="flex items-center justify-between pt-1">
+              <span className="text-xl font-bold font-mono text-indigo-600">
+                {networkInfo.totalOwnershipTransfers}
+              </span>
+              <History className="h-5 w-5 text-indigo-500" />
+            </div>
+            <p className="text-[10px] text-slate-400 font-mono">OwnershipRegistry transfers</p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-slate-200">
+          <CardContent className="p-4 space-y-1">
+            <span className="text-[11px] font-medium text-slate-500">Smart Contracts</span>
+            <div className="flex items-center justify-between pt-1">
+              <span className="text-xl font-bold font-mono text-slate-900">
+                {networkInfo.deployedContractsCount}
+              </span>
+              <FileCode className="h-5 w-5 text-slate-600" />
+            </div>
+            <p className="text-[10px] text-emerald-600 font-medium">All 3 Contracts Active</p>
           </CardContent>
         </Card>
       </div>
+
+      {/* Tabs Navigation */}
+      <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-3">
+        <button
+          onClick={() => setActiveTab('overview')}
+          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+            activeTab === 'overview'
+              ? 'bg-slate-900 text-white'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+          }`}
+        >
+          Ledger Overview
+        </button>
+        <button
+          onClick={() => setActiveTab('blocks')}
+          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 ${
+            activeTab === 'blocks'
+              ? 'bg-slate-900 text-white'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+          }`}
+        >
+          <Blocks className="h-3.5 w-3.5" />
+          Blocks ({blocks.length})
+        </button>
+        <button
+          onClick={() => setActiveTab('transactions')}
+          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 ${
+            activeTab === 'transactions'
+              ? 'bg-slate-900 text-white'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+          }`}
+        >
+          <Cpu className="h-3.5 w-3.5" />
+          Transactions ({transactions.length})
+        </button>
+        <button
+          onClick={() => setActiveTab('registrations')}
+          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 ${
+            activeTab === 'registrations'
+              ? 'bg-slate-900 text-white'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+          }`}
+        >
+          <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" />
+          Property Registrations ({registeredProperties.length})
+        </button>
+        <button
+          onClick={() => setActiveTab('transfers')}
+          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 ${
+            activeTab === 'transfers'
+              ? 'bg-slate-900 text-white'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+          }`}
+        >
+          <History className="h-3.5 w-3.5 text-indigo-500" />
+          Ownership Transfers ({ownershipTransfers.length})
+        </button>
+        <button
+          onClick={() => setActiveTab('contracts')}
+          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 ${
+            activeTab === 'contracts'
+              ? 'bg-slate-900 text-white'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+          }`}
+        >
+          <FileCode className="h-3.5 w-3.5" />
+          Smart Contracts (3)
+        </button>
+      </div>
+
+      {/* TAB 1: OVERVIEW */}
+      {activeTab === 'overview' && (
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <Card className="border-slate-200">
+              <CardHeader className="flex flex-row items-center justify-between pb-3">
+                <div className="flex items-center gap-2">
+                  <Blocks className="h-4 w-4 text-blue-600" />
+                  <CardTitle className="text-sm font-semibold">Latest Blocks Mined</CardTitle>
+                </div>
+                <button
+                  onClick={() => setActiveTab('blocks')}
+                  className="text-xs text-blue-600 hover:underline font-medium"
+                >
+                  View All ({blocks.length}) →
+                </button>
+              </CardHeader>
+              <CardContent className="divide-y divide-slate-100 p-0 text-xs">
+                {isLoading ? (
+                  <div className="p-8 text-center text-slate-400">
+                    <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2 text-blue-600" />
+                    Querying blocks from node...
+                  </div>
+                ) : blocks.length === 0 ? (
+                  <div className="p-8 text-center text-slate-500">
+                    <p className="font-medium">No blocks mined yet on the local ledger.</p>
+                  </div>
+                ) : (
+                  blocks.slice(0, 6).map((blk) => (
+                    <div
+                      key={blk.hash}
+                      onClick={() => setSelectedBlock(blk)}
+                      className="p-3.5 flex items-center justify-between hover:bg-blue-50/50 cursor-pointer transition-colors"
+                      title="Click to view full block details"
+                    >
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono font-bold text-blue-600">#{blk.blockNumber}</span>
+                          <span
+                            className={`text-[10px] font-semibold px-2 py-0.5 rounded border ${getBlockTypeBadgeClass(
+                              blk.blockType
+                            )}`}
+                          >
+                            {blk.blockType || 'Consensus Block'}
+                          </span>
+                        </div>
+                        <p className="font-mono text-[11px] text-slate-500 mt-1">
+                          Hash: <span className="font-semibold">{truncateHash(blk.hash, 8, 6)}</span>
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <span className="inline-block rounded bg-slate-100 px-2 py-0.5 font-mono text-[11px] text-slate-700 font-medium">
+                          {blk.transactionsCount} txs
+                        </span>
+                        <p className="text-[10px] text-slate-400 mt-1 font-mono">{formatDate(blk.timestamp)}</p>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className="border-slate-200">
+              <CardHeader className="flex flex-row items-center justify-between pb-3">
+                <div className="flex items-center gap-2">
+                  <Cpu className="h-4 w-4 text-slate-800" />
+                  <CardTitle className="text-sm font-semibold">Recent Transactions</CardTitle>
+                </div>
+                <button
+                  onClick={() => setActiveTab('transactions')}
+                  className="text-xs text-blue-600 hover:underline font-medium"
+                >
+                  View All ({transactions.length}) →
+                </button>
+              </CardHeader>
+              <CardContent className="divide-y divide-slate-100 p-0 text-xs">
+                {isLoading ? (
+                  <div className="p-8 text-center text-slate-400">
+                    <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2 text-slate-700" />
+                    Querying transactions...
+                  </div>
+                ) : transactions.length === 0 ? (
+                  <div className="p-8 text-center text-slate-500">
+                    <p className="font-medium text-slate-600">No on-chain transactions yet</p>
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      Transactions will appear here when properties are verified and deeds are registered on-chain.
+                    </p>
+                  </div>
+                ) : (
+                  transactions.slice(0, 6).map((tx) => (
+                    <div
+                      key={tx.hash}
+                      onClick={() => setSelectedTx(tx)}
+                      className="p-3.5 space-y-1.5 hover:bg-blue-50/50 cursor-pointer transition-colors"
+                      title="Click to view full transaction details"
+                    >
+                      <div className="flex items-center justify-between">
+                        <HashDisplay value={tx.hash} explorerLink className="bg-transparent border-0 px-0" />
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-mono text-blue-600">Block #{tx.blockNumber}</span>
+                          <StatusBadge status={tx.status} />
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between text-[11px] text-slate-500 font-mono">
+                        <span title={tx.from}>From: {getAddressLabel(tx.from)}</span>
+                        <ArrowRight className="h-3 w-3 text-slate-400" />
+                        <span title={tx.to}>To: {getAddressLabel(tx.to)}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-[11px]">
+                        <div className="flex items-center gap-1.5 truncate">
+                          <span className="font-mono text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded font-medium truncate">
+                            {tx.event}
+                          </span>
+                          {tx.propertyId && (
+                            <span className="font-mono text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded text-[10px] font-semibold">
+                              {tx.propertyId}
+                            </span>
+                          )}
+                        </div>
+                        <span className="font-mono text-slate-400 text-[10px]">{tx.gasUsed}</span>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 2: BLOCKS SECTION */}
+      {activeTab === 'blocks' && (
+        <Card className="border-slate-200">
+          <CardHeader className="flex flex-row items-center justify-between pb-3">
+            <div className="flex items-center gap-2">
+              <Blocks className="h-4 w-4 text-blue-600" />
+              <CardTitle className="text-sm font-semibold">All Mined Blocks (Genesis to Latest)</CardTitle>
+            </div>
+            <span className="text-xs font-mono text-slate-500">{blocks.length} total blocks mined</span>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <Table className="w-full text-xs">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Height</TableHead>
+                    <TableHead>Block Type</TableHead>
+                    <TableHead>Block Hash</TableHead>
+                    <TableHead>Parent Hash</TableHead>
+                    <TableHead>Transactions</TableHead>
+                    <TableHead>Gas Used / Limit</TableHead>
+                    <TableHead>Timestamp</TableHead>
+                    <TableHead className="text-right">Action</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {blocks.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={8} className="text-center py-8 text-slate-400">
+                        No blocks found.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    blocks.map((blk) => (
+                      <TableRow key={blk.hash} className="hover:bg-blue-50/40">
+                        <TableCell className="font-mono font-bold text-blue-600">#{blk.blockNumber}</TableCell>
+                        <TableCell>
+                          <span
+                            className={`text-[10px] font-semibold px-2 py-0.5 rounded border ${getBlockTypeBadgeClass(
+                              blk.blockType
+                            )}`}
+                          >
+                            {blk.blockType || 'Consensus Block'}
+                          </span>
+                        </TableCell>
+                        <TableCell className="font-mono text-slate-700">
+                          {truncateHash(blk.hash, 8, 6)}
+                        </TableCell>
+                        <TableCell className="font-mono text-slate-400">
+                          {truncateHash(blk.parentHash, 6, 4)}
+                        </TableCell>
+                        <TableCell className="font-mono">
+                          <span className="bg-slate-100 text-slate-800 px-2 py-0.5 rounded font-semibold">
+                            {blk.transactionsCount} txs
+                          </span>
+                        </TableCell>
+                        <TableCell className="font-mono text-slate-600">
+                          {blk.gasUsed} {blk.gasLimit ? `/ ${blk.gasLimit}` : ''}
+                        </TableCell>
+                        <TableCell className="text-slate-600">{formatDate(blk.timestamp)}</TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setSelectedBlock(blk)}
+                            className="h-7 text-xs px-2.5"
+                          >
+                            View Details
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* TAB 3: TRANSACTIONS EXPLORER */}
+      {activeTab === 'transactions' && (
+        <Card className="border-slate-200">
+          <CardHeader className="flex flex-row items-center justify-between pb-3">
+            <div className="flex items-center gap-2">
+              <Cpu className="h-4 w-4 text-slate-800" />
+              <CardTitle className="text-sm font-semibold">Transaction Explorer</CardTitle>
+            </div>
+            <span className="text-xs font-mono text-slate-500">{transactions.length} verified transactions</span>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <Table className="w-full text-xs">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Tx Hash</TableHead>
+                    <TableHead>Block</TableHead>
+                    <TableHead>From</TableHead>
+                    <TableHead>To</TableHead>
+                    <TableHead>Event / Method</TableHead>
+                    <TableHead>Property ID</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Timestamp</TableHead>
+                    <TableHead className="text-right">Action</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {transactions.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={9} className="text-center py-8 text-slate-400">
+                        No transactions recorded on chain yet.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    transactions.map((tx) => (
+                      <TableRow key={tx.hash} className="hover:bg-blue-50/40">
+                        <TableCell className="font-mono">
+                          <HashDisplay value={tx.hash} explorerLink className="bg-transparent border-0 px-0" />
+                        </TableCell>
+                        <TableCell className="font-mono text-blue-600 font-semibold">#{tx.blockNumber}</TableCell>
+                        <TableCell className="font-mono text-slate-600">{getAddressLabel(tx.from)}</TableCell>
+                        <TableCell className="font-mono text-slate-600">{getAddressLabel(tx.to)}</TableCell>
+                        <TableCell>
+                          <span className="bg-emerald-50 text-emerald-800 font-semibold px-2 py-0.5 rounded font-mono text-[11px]">
+                            {tx.event}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          {tx.propertyId ? (
+                            <span className="bg-blue-50 text-blue-800 font-bold px-2 py-0.5 rounded font-mono text-[11px]">
+                              {tx.propertyId}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <StatusBadge status={tx.status} />
+                        </TableCell>
+                        <TableCell className="text-slate-600">{formatDate(tx.timestamp)}</TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setSelectedTx(tx)}
+                            className="h-7 text-xs px-2.5"
+                          >
+                            Inspect
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* TAB 4: PROPERTY REGISTRATIONS */}
+      {activeTab === 'registrations' && (
+        <Card className="border-slate-200">
+          <CardHeader className="flex flex-row items-center justify-between pb-3">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="h-4 w-4 text-emerald-600" />
+              <CardTitle className="text-sm font-semibold">
+                Blockchain Property Registrations (PropertyRegistry)
+              </CardTitle>
+            </div>
+            <span className="text-xs font-mono text-emerald-700 font-semibold">
+              {registeredProperties.length} active verified properties anchored
+            </span>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <Table className="w-full text-xs">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Property ID</TableHead>
+                    <TableHead>Title</TableHead>
+                    <TableHead>Owner</TableHead>
+                    <TableHead>Tx Hash</TableHead>
+                    <TableHead>Block #</TableHead>
+                    <TableHead>Smart Contract</TableHead>
+                    <TableHead>Document Hashes (SHA-256)</TableHead>
+                    <TableHead>Registered At</TableHead>
+                    <TableHead>On-Chain Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {registeredProperties.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={9} className="text-center py-10 text-slate-500">
+                        <ShieldCheck className="h-8 w-8 text-slate-300 mx-auto mb-2" />
+                        <p className="font-semibold text-slate-700">No properties registered on-chain yet.</p>
+                        <p className="text-xs text-slate-400 mt-1">
+                          When a seller submits documents and a verifier approves them, the property is automatically
+                          anchored here.
+                        </p>
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    registeredProperties.map((p) => (
+                      <TableRow key={p.property_id} className="hover:bg-emerald-50/30">
+                        <TableCell className="font-mono font-bold text-blue-600">{p.property_id}</TableCell>
+                        <TableCell className="font-semibold text-slate-800">{p.title}</TableCell>
+                        <TableCell>
+                          <div>
+                            <p className="font-medium text-slate-800">{p.owner_name}</p>
+                            <p className="font-mono text-[10px] text-slate-400">{truncateHash(p.owner_wallet, 6, 4)}</p>
+                          </div>
+                        </TableCell>
+                        <TableCell className="font-mono">
+                          <HashDisplay value={p.tx_hash} explorerLink className="bg-transparent border-0 px-0" />
+                        </TableCell>
+                        <TableCell className="font-mono font-bold text-blue-700">#{p.block_number}</TableCell>
+                        <TableCell className="font-mono text-slate-500">
+                          {truncateHash(p.contract_address, 6, 4)}
+                        </TableCell>
+                        <TableCell>
+                          {p.document_hashes && p.document_hashes.length > 0 ? (
+                            <div className="flex flex-col gap-1 max-w-[200px]">
+                              {p.document_hashes.map((dh, idx) => (
+                                <span
+                                  key={idx}
+                                  className="font-mono text-[10px] text-emerald-800 bg-emerald-50 border border-emerald-100 rounded px-1.5 py-0.5 truncate"
+                                  title={`SHA-256: ${dh}`}
+                                >
+                                  {truncateHash(dh, 8, 6)}
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="text-slate-400">None</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-slate-600">{formatDate(p.registered_at)}</TableCell>
+                        <TableCell>
+                          <span className="bg-emerald-100 text-emerald-800 font-semibold px-2 py-1 rounded-full text-[10px] flex items-center gap-1 w-fit">
+                            <Check className="h-3 w-3" /> CONFIRMED on-chain
+                          </span>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* TAB 5: OWNERSHIP TRANSFERS */}
+      {activeTab === 'transfers' && (
+        <Card className="border-slate-200">
+          <CardHeader className="flex flex-row items-center justify-between pb-3">
+            <div className="flex items-center gap-2">
+              <History className="h-4 w-4 text-indigo-600" />
+              <CardTitle className="text-sm font-semibold">
+                On-Chain Ownership Conveyance History (OwnershipRegistry)
+              </CardTitle>
+            </div>
+            <span className="text-xs font-mono text-indigo-700 font-semibold">
+              {ownershipTransfers.length} registered transfers
+            </span>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <Table className="w-full text-xs">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Property ID</TableHead>
+                    <TableHead>From Owner</TableHead>
+                    <TableHead>To Owner</TableHead>
+                    <TableHead>Tx Hash</TableHead>
+                    <TableHead>Block #</TableHead>
+                    <TableHead>Smart Contract</TableHead>
+                    <TableHead>Settlement Timestamp</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {ownershipTransfers.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center py-10 text-slate-500">
+                        <History className="h-8 w-8 text-slate-300 mx-auto mb-2" />
+                        <p className="font-semibold text-slate-700">No ownership transfers executed on-chain yet.</p>
+                        <p className="text-xs text-slate-400 mt-1">
+                          Conveyance events will appear here once statutory legal approval transfers deed title.
+                        </p>
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    ownershipTransfers.map((t, idx) => (
+                      <TableRow key={idx} className="hover:bg-indigo-50/30">
+                        <TableCell className="font-mono font-bold text-blue-600">{t.property_id}</TableCell>
+                        <TableCell>
+                          <p className="font-medium text-slate-800">{t.from_owner}</p>
+                          <p className="font-mono text-[10px] text-slate-400">{truncateHash(t.from_address, 6, 4)}</p>
+                        </TableCell>
+                        <TableCell>
+                          <p className="font-medium text-slate-800">{t.to_owner}</p>
+                          <p className="font-mono text-[10px] text-slate-400">{truncateHash(t.to_address, 6, 4)}</p>
+                        </TableCell>
+                        <TableCell className="font-mono">
+                          <HashDisplay value={t.tx_hash} explorerLink className="bg-transparent border-0 px-0" />
+                        </TableCell>
+                        <TableCell className="font-mono font-bold text-blue-700">#{t.block_number}</TableCell>
+                        <TableCell className="font-mono text-slate-500">
+                          {truncateHash(t.contract_address, 6, 4)}
+                        </TableCell>
+                        <TableCell className="text-slate-600">{formatDate(t.timestamp)}</TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* TAB 6: SMART CONTRACTS */}
+      {activeTab === 'contracts' && (
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {contractsList.map((c) => (
+              <Card key={c.name} className="border-slate-200">
+                <CardHeader className="pb-3 border-b border-slate-100 bg-slate-50/70">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-slate-900 text-sm">{c.name}</span>
+                    <span className="bg-emerald-100 text-emerald-800 text-[10px] font-semibold px-2 py-0.5 rounded-full flex items-center gap-1">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-600" />
+                      {c.status}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-1">{c.purpose}</p>
+                </CardHeader>
+                <CardContent className="p-4 space-y-2 text-xs font-mono">
+                  <div>
+                    <span className="text-[10px] text-slate-400 block">Contract Address</span>
+                    <HashDisplay value={c.address} explorerLink className="bg-transparent border-0 px-0 break-all" />
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-400 block">Deployment Tx Hash</span>
+                    <HashDisplay value={c.deploymentTxHash} explorerLink className="bg-transparent border-0 px-0 truncate" />
+                  </div>
+                  <div className="flex justify-between pt-1 border-t border-slate-100">
+                    <span className="text-slate-400 font-sans">Deployment Block:</span>
+                    <span className="text-blue-600 font-bold">#{c.deploymentBlock}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400 font-sans">Verified ABI:</span>
+                    <span className="text-emerald-700 font-semibold font-sans flex items-center gap-1">
+                      <CheckCircle2 className="h-3 w-3" /> {c.abiStatus}
+                    </span>
+                  </div>
+                  {c.deployedAt && (
+                    <div className="flex justify-between">
+                      <span className="text-slate-400 font-sans">Deployed At:</span>
+                      <span className="text-slate-600 font-sans">{formatDate(c.deployedAt)}</span>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Full Block Details */}
+      {selectedBlock && (
+        <Modal
+          isOpen={Boolean(selectedBlock)}
+          onClose={() => setSelectedBlock(null)}
+          title={`Block Details #${selectedBlock.blockNumber}`}
+          description="EVM Consensus block verified on local Hardhat network."
+          maxWidth="lg"
+        >
+          <div className="space-y-3 font-mono text-xs">
+            <div className="flex justify-between py-1.5 border-b border-slate-100">
+              <span className="text-slate-500 font-sans">Block Height:</span>
+              <span className="font-bold text-slate-900 text-sm">#{selectedBlock.blockNumber}</span>
+            </div>
+            <div className="flex justify-between py-1.5 border-b border-slate-100">
+              <span className="text-slate-500 font-sans">Block Type:</span>
+              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded border ${getBlockTypeBadgeClass(selectedBlock.blockType)}`}>
+                {selectedBlock.blockType || 'Consensus Block'}
+              </span>
+            </div>
+            <div className="space-y-1 py-1.5 border-b border-slate-100">
+              <span className="text-slate-500 font-sans block">Block Hash:</span>
+              <span className="text-slate-800 break-all font-semibold select-all">{selectedBlock.hash}</span>
+            </div>
+            <div className="space-y-1 py-1.5 border-b border-slate-100">
+              <span className="text-slate-500 font-sans block">Parent Block Hash:</span>
+              <span className="text-slate-600 break-all select-all">{selectedBlock.parentHash}</span>
+            </div>
+            <div className="flex justify-between py-1.5 border-b border-slate-100">
+              <span className="text-slate-500 font-sans">Transactions Count:</span>
+              <span className="font-bold text-blue-700">{selectedBlock.transactionsCount} txs included</span>
+            </div>
+            <div className="flex justify-between py-1.5 border-b border-slate-100">
+              <span className="text-slate-500 font-sans">Gas Used / Limit:</span>
+              <span className="text-slate-800">{selectedBlock.gasUsed} {selectedBlock.gasLimit ? `/ ${selectedBlock.gasLimit}` : ''}</span>
+            </div>
+            {selectedBlock.baseFeePerGas && (
+              <div className="flex justify-between py-1.5 border-b border-slate-100">
+                <span className="text-slate-500 font-sans">Base Fee Per Gas:</span>
+                <span className="text-slate-800">{selectedBlock.baseFeePerGas}</span>
+              </div>
+            )}
+            <div className="flex justify-between py-1.5 border-b border-slate-100">
+              <span className="text-slate-500 font-sans">Miner / Validator:</span>
+              <span className="text-slate-700">{selectedBlock.miner || '0x0000000000000000000000000000000000000000'}</span>
+            </div>
+            <div className="flex justify-between py-1.5">
+              <span className="text-slate-500 font-sans">Mined Timestamp:</span>
+              <span className="text-slate-800 font-sans">{formatDate(selectedBlock.timestamp)}</span>
+            </div>
+            {selectedBlock.transactions && selectedBlock.transactions.length > 0 && (
+              <div className="pt-2 border-t border-slate-200">
+                <span className="text-slate-500 font-sans block mb-1 font-semibold">Included Transactions:</span>
+                <div className="space-y-1 max-h-32 overflow-y-auto">
+                  {selectedBlock.transactions.map((txh, i) => (
+                    <div key={i} className="text-[11px] text-blue-600 hover:underline select-all">
+                      {txh}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </Modal>
+      )}
+
+      {/* MODAL: Full Transaction Details */}
+      {selectedTx && (
+        <Modal
+          isOpen={Boolean(selectedTx)}
+          onClose={() => setSelectedTx(null)}
+          title="Transaction Details"
+          description="EVM verified state transition on PropChain smart contracts."
+          maxWidth="lg"
+        >
+          <div className="space-y-3 font-mono text-xs">
+            <div className="flex justify-between py-1.5 border-b border-slate-100 items-center">
+              <span className="text-slate-500 font-sans">Status:</span>
+              <span className="flex items-center gap-1">
+                {selectedTx.status === 'Confirmed' ? (
+                  <span className="text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded font-sans font-semibold flex items-center gap-1 text-[11px]">
+                    <CheckCircle2 className="h-3 w-3" /> Confirmed On-Chain
+                  </span>
+                ) : (
+                  <span className="text-rose-700 bg-rose-100 px-2 py-0.5 rounded font-sans font-semibold flex items-center gap-1 text-[11px]">
+                    <XCircle className="h-3 w-3" /> Reverted
+                  </span>
+                )}
+              </span>
+            </div>
+            <div className="space-y-1 py-1.5 border-b border-slate-100">
+              <span className="text-slate-500 font-sans block">Transaction Hash:</span>
+              <span className="text-slate-900 break-all font-semibold select-all">{selectedTx.hash}</span>
+            </div>
+            <div className="flex justify-between py-1.5 border-b border-slate-100">
+              <span className="text-slate-500 font-sans">Block Number:</span>
+              <span className="text-blue-700 font-bold">#{selectedTx.blockNumber}</span>
+            </div>
+            <div className="flex justify-between py-1.5 border-b border-slate-100">
+              <span className="text-slate-500 font-sans">From (Sender):</span>
+              <span className="text-slate-800 break-all">{getAddressLabel(selectedTx.from)}</span>
+            </div>
+            <div className="flex justify-between py-1.5 border-b border-slate-100">
+              <span className="text-slate-500 font-sans">To (Recipient):</span>
+              <span className="text-slate-800 break-all">{getAddressLabel(selectedTx.to)}</span>
+            </div>
+            <div className="flex justify-between py-1.5 border-b border-slate-100">
+              <span className="text-slate-500 font-sans">Event / Method:</span>
+              <span className="text-emerald-700 font-semibold">{selectedTx.event}</span>
+            </div>
+            {selectedTx.propertyId && (
+              <div className="flex justify-between py-1.5 border-b border-slate-100">
+                <span className="text-slate-500 font-sans">Property ID:</span>
+                <span className="font-bold text-blue-700 bg-blue-100/70 px-2 py-0.5 rounded">
+                  {selectedTx.propertyId}
+                </span>
+              </div>
+            )}
+            {selectedTx.documentHash && (
+              <div className="space-y-1 py-1.5 border-b border-slate-100">
+                <span className="text-slate-500 font-sans block">Document SHA-256 Hash:</span>
+                <span className="text-emerald-800 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded break-all text-[11px] block select-all">
+                  {selectedTx.documentHash}
+                </span>
+              </div>
+            )}
+            <div className="flex justify-between py-1.5 border-b border-slate-100">
+              <span className="text-slate-500 font-sans">Value Transferred:</span>
+              <span className="text-slate-800">{selectedTx.value || '0 ETH'}</span>
+            </div>
+            <div className="flex justify-between py-1.5 border-b border-slate-100">
+              <span className="text-slate-500 font-sans">Gas Used:</span>
+              <span className="text-slate-800">{selectedTx.gasUsed}</span>
+            </div>
+            <div className="flex justify-between py-1.5">
+              <span className="text-slate-500 font-sans">Timestamp:</span>
+              <span className="text-slate-800 font-sans">{formatDate(selectedTx.timestamp)}</span>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   )
 }

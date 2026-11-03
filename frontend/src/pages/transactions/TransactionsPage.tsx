@@ -60,13 +60,23 @@ export const TransactionsPage: React.FC = () => {
 
   const loadData = useCallback(async () => {
     try {
+      const isSeller = user?.role === 'PROPERTY_OWNER'
       const [propRes, txnRes] = await Promise.allSettled([
-        propertyService.getProperties({ page_size: 100 }),
+        propertyService.getProperties({ page_size: 100, mine: isSeller ? true : undefined }),
         apiClient.get<any[]>('/transactions'),
       ])
 
       if (propRes.status === 'fulfilled' && propRes.value.items) {
-        setProperties(propRes.value.items)
+        let items = propRes.value.items
+        if (isSeller && user?.id) {
+          const uid = String(user.id).toLowerCase()
+          items = items.filter((p: any) => {
+            const ownerId = p.current_owner_id ? String(p.current_owner_id).toLowerCase() : ''
+            const creatorId = p.creator_user_id ? String(p.creator_user_id).toLowerCase() : ''
+            return ownerId === uid || creatorId === uid
+          })
+        }
+        setProperties(items)
       }
 
       if (txnRes.status === 'fulfilled' && Array.isArray(txnRes.value.data)) {
@@ -115,17 +125,37 @@ export const TransactionsPage: React.FC = () => {
   }, [loadData])
 
   const eligibleProperties = useMemo(() => {
-    const verified = properties.filter((p) => {
+    const isSeller = user?.role === 'PROPERTY_OWNER'
+    const isBuyer = user?.role === 'BUYER'
+    const uid = user?.id ? String(user.id).toLowerCase() : ''
+
+    const verified = properties.filter((p: any) => {
+      const ownerId = p.current_owner_id ? String(p.current_owner_id).toLowerCase() : ''
+      const creatorId = p.creator_user_id ? String(p.creator_user_id).toLowerCase() : ''
+      if (isBuyer && uid && (ownerId === uid || creatorId === uid)) {
+        return false
+      }
+      if (isSeller && uid && (ownerId !== uid && creatorId !== uid)) {
+        return false
+      }
       const v = (p.verificationStatus || (p as any).verification_status || '').toString().toUpperCase()
       const s = (p.status || '').toString().toUpperCase()
       return v === 'VERIFIED' && (!s || s === 'ACTIVE')
     })
     if (verified.length > 0) return verified
-    return properties.filter((p) => {
+    return properties.filter((p: any) => {
+      const ownerId = p.current_owner_id ? String(p.current_owner_id).toLowerCase() : ''
+      const creatorId = p.creator_user_id ? String(p.creator_user_id).toLowerCase() : ''
+      if (isBuyer && uid && (ownerId === uid || creatorId === uid)) {
+        return false
+      }
+      if (isSeller && uid && (ownerId !== uid && creatorId !== uid)) {
+        return false
+      }
       const s = (p.status || '').toString().toUpperCase()
       return !s || s === 'ACTIVE'
     })
-  }, [properties])
+  }, [properties, user])
 
   const {
     register,
@@ -264,7 +294,8 @@ export const TransactionsPage: React.FC = () => {
       t.sellerName.toLowerCase().includes(searchQuery.toLowerCase())
   )
 
-  const canInitiate = user?.role === 'BUYER' || user?.role === 'PROPERTY_OWNER' || user?.role === 'ADMIN'
+  // Item 1: Initiate Escrow / Make Offer ONLY for BUYER role
+  const canInitiate = user?.role === 'BUYER'
 
   return (
     <div className="space-y-6">
@@ -379,12 +410,21 @@ export const TransactionsPage: React.FC = () => {
           <Select
             label="Select Property"
             options={[
-              { value: '', label: '-- Select Property --' },
+              {
+                value: '',
+                label:
+                  eligibleProperties.length === 0
+                    ? user?.role === 'PROPERTY_OWNER'
+                      ? 'You have no eligible properties for transfer'
+                      : '-- Select Property --'
+                    : '-- Select Property --',
+              },
               ...eligibleProperties.map((p) => ({
                 value: p.id || p.propertyId,
                 label: `${getPropertyLabel(p)} (${formatCurrency(p.valuation)})`,
               })),
             ]}
+            disabled={eligibleProperties.length === 0}
             required
             error={errors.propertyId?.message}
             {...register('propertyId', { onChange: handlePropertyChange })}

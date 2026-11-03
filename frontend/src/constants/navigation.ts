@@ -19,6 +19,7 @@ export const ROLE_NAVIGATION: Record<UserRole, NavItem[]> = {
   PROPERTY_OWNER: [
     { title: 'Seller Dashboard', href: '/dashboard', iconName: 'LayoutDashboard' },
     { title: 'My Properties', href: '/properties', iconName: 'Building2' },
+    { title: 'Marketplace', href: '/properties?tab=marketplace', iconName: 'ShoppingBag' },
     { title: 'Document Uploads', href: '/documents', iconName: 'FileCheck2' },
     { title: 'Received Offers', href: '/transactions', iconName: 'ArrowLeftRight' },
     { title: 'Ownership Transfer', href: '/ownership', iconName: 'FileBadge' },

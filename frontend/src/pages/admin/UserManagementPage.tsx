@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/Button'
 import { LoadingState } from '@/components/common/LoadingState'
 import authService from '@/services/authService'
 import type { User, AccountStatus } from '@/types/auth'
-import { formatDate } from '@/lib/utils'
+import { formatDate, getRoleLabel } from '@/lib/utils'
 
 export const UserManagementPage: React.FC = () => {
   const [users, setUsers] = useState<User[]>([])
@@ -101,11 +101,11 @@ export const UserManagementPage: React.FC = () => {
                 className="rounded-lg border border-slate-200 bg-white py-1.5 px-2.5 text-xs text-slate-700 focus:border-slate-900 focus:outline-none"
               >
                 <option value="">All Roles</option>
-                <option value="ADMIN">ADMIN</option>
-                <option value="PROPERTY_OWNER">PROPERTY_OWNER</option>
-                <option value="BUYER">BUYER</option>
-                <option value="VERIFIER">VERIFIER</option>
-                <option value="LEGAL_AUTHORITY">LEGAL_AUTHORITY</option>
+                <option value="ADMIN">Admin</option>
+                <option value="PROPERTY_OWNER">Seller</option>
+                <option value="BUYER">Buyer</option>
+                <option value="VERIFIER">Verifier</option>
+                <option value="LEGAL_AUTHORITY">Legal Authority</option>
               </select>
 
               <select
@@ -152,8 +152,8 @@ export const UserManagementPage: React.FC = () => {
                         <div className="text-xs text-slate-500 font-mono">{u.email}</div>
                       </TableCell>
                       <TableCell>
-                        <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-800 border border-slate-200">
-                          {u.role}
+                        <span className="font-sans text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-800 border border-slate-200">
+                          {getRoleLabel(u.role)}
                         </span>
                       </TableCell>
                       <TableCell>

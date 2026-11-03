@@ -78,6 +78,18 @@ class BlockchainService:
             except Exception as e:
                 logger.warning("Could not initialize contracts from deployment artifact: %s", e)
 
+    @classmethod
+    def get_contract_address(cls) -> Optional[str]:
+        repo_root = Path(__file__).resolve().parent.parent.parent.parent
+        deployment_file = repo_root / "blockchain" / "deployments" / "localhost.json"
+        if deployment_file.is_file():
+            try:
+                data = json.loads(deployment_file.read_text())
+                return data.get("contracts", {}).get("PropertyRegistry", {}).get("address")
+            except Exception:
+                pass
+        return "0x5FbDB2315678afecb367f032d93F642f64180aa3"
+
     def is_network_connected(self) -> bool:
         try:
             return self.w3.is_connected()
@@ -92,6 +104,7 @@ class BlockchainService:
     ) -> Tuple[bool, Optional[str], Optional[str]]:
         """
         Submits on-chain property registration and initial ownership anchor to EVM.
+        Prevents duplicate submissions when retrying.
         Returns: (success, tx_hash, error_message)
         """
         if not self.is_network_connected() or not self.property_registry or not self.ownership_registry:
@@ -107,91 +120,211 @@ class BlockchainService:
             self.db.commit()
             return False, None, "Blockchain EVM node unreachable or contracts not deployed."
 
-        # 1. Record pending operation in DB
-        op = BlockchainOperation(
-            operation_type="REGISTER_PROPERTY",
-            entity_type="PROPERTY",
-            entity_id=prop.id,
-            status="PENDING",
+        # 1. Find or initialize operation record in DB
+        op = (
+            self.db.query(BlockchainOperation)
+            .filter(
+                BlockchainOperation.entity_id == prop.id,
+                BlockchainOperation.operation_type == "REGISTER_PROPERTY",
+            )
+            .order_by(BlockchainOperation.created_at.desc())
+            .first()
         )
-        self.db.add(op)
+        if op is None:
+            op = BlockchainOperation(
+                operation_type="REGISTER_PROPERTY",
+                entity_type="PROPERTY",
+                entity_id=prop.id,
+                status="PENDING",
+            )
+            self.db.add(op)
+        else:
+            op.retry_count = (op.retry_count or 0) + 1
+            op.status = "PENDING"
+            op.error_message = None
         self.db.commit()
 
         try:
             checksum_owner = Web3.to_checksum_address(owner_wallet)
 
             # Convert 32-byte hash
-            doc_hash_bytes = bytes.fromhex(document_hash_hex.replace("0x", "")[:64])
+            clean_hash = (document_hash_hex or "").replace("0x", "")[:64]
+            try:
+                doc_hash_bytes = bytes.fromhex(clean_hash) if clean_hash else bytes(32)
+            except ValueError:
+                doc_hash_bytes = bytes(32)
             if len(doc_hash_bytes) < 32:
-                doc_hash_bytes = doc_hash_bytes.ljust(32, b"\0")
+                doc_hash_bytes = doc_hash_bytes.ljust(32, b"\x00")
 
-            # 2. Build & sign transaction
-            nonce = self.w3.eth.get_transaction_count(self.deployer_account.address)
-            tx = self.property_registry.functions.registerProperty(
-                prop.property_number,
-                checksum_owner,
-                doc_hash_bytes,
-            ).build_transaction({
-                "from": self.deployer_account.address,
-                "nonce": nonce,
-                "gas": 300000,
-                "gasPrice": self.w3.eth.gas_price,
-            })
+            onchain_tx_hash: Optional[str] = op.tx_hash
+            onchain_block_num: Optional[int] = op.block_number
 
-            signed_tx = self.w3.eth.account.sign_transaction(tx, private_key=self.deployer_private_key)
-            tx_hash_bytes = self.w3.eth.send_raw_transaction(signed_tx.raw_transaction)
-            tx_hash = self.w3.to_hex(tx_hash_bytes)
+            # 2. Check if already registered on PropertyRegistry
+            already_registered = False
+            try:
+                prop_data = self.property_registry.functions.getProperty(prop.property_number).call()
+                # prop_data: (currentOwner, documentHash, state, registeredAt, updatedAt, exists)
+                if len(prop_data) >= 6 and prop_data[5]:
+                    already_registered = True
+                    logger.info("Property %s already exists in PropertyRegistry", prop.property_number)
+            except Exception as check_err:
+                logger.warning("Could not check getProperty for %s: %s", prop.property_number, check_err)
 
-            op.tx_hash = tx_hash
-            op.status = "SUBMITTED"
-            self.db.commit()
+            if not already_registered:
+                nonce = self.w3.eth.get_transaction_count(self.deployer_account.address, "pending")
+                tx = self.property_registry.functions.registerProperty(
+                    prop.property_number,
+                    checksum_owner,
+                    doc_hash_bytes,
+                ).build_transaction({
+                    "from": self.deployer_account.address,
+                    "nonce": nonce,
+                    "gas": 300000,
+                    "gasPrice": self.w3.eth.gas_price,
+                })
 
-            # 3. Wait for receipt
-            receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash_bytes, timeout=10)
-            if receipt["status"] != 1:
-                op.status = "REVERTED"
-                op.error_message = "Transaction reverted on chain."
+                signed_tx = self.w3.eth.account.sign_transaction(tx, private_key=self.deployer_private_key)
+                tx_hash_bytes = self.w3.eth.send_raw_transaction(signed_tx.raw_transaction)
+                onchain_tx_hash = self.w3.to_hex(tx_hash_bytes)
+
+                op.tx_hash = onchain_tx_hash
+                op.status = "SUBMITTED"
                 self.db.commit()
-                return False, tx_hash, "Transaction reverted on chain."
 
-            # 4. Record genesis initial ownership in OwnershipRegistry
-            nonce2 = self.w3.eth.get_transaction_count(self.deployer_account.address)
-            tx2 = self.ownership_registry.functions.recordInitialOwnership(
-                prop.property_number,
-                checksum_owner,
-            ).build_transaction({
-                "from": self.deployer_account.address,
-                "nonce": nonce2,
-                "gas": 300000,
-                "gasPrice": self.w3.eth.gas_price,
-            })
-            signed_tx2 = self.w3.eth.account.sign_transaction(tx2, private_key=self.deployer_private_key)
-            tx2_hash_bytes = self.w3.eth.send_raw_transaction(signed_tx2.raw_transaction)
-            receipt2 = self.w3.eth.wait_for_transaction_receipt(tx2_hash_bytes, timeout=10)
+                # Wait for receipt
+                receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash_bytes, timeout=10)
+                if receipt["status"] != 1:
+                    op.status = "REVERTED"
+                    op.error_message = "PropertyRegistry transaction reverted on chain."
+                    self.db.commit()
+                    return False, onchain_tx_hash, "PropertyRegistry transaction reverted on chain."
 
-            # 5. Update DB state
+                onchain_block_num = receipt["blockNumber"]
+
+            # 3. Check if initial ownership is already recorded in OwnershipRegistry
+            already_owned = False
+            try:
+                curr_owner = self.ownership_registry.functions.getCurrentOwner(prop.property_number).call()
+                if curr_owner and curr_owner != "0x0000000000000000000000000000000000000000":
+                    already_owned = True
+                    logger.info("Ownership for %s already recorded in OwnershipRegistry", prop.property_number)
+            except Exception as check_err:
+                logger.warning("Could not check getCurrentOwner for %s: %s", prop.property_number, check_err)
+
+            if not already_owned:
+                nonce2 = self.w3.eth.get_transaction_count(self.deployer_account.address, "pending")
+                tx2 = self.ownership_registry.functions.recordInitialOwnership(
+                    prop.property_number,
+                    checksum_owner,
+                ).build_transaction({
+                    "from": self.deployer_account.address,
+                    "nonce": nonce2,
+                    "gas": 300000,
+                    "gasPrice": self.w3.eth.gas_price,
+                })
+                signed_tx2 = self.w3.eth.account.sign_transaction(tx2, private_key=self.deployer_private_key)
+                tx2_hash_bytes = self.w3.eth.send_raw_transaction(signed_tx2.raw_transaction)
+                receipt2 = self.w3.eth.wait_for_transaction_receipt(tx2_hash_bytes, timeout=10)
+                if receipt2["status"] != 1:
+                    op.status = "REVERTED"
+                    op.error_message = "OwnershipRegistry transaction reverted on chain."
+                    self.db.commit()
+                    return False, self.w3.to_hex(tx2_hash_bytes), "OwnershipRegistry transaction reverted on chain."
+
+                if not onchain_tx_hash:
+                    onchain_tx_hash = self.w3.to_hex(tx2_hash_bytes)
+                if not onchain_block_num:
+                    onchain_block_num = receipt2["blockNumber"]
+
+            # If both were already registered and we had no block/tx info, fallback
+            if not onchain_block_num:
+                try:
+                    onchain_block_num = self.w3.eth.block_number
+                except Exception:
+                    onchain_block_num = 1
+
+            if not onchain_tx_hash:
+                onchain_tx_hash = f"0x{'0'*64}"
+
+            # Query real block timestamp
+            block_timestamp = None
+            if onchain_block_num:
+                try:
+                    block_info = self.w3.eth.get_block(onchain_block_num)
+                    if block_info and "timestamp" in block_info:
+                        block_timestamp = datetime.fromtimestamp(block_info["timestamp"], tz=timezone.utc)
+                except Exception as b_err:
+                    logger.warning("Could not fetch block %s details: %s", onchain_block_num, b_err)
+            if not block_timestamp:
+                block_timestamp = datetime.now(timezone.utc)
+
+            # 4. Update DB state
             op.status = "CONFIRMED"
-            op.block_number = receipt["blockNumber"]
+            op.tx_hash = onchain_tx_hash
+            op.block_number = onchain_block_num
+            op.error_message = None
 
             prop.blockchain_property_id = prop.property_number
 
-            # Record initial ownership event
-            genesis_event = OwnershipEvent(
-                property_id=prop.id,
-                previous_owner_id=None,
-                new_owner_id=prop.creator_user_id,
-                previous_owner_address=None,
-                new_owner_address=checksum_owner,
-                transaction_id="GENESIS",
-                event_type="INITIAL_REGISTRATION",
-                blockchain_tx_hash=tx_hash,
-                block_number=receipt["blockNumber"],
-                confirmed_at=datetime.now(timezone.utc),
+            # Check or create initial ownership event
+            genesis_event = (
+                self.db.query(OwnershipEvent)
+                .filter(
+                    OwnershipEvent.property_id == prop.id,
+                    OwnershipEvent.event_type == "INITIAL_REGISTRATION",
+                )
+                .first()
             )
-            self.db.add(genesis_event)
-            self.db.commit()
+            if not genesis_event:
+                genesis_event = OwnershipEvent(
+                    property_id=prop.id,
+                    previous_owner_id=None,
+                    new_owner_id=prop.creator_user_id or prop.current_owner_id,
+                    previous_owner_address=None,
+                    new_owner_address=checksum_owner,
+                    transaction_id="GENESIS",
+                    event_type="INITIAL_REGISTRATION",
+                    blockchain_tx_hash=onchain_tx_hash,
+                    block_number=onchain_block_num,
+                    confirmed_at=block_timestamp,
+                )
+                self.db.add(genesis_event)
+            else:
+                if onchain_tx_hash and not genesis_event.blockchain_tx_hash:
+                    genesis_event.blockchain_tx_hash = onchain_tx_hash
+                if onchain_block_num and not genesis_event.block_number:
+                    genesis_event.block_number = onchain_block_num
+                if not genesis_event.confirmed_at:
+                    genesis_event.confirmed_at = block_timestamp
 
-            return True, tx_hash, None
+            # Record BlockchainEvent for explorer indexing
+            reg_contract_addr = self.get_contract_address() or "0x5FbDB2315678afecb367f032d93F642f64180aa3"
+            existing_event = (
+                self.db.query(BlockchainEvent)
+                .filter(
+                    BlockchainEvent.tx_hash == onchain_tx_hash,
+                    BlockchainEvent.event_name == "PropertyRegistered",
+                )
+                .first()
+            )
+            if not existing_event:
+                bc_event = BlockchainEvent(
+                    contract_address=reg_contract_addr,
+                    event_name="PropertyRegistered",
+                    block_number=onchain_block_num or 0,
+                    tx_hash=onchain_tx_hash,
+                    log_index=0,
+                    payload={
+                        "property_id": prop.property_number,
+                        "owner_wallet": checksum_owner,
+                        "document_hash": document_hash_hex,
+                        "timestamp": int(block_timestamp.timestamp()),
+                    },
+                )
+                self.db.add(bc_event)
+
+            self.db.commit()
+            return True, onchain_tx_hash, None
 
         except Exception as e:
             logger.error("Error anchoring property %s on chain: %s", prop.property_number, e)

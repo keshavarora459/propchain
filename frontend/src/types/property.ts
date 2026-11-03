@@ -44,10 +44,19 @@ export interface Property {
   verification_status?: VerificationStatus
   blockchain_property_id?: string
   blockchainTokenId?: string
+  blockchain_tx_hash?: string
+  blockchain_block_number?: number
+  blockchain_contract_address?: string
+  blockchain_registration_timestamp?: string
+  blockchain_error?: string
   registeredAt: string
   created_at?: string
   imageUrl?: string
   description?: string
+  creator_user_id?: string
+  current_owner_id?: string
+  submitted_at?: string
+  seller_name?: string
 }
 
 export interface PropertyFilter {
@@ -61,6 +70,7 @@ export interface PropertyFilter {
   verificationStatus?: string
   state?: string
   city?: string
+  mine?: boolean
 }
 
 export interface PropertyListResponse {

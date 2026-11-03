@@ -64,6 +64,39 @@ export const getExplorerAddressUrl = (address: string, chainId: number = SEPOLIA
   return '#'
 }
 
+export const CONTRACT_DEPLOYMENT_INFO = {
+  PROPERTY_REGISTRY: {
+    address: '0x5FbDB2315678afecb367f032d93F642f64180aa3',
+    name: 'PropertyRegistry',
+    deploymentTxHash: '0xa7c140b7328a99cfe2980e4cd0fd52bdba4644f2a3e3aff06dba96164580880b',
+    deploymentBlock: 1,
+    deployedAt: '2026-11-03T16:54:58.948Z',
+    status: 'Active',
+    abiStatus: 'Verified',
+    purpose: 'Anchors verified title deeds and canonical land parcel registry records on-chain.',
+  },
+  OWNERSHIP_REGISTRY: {
+    address: '0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512',
+    name: 'OwnershipRegistry',
+    deploymentTxHash: '0x2a66d0ebbc1008bab413e3ed4bd095411a5c27df4fd76f04d815eaef42ecedd0',
+    deploymentBlock: 2,
+    deployedAt: '2026-11-03T16:54:58.948Z',
+    status: 'Active',
+    abiStatus: 'Verified',
+    purpose: 'Immutable chronological conveyance ledger and current registered owner lookup.',
+  },
+  TRANSACTION_MANAGER: {
+    address: '0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9',
+    name: 'TransactionManager',
+    deploymentTxHash: '0x681a77d7fa59724b712ccbc3459bff4b1bf95964283c8f1f1615c1ee4a7a6afd',
+    deploymentBlock: 4,
+    deployedAt: '2026-11-03T16:54:58.948Z',
+    status: 'Active',
+    abiStatus: 'Verified',
+    purpose: 'Multi-signature escrow state machine enforcing seller, verifier, and legal sign-offs.',
+  },
+}
+
 export const PROPERTY_REGISTRY_ABI = [
   'event PropertyRegistered(string indexed propertyId, address indexed ownerWallet, bytes32 documentHash, uint256 timestamp)',
   'event PropertyDocumentUpdated(string indexed propertyId, bytes32 newDocumentHash, uint256 timestamp)',

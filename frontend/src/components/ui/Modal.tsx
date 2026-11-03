@@ -9,6 +9,7 @@ export interface ModalProps {
   description?: string
   children: React.ReactNode
   maxWidth?: 'sm' | 'md' | 'lg' | 'xl' | '2xl'
+  bodyClassName?: string
 }
 
 export const Modal: React.FC<ModalProps> = ({
@@ -18,6 +19,7 @@ export const Modal: React.FC<ModalProps> = ({
   description,
   children,
   maxWidth = 'md',
+  bodyClassName,
 }) => {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -70,7 +72,7 @@ export const Modal: React.FC<ModalProps> = ({
             <X className="h-5 w-5" />
           </button>
         </div>
-        <div className="p-6 max-h-[80vh] overflow-y-auto">{children}</div>
+        <div className={cn('p-6 max-h-[80vh] overflow-y-auto', bodyClassName)}>{children}</div>
       </div>
     </div>
   )

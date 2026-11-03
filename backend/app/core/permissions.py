@@ -44,7 +44,6 @@ ROLE_PERMISSIONS: Dict[UserRole, FrozenSet[Permission]] = {
         Permission.MANAGE_USERS,
         Permission.REGISTER_PROPERTY,
         Permission.VIEW_PROPERTIES,
-        Permission.INITIATE_TRANSACTION,
         Permission.VERIFY_DOCUMENTS,
         Permission.REVIEW_APPROVALS,
         Permission.VIEW_FRAUD_ALERTS,
@@ -112,8 +111,14 @@ def assert_property_access(current_user: Any, prop: Any, allow_marketplace: bool
     raw_role = current_user.role
     user_role = raw_role.value if hasattr(raw_role, "value") else str(raw_role)
 
-    # Privileged administrative and verification roles have global view privileges
-    if user_role in {UserRole.ADMIN.value, UserRole.VERIFIER.value, UserRole.LEGAL_AUTHORITY.value}:
+    # Privileged administrative and legal authority roles have global view privileges
+    if user_role in {UserRole.ADMIN.value, UserRole.LEGAL_AUTHORITY.value}:
+        return
+
+    # Verifiers can view submitted or verified properties, but draft (PENDING) properties are forbidden
+    if user_role in {UserRole.VERIFIER.value, "VERIFIER"}:
+        if getattr(prop, "verification_status", None) == "PENDING":
+            raise ForbiddenError("Access denied: Draft properties cannot be viewed by verifiers until submitted.")
         return
 
     # Check direct ownership or creation

@@ -53,14 +53,18 @@ export const AgentDashboard: React.FC = () => {
   }, [])
 
   const verifierMetrics = dashboardData?.verifier_metrics || {}
-  const pendingProps = verifierMetrics?.properties_to_verify || allProperties.filter((p) => p.verificationStatus === 'PENDING')
-  const recentDocs = verifierMetrics?.recent_documents || []
+  // Item 7: Assigned properties must show properties with verification status SUBMITTED or CORRECTION_REQUESTED
+  const submittedProps = (verifierMetrics?.properties_to_verify || allProperties).filter((p) => {
+    const s = (p.verification_status || p.verificationStatus || '').toString().toUpperCase()
+    return s === 'SUBMITTED' || s === 'CORRECTION_REQUESTED' || s === 'REQUIRES_CORRECTION'
+  })
+  const recentDocs = verifierMetrics?.recent_documents || verifierMetrics?.documents_queue || []
 
   const handleVerifyPropertyAction = async (propId: string) => {
     setActionInProgress(propId)
     try {
-      await propertyService.updatePropertyStatus(propId, { verification_status: 'VERIFIED' })
-      setActionMessage('✓ Property verified successfully and marked eligible for marketplace transactions.')
+      await propertyService.verifyProperty(propId)
+      setActionMessage('✓ Property verified successfully and marked active on the marketplace.')
       await loadAgentData()
       setTimeout(() => setActionMessage(null), 5000)
     } catch (err: any) {
@@ -102,14 +106,14 @@ export const AgentDashboard: React.FC = () => {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           title="Properties Needing Verification"
-          value={pendingProps.length.toString()}
-          subtitle={pendingProps.length > 0 ? 'Requires title inspection' : 'Queue cleared'}
+          value={submittedProps.length.toString()}
+          subtitle={submittedProps.length > 0 ? 'Awaiting title inspection' : 'Queue cleared'}
           icon={<Building2 className="h-5 w-5" />}
           iconBg="bg-amber-50 text-amber-600"
         />
         <StatCard
           title="Verified Properties"
-          value={(dashboardData?.verified_properties ?? 0).toString()}
+          value={(dashboardData?.verified_properties ?? allProperties.filter((p) => (p.verification_status || p.verificationStatus || '').toString().toUpperCase() === 'VERIFIED').length).toString()}
           subtitle="Accredited for marketplace offers"
           icon={<CheckSquare className="h-5 w-5" />}
           iconBg="bg-emerald-50 text-emerald-600"
@@ -117,7 +121,7 @@ export const AgentDashboard: React.FC = () => {
         <StatCard
           title="Pending Document Reviews"
           value={(verifierMetrics?.pending_documents_count ?? recentDocs.length).toString()}
-          subtitle="Scanned deeds awaiting OCR audit"
+          subtitle="Documents awaiting review"
           icon={<FileCheck2 className="h-5 w-5" />}
           iconBg="bg-blue-50 text-blue-600"
         />
@@ -134,7 +138,7 @@ export const AgentDashboard: React.FC = () => {
       <Tabs
         tabs={[
           { id: 'overview', label: 'Agent Overview' },
-          { id: 'assigned', label: 'Assigned Properties', count: pendingProps.length },
+          { id: 'assigned', label: 'Assigned Properties', count: submittedProps.length },
           { id: 'manage', label: 'Property Registry', count: allProperties.length },
           { id: 'progress', label: 'Verification Progress' },
           { id: 'tracking', label: 'Client & Transaction Tracking' },
@@ -153,13 +157,13 @@ export const AgentDashboard: React.FC = () => {
                 <div className="flex items-center justify-between">
                   <CardTitle>High-Priority Properties for Review</CardTitle>
                   <Button size="sm" variant="outline" onClick={() => setActiveTab('assigned')} className="text-xs">
-                    View All ({pendingProps.length})
+                    View All ({submittedProps.length})
                   </Button>
                 </div>
                 <CardDescription>Properties with pending verification submitted by property owners.</CardDescription>
               </CardHeader>
               <CardContent className="p-0">
-                {pendingProps.length === 0 ? (
+                {submittedProps.length === 0 ? (
                   <div className="p-8 text-center text-xs text-slate-400">
                     <CheckCircle2 className="h-8 w-8 mx-auto text-emerald-500 mb-2" />
                     <p className="font-semibold text-slate-700">Verification queue is completely up to date!</p>
@@ -169,26 +173,33 @@ export const AgentDashboard: React.FC = () => {
                     <TableHeader>
                       <TableRow>
                         <TableHead>Property</TableHead>
-                        <TableHead>Location</TableHead>
-                        <TableHead>Valuation</TableHead>
+                        <TableHead>Seller</TableHead>
+                        <TableHead>Submitted</TableHead>
+                        <TableHead>Documents</TableHead>
                         <TableHead className="text-right">Action</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {pendingProps.slice(0, 4).map((p: any) => (
+                      {submittedProps.slice(0, 4).map((p: any) => (
                         <TableRow key={p.id}>
-                          <TableCell className="font-medium text-slate-900 text-xs">{getPropertyLabel(p)}</TableCell>
-                          <TableCell className="text-xs text-slate-500">{p.city}, {p.state}</TableCell>
-                          <TableCell className="font-mono text-xs font-bold">{formatCurrency(p.valuation)}</TableCell>
-                          <TableCell className="text-right">
-                            <Button
-                              size="sm"
-                              disabled={actionInProgress === p.id}
-                              onClick={() => handleVerifyPropertyAction(p.id)}
-                              className="text-xs h-7 px-2 bg-emerald-600 hover:bg-emerald-500 text-white"
-                            >
-                              Verify
-                            </Button>
+                          <TableCell className="font-medium text-slate-900 text-xs">
+                            <span title={getPropertyLabel(p)}>{getPropertyLabel(p)}</span>
+                          </TableCell>
+                          <TableCell className="text-xs text-slate-600">
+                            {p.seller_name || p.owner_name || p.currentOwner || 'Seller'}
+                          </TableCell>
+                          <TableCell className="text-xs text-slate-500 whitespace-nowrap">
+                            {formatDate(p.submitted_at || p.created_at)}
+                          </TableCell>
+                          <TableCell className="text-xs text-slate-700 font-mono whitespace-nowrap">
+                            {p.approved_docs_count ?? 0} of {p.total_docs_count ?? 4} documents
+                          </TableCell>
+                          <TableCell className="text-right whitespace-nowrap">
+                            <Link to="/documents">
+                              <Button size="sm" className="text-xs h-7 px-2.5">
+                                Review
+                              </Button>
+                            </Link>
                           </TableCell>
                         </TableRow>
                       ))}
@@ -250,7 +261,7 @@ export const AgentDashboard: React.FC = () => {
             <CardDescription>Check registry boundaries, title deed consistency, and mark properties as Verified.</CardDescription>
           </CardHeader>
           <CardContent className="p-0">
-            {pendingProps.length === 0 ? (
+            {submittedProps.length === 0 ? (
               <div className="p-12 text-center text-xs text-slate-400">
                 <CheckCircle2 className="h-8 w-8 mx-auto text-emerald-500 mb-2" />
                 <p className="text-sm font-medium text-slate-700">No pending properties</p>
@@ -262,35 +273,39 @@ export const AgentDashboard: React.FC = () => {
                   <TableRow>
                     <TableHead>Parcel ID</TableHead>
                     <TableHead>Property</TableHead>
-                    <TableHead>Location</TableHead>
-                    <TableHead>Valuation</TableHead>
+                    <TableHead>Seller</TableHead>
+                    <TableHead>Submitted Date</TableHead>
+                    <TableHead>Documents</TableHead>
                     <TableHead>Current Status</TableHead>
                     <TableHead className="text-right">Inspection & Action</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {pendingProps.map((p: any) => (
+                  {submittedProps.map((p: any) => (
                     <TableRow key={p.id}>
                       <TableCell className="font-mono text-xs font-semibold text-slate-800">{p.property_number || p.propertyId}</TableCell>
                       <TableCell className="font-medium text-slate-900 text-xs">{getPropertyLabel(p)}</TableCell>
-                      <TableCell className="text-xs text-slate-600">{p.city}, {p.state}</TableCell>
-                      <TableCell className="font-mono text-xs font-bold text-slate-900">{formatCurrency(p.valuation)}</TableCell>
-                      <TableCell><StatusBadge status={p.verification_status || p.verificationStatus} /></TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="text-xs text-slate-600">{p.seller_name || p.owner_name || p.currentOwner || 'Seller'}</TableCell>
+                      <TableCell className="text-xs text-slate-500 whitespace-nowrap">{formatDate(p.submitted_at || p.created_at)}</TableCell>
+                      <TableCell className="text-xs text-slate-700 font-mono whitespace-nowrap">{p.approved_docs_count ?? 0} of 4 documents</TableCell>
+                      <TableCell><StatusBadge status={p.verification_status || p.verificationStatus || 'SUBMITTED'} /></TableCell>
+                      <TableCell className="text-right whitespace-nowrap">
                         <div className="flex items-center justify-end gap-2">
-                          <Link to={`/properties/${p.id}`}>
+                          <Link to="/documents">
                             <Button size="sm" variant="outline" className="text-xs h-8">
-                              Inspect Title
+                              Review Documents
                             </Button>
                           </Link>
-                          <Button
-                            size="sm"
-                            disabled={actionInProgress === p.id}
-                            onClick={() => handleVerifyPropertyAction(p.id)}
-                            className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs h-8"
-                          >
-                            {actionInProgress === p.id ? 'Verifying...' : 'Approve & Verify'}
-                          </Button>
+                          {(p.approved_docs_count ?? 0) === 4 && (
+                            <Button
+                              size="sm"
+                              disabled={actionInProgress === p.id}
+                              onClick={() => handleVerifyPropertyAction(p.id)}
+                              className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs h-8"
+                            >
+                              {actionInProgress === p.id ? 'Verifying...' : 'Verify Property'}
+                            </Button>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>

@@ -158,9 +158,12 @@ class Settings(BaseSettings):
         and API responses. Never exposes credentials.
         """
         try:
+            if "sqlite" in self.DATABASE_URL:
+                return self.DATABASE_URL
+
             parsed = urlparse(self.DATABASE_URL)
             if not parsed.netloc:
-                return "sqlite:///:memory:" if "sqlite" in self.DATABASE_URL else "configured"
+                return "configured"
 
             # Redact password if present in userinfo
             if parsed.password:
