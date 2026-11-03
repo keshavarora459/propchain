@@ -148,11 +148,21 @@ def anchor_property_on_chain(
         )
     ).first()
 
-    owner_address = wallet.wallet_address if wallet else "0x70997970C51812dc3A010C7d01b50e0d17dc79C8"
+    owner_address = (
+        wallet.wallet_address
+        if wallet
+        else os.getenv("DEFAULT_OWNER_WALLET", "")
+    )
+
 
     # Get verified or computed property document hash
     doc_hash = hashlib.sha256(f"{prop.property_number}:{prop.id}".encode()).hexdigest()
     if prop.documents and prop.documents[0].document_hash:
+
+
+
+
+
         doc_hash = prop.documents[0].document_hash
 
     b_service = BlockchainService(db)

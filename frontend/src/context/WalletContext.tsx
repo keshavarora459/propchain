@@ -166,14 +166,28 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     } catch (switchError: any) {
       // 4902 error code means chain has not been added to MetaMask
       if (switchError?.code === 4902 || switchError?.data?.originalError?.code === 4902) {
+        const isSepolia = targetChainId === 11155111
         await ethereum.request({
           method: 'wallet_addEthereumChain',
           params: [
             {
               chainId: hexChainId,
-              chainName: targetChainId === 31337 ? 'Hardhat Local EVM' : `EVM Network (${targetChainId})`,
-              rpcUrls: ['http://127.0.0.1:8545'],
-              nativeCurrency: { name: 'Ethereum', symbol: 'ETH', decimals: 18 },
+              chainName: isSepolia
+                ? 'Ethereum Sepolia Testnet'
+                : targetChainId === 31337
+                ? 'Hardhat Local EVM'
+                : `EVM Network (${targetChainId})`,
+              rpcUrls: [
+                isSepolia
+                  ? import.meta.env.VITE_BLOCKCHAIN_RPC_URL || 'https://rpc.sepolia.org'
+                  : 'http://127.0.0.1:8545',
+              ],
+              nativeCurrency: {
+                name: isSepolia ? 'Sepolia ETH' : 'Ethereum',
+                symbol: 'ETH',
+                decimals: 18,
+              },
+              blockExplorerUrls: isSepolia ? ['https://sepolia.etherscan.io'] : undefined,
             },
           ],
         })

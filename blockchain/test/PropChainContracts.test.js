@@ -6,6 +6,7 @@ describe("PropChain Smart Contracts Test Suite", function () {
   let propertyRegistry, ownershipRegistry, transactionManager;
 
   const sampleDocHash = ethers.keccak256(ethers.toUtf8Bytes("SAMPLE_OFFICIAL_DEED_HASH"));
+  const updatedDocHash = ethers.keccak256(ethers.toUtf8Bytes("UPDATED_OFFICIAL_DEED_HASH"));
   const propId1 = "PROP-2026-1001";
   const propId2 = "PROP-2026-1002";
   const txnId1 = "TXN-2026-9001";
@@ -32,6 +33,10 @@ describe("PropChain Smart Contracts Test Suite", function () {
     transactionManager = await TransactionManager.deploy(admin.address, await ownershipRegistry.getAddress());
     await transactionManager.waitForDeployment();
 
+    // Grant roles on PropertyRegistry
+    const PROP_VERIFIER_ROLE = await propertyRegistry.VERIFIER_ROLE();
+    await propertyRegistry.grantRole(PROP_VERIFIER_ROLE, verifier.address);
+
     // Grant roles on TransactionManager
     const VERIFIER_ROLE = await transactionManager.VERIFIER_ROLE();
     const LEGAL_AUTHORITY_ROLE = await transactionManager.LEGAL_AUTHORITY_ROLE();
@@ -41,7 +46,7 @@ describe("PropChain Smart Contracts Test Suite", function () {
     await transactionManager.grantRole(LEGAL_AUTHORITY_ROLE, legalAuthority.address);
     await transactionManager.grantRole(OPERATOR_ROLE, operator.address);
 
-    // Grant TRANSFER_ROLE on OwnershipRegistry to TransactionManager
+    // Grant TRANSFER_ROLE on OwnershipRegistry to TransactionManager and operator
     const TRANSFER_ROLE = await ownershipRegistry.TRANSFER_ROLE();
     await ownershipRegistry.grantRole(TRANSFER_ROLE, await transactionManager.getAddress());
     await ownershipRegistry.grantRole(TRANSFER_ROLE, operator.address);
@@ -59,6 +64,7 @@ describe("PropChain Smart Contracts Test Suite", function () {
       expect(prop.currentOwner).to.equal(seller.address);
       expect(prop.documentHash).to.equal(sampleDocHash);
       expect(prop.exists).to.be.true;
+      expect(await propertyRegistry.totalProperties()).to.equal(1);
     });
 
     it("should reject duplicate property registration", async function () {
@@ -69,10 +75,47 @@ describe("PropChain Smart Contracts Test Suite", function () {
       ).to.be.revertedWithCustomError(propertyRegistry, "PropertyAlreadyRegistered");
     });
 
+    it("should reject registration with empty identifier or zero address", async function () {
+      await expect(
+        propertyRegistry.connect(admin).registerProperty("", seller.address, sampleDocHash)
+      ).to.be.revertedWithCustomError(propertyRegistry, "EmptyIdentifier");
+
+      await expect(
+        propertyRegistry.connect(admin).registerProperty(propId2, ethers.ZeroAddress, sampleDocHash)
+      ).to.be.revertedWithCustomError(propertyRegistry, "InvalidZeroAddress");
+    });
+
     it("should reject registration from unauthorized caller", async function () {
       await expect(
         propertyRegistry.connect(stranger).registerProperty(propId2, stranger.address, sampleDocHash)
       ).to.be.reverted;
+    });
+
+    it("should allow verifier to update document integrity hash", async function () {
+      await propertyRegistry.connect(admin).registerProperty(propId1, seller.address, sampleDocHash);
+
+      await expect(
+        propertyRegistry.connect(verifier).updateDocumentHash(propId1, updatedDocHash)
+      )
+        .to.emit(propertyRegistry, "PropertyDocumentUpdated")
+        .withArgs(propId1, updatedDocHash, (val) => val > 0);
+
+      const prop = await propertyRegistry.getProperty(propId1);
+      expect(prop.documentHash).to.equal(updatedDocHash);
+    });
+
+    it("should allow verifier to update property state", async function () {
+      await propertyRegistry.connect(admin).registerProperty(propId1, seller.address, sampleDocHash);
+
+      // State 3 = Verified
+      await expect(
+        propertyRegistry.connect(verifier).setPropertyState(propId1, 3)
+      )
+        .to.emit(propertyRegistry, "PropertyStateChanged")
+        .withArgs(propId1, 3, (val) => val > 0);
+
+      const prop = await propertyRegistry.getProperty(propId1);
+      expect(prop.state).to.equal(3);
     });
   });
 
@@ -96,6 +139,7 @@ describe("PropChain Smart Contracts Test Suite", function () {
       expect(history[0].previousOwner).to.equal(ethers.ZeroAddress);
       expect(history[0].newOwner).to.equal(seller.address);
       expect(history[0].transactionId).to.equal("GENESIS");
+      expect(await ownershipRegistry.getTransferCount(propId1)).to.equal(1);
     });
 
     it("should reject duplicate initial ownership recording", async function () {
@@ -103,6 +147,12 @@ describe("PropChain Smart Contracts Test Suite", function () {
       await expect(
         ownershipRegistry.connect(operator).recordInitialOwnership(propId1, buyer.address)
       ).to.be.revertedWithCustomError(ownershipRegistry, "InitialOwnershipAlreadyRecorded");
+    });
+
+    it("should reject unauthorized ownership records", async function () {
+      await expect(
+        ownershipRegistry.connect(stranger).recordInitialOwnership(propId1, stranger.address)
+      ).to.be.reverted;
     });
   });
 
@@ -176,6 +226,15 @@ describe("PropChain Smart Contracts Test Suite", function () {
         .to.emit(transactionManager, "TransactionCancelled")
         .withArgs(txnId1, "Buyer changed terms", (val) => val > 0);
     });
+
+    it("should reject unauthorized callers trying to accept or complete", async function () {
+      await expect(
+        transactionManager.connect(stranger).acceptTransaction(txnId1)
+      ).to.be.revertedWithCustomError(transactionManager, "UnauthorizedCaller");
+
+      await expect(
+        transactionManager.connect(stranger).completeTransfer(txnId1)
+      ).to.be.reverted;
+    });
   });
 });
-

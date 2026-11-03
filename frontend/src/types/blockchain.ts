@@ -15,9 +15,13 @@ export interface BlockchainTx {
   to: string
   contractAddress?: string
   value: string
-  fee: string
-  status: 'Confirmed' | 'Pending' | 'Failed'
+  fee?: string
+  gasUsed?: string
+  status: 'Confirmed' | 'Pending' | 'Failed' | 'Reverted'
   event: string
+  propertyId?: string
+  documentHash?: string
+  details?: string
   timestamp: string
 }
 
@@ -28,5 +32,17 @@ export interface BlockchainNetworkStatus {
   gasPriceGwei: number
   syncStatus: 'Synced' | 'Syncing' | 'Offline'
   nodeVersion: string
+  rpcUrl?: string
 }
 
+export interface BlockchainStats {
+  latestBlock: number
+  totalBlocks: number
+  totalTransactions: number
+  totalPropertiesAnchored: number
+  networkStatus: string
+  chainId: number
+  gasPriceGwei: number
+  networkName: string
+  contracts: Record<string, string>
+}

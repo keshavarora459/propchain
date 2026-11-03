@@ -72,18 +72,11 @@ def setup_middleware(app: FastAPI) -> None:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
-        allow_origin_regex=r"^https://.*(\.onrender\.com|\.vercel\.app)$",
+        allow_origin_regex=r"^(http://(localhost|127\.0\.0\.1)(:\d+)?|https://.*(\.onrender\.com|\.vercel\.app))$",
         allow_credentials=True,
-        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        allow_headers=[
-            "Content-Type",
-            "Authorization",
-            "Accept",
-            "X-Request-ID",
-            "X-Requested-With",
-        ],
-        expose_headers=["X-Request-ID", "X-Process-Time"],
+        allow_methods=["*"],
+        allow_headers=["*"],
+        expose_headers=["*"],
         max_age=600,
     )
     logger.info("Configured CORS allowed origins: %s", settings.cors_origins)
-

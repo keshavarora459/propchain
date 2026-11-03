@@ -8,9 +8,11 @@ import { Input } from '@/components/ui/Input'
 import { Button } from '@/components/ui/Button'
 import { userSettingsSchema, type UserSettingsFormData } from '@/schemas/settingsSchema'
 import { useWallet } from '@/context/WalletContext'
+import { useAuth } from '@/hooks/useAuth'
 
 export const SettingsPage: React.FC = () => {
   const { account } = useWallet()
+  const { user } = useAuth()
   const [saveSuccess, setSaveSuccess] = useState(false)
 
   const {
@@ -20,14 +22,14 @@ export const SettingsPage: React.FC = () => {
   } = useForm<UserSettingsFormData>({
     resolver: zodResolver(userSettingsSchema),
     defaultValues: {
-      fullName: 'Alexander Drake',
-      email: 'alex.drake@propchain.network',
-      organization: 'Department of Real Estate & Cryptographic Land Registry',
-      preferredWallet: account || '0x3A9E8b6e3f4211516eB70b138F9B6eFe715697F3',
+      fullName: user?.full_name || '',
+      email: user?.email || '',
+      organization: '',
+      preferredWallet: account || '',
       notifyOnTransactions: true,
       notifyOnFraudAlerts: true,
       notifyOnApprovals: true,
-      rpcEndpoint: 'http://127.0.0.1:8545',
+      rpcEndpoint: import.meta.env.VITE_BLOCKCHAIN_RPC_URL || 'http://127.0.0.1:8545',
     },
   })
 
@@ -106,7 +108,7 @@ export const SettingsPage: React.FC = () => {
             />
             <Input
               label="Designated Signing Wallet (0x...)"
-              placeholder="0x3A9E8b6e3f4211516eB70b138F9B6eFe715697F3"
+              placeholder="0x..."
               helperText="MetaMask or hardware wallet address for signing registrar approvals."
               error={errors.preferredWallet?.message}
               {...register('preferredWallet')}

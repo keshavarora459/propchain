@@ -17,7 +17,7 @@ import app.models
 from app.repositories.user_repository import user_repository
 from app.core.mongo import check_mongo_connection, hydrate_all_from_mongo
 
-DEFAULT_PASSWORD = "Password123!"
+DEFAULT_PASSWORD = os.getenv("DEMO_USER_PASSWORD", "Password123!")
 
 DEMO_ACCOUNTS = [
     {

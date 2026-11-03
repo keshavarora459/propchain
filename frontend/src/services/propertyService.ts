@@ -2,12 +2,12 @@ import apiClient from '@/lib/axios'
 import type { Property, PropertyFilter, PropertyListResponse } from '@/types/property'
 
 export function normalizeProperty(p: any): Property {
-  const propertyId = p.propertyId || p.property_number || p.id || 'PROP-00000'
-  const city = p.city || 'San Jose'
-  const state = p.state || 'California'
-  const address = p.address || p.street_address || `${city}, ${state}`
-  const currentOwner = p.currentOwner || p.owner_name || 'Registered Owner'
-  const ownerAddress = p.ownerAddress || p.owner_email || 'Verified Owner'
+  const propertyId = p.propertyId || p.property_number || p.id || ''
+  const city = p.city || ''
+  const state = p.state || ''
+  const address = p.address || p.street_address || (city && state ? `${city}, ${state}` : '')
+  const currentOwner = p.currentOwner || p.owner_name || ''
+  const ownerAddress = p.ownerAddress || p.owner_email || ''
   
   const rawStatus = (p.verification_status || p.verificationStatus || 'Pending').toString()
   const verificationStatus =
@@ -20,10 +20,10 @@ export function normalizeProperty(p: any): Property {
       : 'Pending'
 
   const registeredAt = p.registeredAt || p.created_at || new Date().toISOString()
-  const area = typeof p.area === 'number' ? p.area : Number(p.land_area) || 1200
+  const area = typeof p.area === 'number' ? p.area : Number(p.land_area) || 0
   const areaUnit = p.areaUnit || (p.area_unit === 'ACRE' ? 'acres' : (p.area_unit === 'SQ_M' ? 'sq m' : 'sq ft'))
   const valuation = typeof p.valuation === 'number' ? p.valuation : Number(p.valuation) || 0
-  const registrationReference = p.registrationReference || p.registration_number || p.ulpin || p.survey_number || 'REG-PENDING'
+  const registrationReference = p.registrationReference || p.registration_number || p.ulpin || p.survey_number || ''
   
   const rawType = (p.propertyType || p.property_type || 'Residential').toString()
   const propertyType = rawType.charAt(0).toUpperCase() + rawType.slice(1).toLowerCase()
@@ -31,13 +31,17 @@ export function normalizeProperty(p: any): Property {
   return {
     ...p,
     id: p.id,
-    title: p.title || 'Real Estate Property',
+
+
+
+    title: p.title || '',
+
     propertyId,
     propertyType,
     address,
     city,
     state,
-    postalCode: p.postalCode || p.postal_code || '95110',
+    postalCode: p.postalCode || p.postal_code || '',
     area,
     areaUnit,
     valuation,

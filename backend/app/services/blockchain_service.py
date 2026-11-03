@@ -29,7 +29,7 @@ class BlockchainService:
         # Hardhat account #0 default private key for local development
         self.deployer_private_key = os.getenv(
             "BLOCKCHAIN_DEPLOYER_PRIVATE_KEY",
-            "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
+            "",
         )
         try:
             self.deployer_account = self.w3.eth.account.from_key(self.deployer_private_key)
@@ -40,7 +40,14 @@ class BlockchainService:
 
     def _load_contracts(self):
         repo_root = Path(__file__).resolve().parent.parent.parent.parent
-        deployment_file = repo_root / "blockchain" / "deployments" / "localhost.json"
+        deployments_dir = repo_root / "blockchain" / "deployments"
+        chain_id = os.getenv("BLOCKCHAIN_CHAIN_ID", "31337")
+
+        deployment_file = (
+            deployments_dir / "sepolia.json"
+            if chain_id == "11155111" and (deployments_dir / "sepolia.json").is_file()
+            else deployments_dir / "localhost.json"
+        )
 
         self.property_registry = None
         self.ownership_registry = None

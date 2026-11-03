@@ -2,10 +2,17 @@ import apiClient from '@/lib/axios'
 import type { Transaction } from '@/types/transaction'
 
 export function normalizeTransaction(t: any): Transaction {
-  const transactionId = t.transactionId || t.transaction_number || t.id || 'TXN-0000'
-  const propertyTitle = t.propertyTitle || t.property_title || 'Real Estate Property'
-  const buyerName = t.buyerName || t.buyer_name || 'Buyer'
-  const sellerName = t.sellerName || t.seller_name || 'Seller'
+
+
+
+
+
+
+  const transactionId = t.transactionId || t.transaction_number || t.id || ''
+  const propertyTitle = t.propertyTitle || t.property_title || ''
+  const buyerName = t.buyerName || t.buyer_name || ''
+  const sellerName = t.sellerName || t.seller_name || ''
+
   const amount = typeof t.amount === 'number' ? t.amount : Number(t.proposed_amount) || 0
   const initiatedAt = t.initiatedAt || t.created_at || new Date().toISOString()
   const status = t.status || 'Pending'
@@ -17,11 +24,11 @@ export function normalizeTransaction(t: any): Transaction {
     propertyId: t.propertyId || t.property_id || '',
     propertyTitle,
     buyerName,
-    buyerWallet: t.buyerWallet || '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
+    buyerWallet: t.buyerWallet || t.buyer_wallet || t.buyer?.wallet_address || '',
     sellerName,
-    sellerWallet: t.sellerWallet || '0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC',
+    sellerWallet: t.sellerWallet || t.seller_wallet || t.seller?.wallet_address || '',
     amount,
-    currency: t.currency || 'INR',
+    currency: t.currency || 'ETH',
     status,
     type: t.type || t.transaction_type || 'Sale',
     escrowStatus: status === 'COMPLETED' ? 'Released' : 'Funded',

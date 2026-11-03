@@ -80,37 +80,56 @@ export const Sidebar: React.FC = () => {
   const roleMeta = getRoleBadge()
   const RoleIcon = roleMeta.icon
 
-  const renderNavLinks = () => (
-    <nav className="flex-1 space-y-1 px-3 py-4 overflow-y-auto">
-      {navItems.map((item: NavItem) => (
-        <NavLink
-          key={item.href}
-          to={item.href}
-          onClick={() => setMobileSidebarOpen(false)}
-          className={({ isActive }) =>
-            cn(
-              'flex items-center gap-3 rounded-lg px-3 py-2.5 text-xs font-medium transition-all group relative',
-              isActive
-                ? 'bg-slate-800 text-white shadow-xs font-semibold'
-                : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-200'
-            )
-          }
-          title={sidebarCollapsed ? item.title : undefined}
-        >
-          {getIcon(item.iconName)}
-          {!sidebarCollapsed && <span className="truncate">{item.title}</span>}
-          {!sidebarCollapsed && item.badge && (
-            <span className="ml-auto rounded-full bg-blue-600/30 text-blue-400 px-2 py-0.5 text-[10px] font-bold border border-blue-500/20">
-              {item.badge}
-            </span>
-          )}
-          {sidebarCollapsed && item.badge && (
-            <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-blue-500 ring-2 ring-slate-900" />
-          )}
-        </NavLink>
-      ))}
-    </nav>
-  )
+  const renderNavLinks = (isDrawer = false) => {
+    const isCollapsed = !isDrawer && sidebarCollapsed
+
+    return (
+      <nav className={cn('flex-1 space-y-1 overflow-y-auto', isCollapsed ? 'px-2 py-4' : 'px-3 py-4')}>
+        {navItems.map((item: NavItem) => (
+          <NavLink
+            key={item.href}
+            to={item.href}
+            onClick={() => setMobileSidebarOpen(false)}
+            className={({ isActive }) =>
+              cn(
+                'flex items-center rounded-lg text-xs font-medium transition-all group relative',
+                isCollapsed
+                  ? 'justify-center h-10 w-10 mx-auto'
+                  : 'gap-3 px-3 py-2.5',
+                isActive
+                  ? 'bg-slate-800 text-white shadow-xs font-semibold'
+                  : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-200'
+              )
+            }
+            title={item.title}
+          >
+            {getIcon(item.iconName)}
+            {!isCollapsed && <span className="truncate">{item.title}</span>}
+            {!isCollapsed && item.badge && (
+              <span className="ml-auto rounded-full bg-blue-600/30 text-blue-400 px-2 py-0.5 text-[10px] font-bold border border-blue-500/20">
+                {item.badge}
+              </span>
+            )}
+            {isCollapsed && item.badge && (
+              <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-blue-500 ring-2 ring-slate-900" />
+            )}
+
+            {/* Floating tooltip for collapsed mode */}
+            {isCollapsed && (
+              <div className="pointer-events-none absolute left-full ml-3 z-50 hidden rounded-md bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white shadow-xl border border-slate-700 whitespace-nowrap group-hover:flex items-center gap-2">
+                <span>{item.title}</span>
+                {item.badge && (
+                  <span className="rounded-full bg-blue-500/30 text-blue-300 px-1.5 py-0.2 text-[10px] font-bold border border-blue-400/20">
+                    {item.badge}
+                  </span>
+                )}
+              </div>
+            )}
+          </NavLink>
+        ))}
+      </nav>
+    )
+  }
 
   return (
     <>
@@ -157,7 +176,7 @@ export const Sidebar: React.FC = () => {
           </div>
         </div>
 
-        {renderNavLinks()}
+        {renderNavLinks(true)}
 
         <div className="border-t border-slate-800/80 p-4">
           <div className="rounded-lg bg-slate-900 p-3 text-xs text-slate-400">
@@ -167,39 +186,74 @@ export const Sidebar: React.FC = () => {
         </div>
       </div>
 
-      {/* Desktop Persistent Sidebar */}
+      {/* Desktop Persistent & Smoothly Collapsible Sidebar */}
       <aside
         className={cn(
-          'hidden md:flex flex-col border-r border-slate-800 bg-slate-950 text-white transition-all duration-300 shrink-0 sticky top-0 h-screen',
+          'hidden md:flex flex-col border-r border-slate-800 bg-slate-950 text-white shrink-0 sticky top-0 h-screen select-none transition-all duration-300 ease-in-out',
           sidebarCollapsed ? 'w-20' : 'w-64'
         )}
       >
         {/* Brand Header */}
-        <div className="flex h-16 items-center justify-between border-b border-slate-800/80 px-4">
-          <div className="flex items-center gap-2.5 overflow-hidden">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-600 text-white shadow-sm font-bold">
+        <div
+          className={cn(
+            'flex h-16 items-center border-b border-slate-800/80 transition-all duration-300',
+            sidebarCollapsed ? 'justify-center px-2' : 'justify-between px-4'
+          )}
+        >
+          {sidebarCollapsed ? (
+            <button
+              onClick={toggleSidebar}
+              className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 text-white shadow-md hover:bg-blue-500 transition-all cursor-pointer relative group"
+              title="Expand Sidebar"
+              aria-label="Expand Sidebar"
+            >
               <Shield className="h-5 w-5" />
-            </div>
-            {!sidebarCollapsed && (
-              <div className="truncate">
-                <span className="text-base font-bold tracking-tight text-white">PropChain</span>
-                <span className="block text-[10px] text-slate-400 font-mono tracking-widest uppercase">
-                  Enterprise EVM
-                </span>
+              <span className="absolute -bottom-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-slate-800 border border-slate-700 text-slate-300 shadow-xs">
+                <ChevronRight className="h-2.5 w-2.5" />
+              </span>
+            </button>
+          ) : (
+            <>
+              <div className="flex items-center gap-2.5 overflow-hidden">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-600 text-white shadow-sm font-bold">
+                  <Shield className="h-5 w-5" />
+                </div>
+                <div className="truncate">
+                  <span className="text-base font-bold tracking-tight text-white block">PropChain</span>
+                  <span className="block text-[10px] text-slate-400 font-mono tracking-widest uppercase">
+                    Enterprise EVM
+                  </span>
+                </div>
               </div>
-            )}
-          </div>
-          <button
-            onClick={toggleSidebar}
-            className="rounded-md p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white transition-colors cursor-pointer"
-            title={sidebarCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
-          >
-            {sidebarCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
-          </button>
+              <button
+                onClick={toggleSidebar}
+                className="rounded-md p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white transition-colors cursor-pointer shrink-0"
+                title="Collapse Sidebar"
+                aria-label="Collapse Sidebar"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+            </>
+          )}
         </div>
 
         {/* User Role Badge in Sidebar */}
-        {!sidebarCollapsed && (
+        {sidebarCollapsed ? (
+          <div className="px-2 pt-3 flex justify-center">
+            <div
+              className={cn(
+                'flex items-center justify-center h-10 w-10 rounded-lg border cursor-default group relative',
+                roleMeta.color
+              )}
+              title={`Current Role: ${roleMeta.label}`}
+            >
+              <RoleIcon className="h-5 w-5 shrink-0" />
+              <div className="pointer-events-none absolute left-full ml-3 z-50 hidden rounded-md bg-slate-900 px-2.5 py-1 text-xs font-semibold text-white shadow-xl border border-slate-700 whitespace-nowrap group-hover:block">
+                Role: {roleMeta.label}
+              </div>
+            </div>
+          </div>
+        ) : (
           <div className="px-3 pt-3">
             <div className={cn('flex items-center gap-2 px-2.5 py-1.5 rounded-lg border text-xs font-medium', roleMeta.color)}>
               <RoleIcon className="h-4 w-4 shrink-0" />
@@ -212,23 +266,31 @@ export const Sidebar: React.FC = () => {
         )}
 
         {/* Navigation Items */}
-        {renderNavLinks()}
+        {renderNavLinks(false)}
 
         {/* Network & Environment Footer */}
         <div className="border-t border-slate-800/80 p-3">
-          <div className={cn('rounded-lg bg-slate-900 text-xs text-slate-400', sidebarCollapsed ? 'p-2 text-center' : 'p-3')}>
-            {!sidebarCollapsed ? (
-              <>
-                <p className="font-semibold text-slate-200 text-xs">EVM Local Node</p>
-                <div className="flex items-center justify-between mt-1 text-[11px] font-mono text-emerald-400">
-                  <span>Chain: 31337</span>
-                  <span>Synced</span>
+          {sidebarCollapsed ? (
+            <div className="flex justify-center">
+              <div
+                className="h-8 w-8 rounded-lg bg-slate-900 flex items-center justify-center cursor-default group relative"
+                title="EVM Hardhat Node (Chain 31337) - Synced"
+              >
+                <div className="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                <div className="pointer-events-none absolute left-full ml-3 z-50 hidden rounded-md bg-slate-900 px-3 py-1.5 text-[11px] font-medium text-emerald-400 shadow-xl border border-slate-700 whitespace-nowrap group-hover:block">
+                  EVM Node: 31337 (Synced)
                 </div>
-              </>
-            ) : (
-              <div className="h-2 w-2 mx-auto rounded-full bg-emerald-500" title="EVM Node 31337 Online" />
-            )}
-          </div>
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-lg bg-slate-900 p-3 text-xs text-slate-400">
+              <p className="font-semibold text-slate-200 text-xs">EVM Local Node</p>
+              <div className="flex items-center justify-between mt-1 text-[11px] font-mono text-emerald-400">
+                <span>Chain: 31337</span>
+                <span>Synced</span>
+              </div>
+            </div>
+          )}
         </div>
       </aside>
     </>

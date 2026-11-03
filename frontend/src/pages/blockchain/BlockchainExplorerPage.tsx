@@ -15,6 +15,8 @@ import {
   AlertTriangle,
   Layers,
   FileCheck2,
+  Activity,
+  Flame,
 } from 'lucide-react'
 import { PageHeader } from '@/components/common/PageHeader'
 import { StatusBadge } from '@/components/common/StatusBadge'
@@ -28,6 +30,8 @@ import {
   OWNERSHIP_REGISTRY_ABI,
   TRANSACTION_MANAGER_ABI,
 } from '@/contracts/contractConfig'
+import { blockchainService } from '@/services/blockchainService'
+import type { BlockchainStats } from '@/types/blockchain'
 
 export interface RealBlock {
   blockNumber: number
@@ -73,7 +77,8 @@ function getAddressLabel(address?: string | null): string {
   if (addr === CONTRACT_ADDRESSES.TRANSACTION_MANAGER.toLowerCase()) {
     return 'TransactionManager (Contract)'
   }
-  if (addr === '0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266') {
+  const deployerAddr = (import.meta.env.VITE_BLOCKCHAIN_DEPLOYER_ADDRESS || '').toLowerCase()
+  if (deployerAddr && addr === deployerAddr) {
     return 'Hardhat Deployer / Admin'
   }
   return truncateHash(address, 6, 4)
@@ -105,6 +110,7 @@ export const BlockchainExplorerPage: React.FC = () => {
 
   const [blocks, setBlocks] = useState<RealBlock[]>([])
   const [transactions, setTransactions] = useState<RealTx[]>([])
+  const [stats, setStats] = useState<BlockchainStats | null>(null)
   const [networkInfo, setNetworkInfo] = useState({
     name: 'Hardhat EVM Localhost',
     chainId: 31337,
@@ -115,6 +121,82 @@ export const BlockchainExplorerPage: React.FC = () => {
 
   const loadBlockchainData = useCallback(async () => {
     setIsLoading(true)
+    let connected = false
+
+    // 1. Primary: Load via authenticated backend API (bypasses browser CORS & PNA restrictions)
+    try {
+      const [statusRes, blocksRes, txsRes, statsRes] = await Promise.allSettled([
+        blockchainService.getNetworkStatus(),
+        blockchainService.getLatestBlocks(25),
+        blockchainService.getRecentTransactions(25),
+        blockchainService.getStats(),
+      ])
+
+      if (statusRes.status === 'fulfilled' && statusRes.value) {
+        const s = statusRes.value
+        if (s.syncStatus !== 'Offline') {
+          connected = true
+          setNetworkInfo({
+            name: s.networkName || 'Hardhat EVM Localhost',
+            chainId: s.chainId || 31337,
+            latestBlock: s.latestBlock || 0,
+            status: 'Connected',
+            rpcUrl: s.rpcUrl || RPC_URL,
+          })
+        }
+      }
+
+      if (statsRes.status === 'fulfilled' && statsRes.value) {
+        setStats(statsRes.value)
+      }
+
+      const fetchedBlocks: RealBlock[] = []
+      const fetchedTxs: RealTx[] = []
+
+      if (blocksRes.status === 'fulfilled' && Array.isArray(blocksRes.value)) {
+        for (const b of blocksRes.value) {
+          fetchedBlocks.push({
+            blockNumber: b.blockNumber,
+            hash: b.hash,
+            parentHash: b.parentHash,
+            timestamp: b.timestamp,
+            transactionsCount: b.transactionsCount,
+            gasUsed: b.gasUsed,
+            miner: b.miner,
+          })
+        }
+      }
+
+      if (txsRes.status === 'fulfilled' && Array.isArray(txsRes.value)) {
+        for (const t of txsRes.value) {
+          fetchedTxs.push({
+            hash: t.hash,
+            blockNumber: t.blockNumber,
+            from: t.from,
+            to: t.to,
+            event: t.event,
+            propertyId: t.propertyId,
+            documentHash: t.documentHash,
+            value: t.value || '0.0 ETH',
+            gasUsed: t.gasUsed || '21,000 gas',
+            status: (t.status === 'Reverted' ? 'Reverted' : 'Confirmed') as 'Confirmed' | 'Reverted',
+            timestamp: t.timestamp,
+            details: t.details,
+          })
+        }
+      }
+
+      if (connected) {
+        setBlocks(fetchedBlocks)
+        setTransactions(fetchedTxs)
+        setIsLoading(false)
+        return
+      }
+    } catch (apiErr) {
+      console.warn('Backend blockchain API retrieval notice:', apiErr)
+    }
+
+    // 2. Direct RPC Fallback (used when direct client connection is available)
     try {
       const provider = new ethers.JsonRpcProvider(RPC_URL)
       const currentBlockNum = await provider.getBlockNumber()
@@ -131,7 +213,6 @@ export const BlockchainExplorerPage: React.FC = () => {
       const fetchedBlocks: RealBlock[] = []
       const fetchedTxs: RealTx[] = []
 
-      // Fetch the last up to 25 blocks (from latest down to 0)
       const startBlock = currentBlockNum
       const endBlock = Math.max(0, currentBlockNum - 24)
 
@@ -151,7 +232,6 @@ export const BlockchainExplorerPage: React.FC = () => {
               miner: block.miner,
             })
 
-            // Extract real transactions from prefetched transactions or query hashes
             const rawTxs: any[] = []
             if (block.prefetchedTransactions && block.prefetchedTransactions.length > 0) {
               rawTxs.push(...block.prefetchedTransactions)
@@ -197,7 +277,6 @@ export const BlockchainExplorerPage: React.FC = () => {
                       }
                     }
                   } else {
-                    // 1. Decode calldata if available
                     if (tx.data && tx.data !== '0x') {
                       try {
                         const propTx = propertyRegistryInterface.parseTransaction({ data: tx.data, value: tx.value })
@@ -229,58 +308,12 @@ export const BlockchainExplorerPage: React.FC = () => {
                           }
                         }
                       } catch {}
-                    }
-
-                    // 2. Decode receipt logs
-                    for (const log of receipt.logs) {
-                      try {
-                        const parsedProp = propertyRegistryInterface.parseLog(log)
-                        if (parsedProp) {
-                          if (parsedProp.name === 'PropertyRegistered') {
-                            eventName = 'Property Registered'
-                            if (!propertyId && typeof parsedProp.args.propertyId === 'string') {
-                              propertyId = parsedProp.args.propertyId
-                            }
-                            if (!documentHash && parsedProp.args.documentHash) {
-                              documentHash = parsedProp.args.documentHash
-                            }
-                            if (propertyId) details = `Property ${propertyId} anchored on-chain`
-                            break
-                          } else if (parsedProp.name === 'PropertyDocumentUpdated') {
-                            eventName = 'Document Updated'
-                            break
-                          }
-                        }
-                      } catch {}
 
                       try {
-                        const parsedOwn = ownershipRegistryInterface.parseLog(log)
-                        if (parsedOwn) {
-                          if (parsedOwn.name === 'InitialOwnershipRecorded') {
-                            eventName = 'Genesis Ownership Recorded'
-                            if (!propertyId && typeof parsedOwn.args.propertyId === 'string') {
-                              propertyId = parsedOwn.args.propertyId
-                            }
-                            break
-                          } else if (parsedOwn.name === 'OwnershipTransferred') {
-                            eventName = 'Ownership Transferred'
-                            if (!propertyId && typeof parsedOwn.args.propertyId === 'string') {
-                              propertyId = parsedOwn.args.propertyId
-                            }
-                            break
-                          }
-                        }
-                      } catch {}
-
-                      try {
-                        const parsedTx = transactionManagerInterface.parseLog(log)
-                        if (parsedTx) {
-                          if (parsedTx.name === 'TransactionCompleted') {
-                            eventName = 'Conveyance Completed'
-                            propertyId = parsedTx.args.propertyId
-                            details = `Escrow ${parsedTx.args.transactionId} settled`
-                            break
-                          }
+                        const tmTx = transactionManagerInterface.parseTransaction({ data: tx.data, value: tx.value })
+                        if (tmTx) {
+                          eventName = 'Conveyance Escrow Execution'
+                          details = `Transaction ${tmTx.args?.transactionId ?? ''} settled on-chain`
                         }
                       } catch {}
                     }
@@ -315,12 +348,14 @@ export const BlockchainExplorerPage: React.FC = () => {
       setTransactions(fetchedTxs)
     } catch (err) {
       console.error('Failed to connect to local blockchain RPC:', err)
-      setNetworkInfo((prev) => ({
-        ...prev,
-        status: 'Offline / Standby',
-      }))
-      setBlocks([])
-      setTransactions([])
+      if (!connected) {
+        setNetworkInfo((prev) => ({
+          ...prev,
+          status: 'Offline / Standby',
+        }))
+        setBlocks([])
+        setTransactions([])
+      }
     } finally {
       setIsLoading(false)
     }
@@ -379,10 +414,24 @@ export const BlockchainExplorerPage: React.FC = () => {
     }
 
     setIsSearching(true)
+
+    // 1. Backend Search Lookup
+    try {
+      const backendRes = await blockchainService.search(rawQuery)
+      if (backendRes && backendRes.type && backendRes.type !== 'not_found') {
+        setSearchResult(backendRes)
+        setIsSearching(false)
+        return
+      }
+    } catch (bErr) {
+      console.warn('Backend search check notice:', bErr)
+    }
+
+    // 2. Direct RPC Search Lookup
     try {
       const provider = new ethers.JsonRpcProvider(RPC_URL)
 
-      // 1. Check if number (block height)
+      // 2a. Block height
       if (/^\d+$/.test(rawQuery)) {
         const blockNum = parseInt(rawQuery, 10)
         const block = await provider.getBlock(blockNum, true)
@@ -400,16 +449,18 @@ export const BlockchainExplorerPage: React.FC = () => {
               transactions: block.transactions,
             },
           })
+          setIsSearching(false)
           return
         }
       }
 
-      // 2. Check if 64-char or 66-char Hex (documentHash, txHash, or blockHash)
+      // 2b. Hex Query (64 or 66 chars)
       const is64Hex = /^[0-9a-fA-F]{64}$/.test(rawQuery)
       const is66Hex = /^0x[0-9a-fA-F]{64}$/.test(rawQuery)
 
       if (is64Hex || is66Hex) {
         const normalizedHex = is64Hex ? `0x${rawQuery}` : rawQuery
+
 
         // 2a. Check if it matches a documentHash in on-chain PropertyRegistered events
         try {
@@ -463,19 +514,29 @@ export const BlockchainExplorerPage: React.FC = () => {
         }
 
         // 2b. Check if it matches a transaction in loaded ledger
+
+
+
         const localDocTx = transactions.find(
-          (t) => t.documentHash && t.documentHash.toLowerCase() === normalizedHex.toLowerCase()
+          (t) =>
+            t.hash.toLowerCase() === normalizedHex.toLowerCase() ||
+            (t.documentHash && t.documentHash.toLowerCase() === normalizedHex.toLowerCase())
         )
         if (localDocTx) {
+
           applyScopingAndSetResult({ type: 'transaction', data: localDocTx })
+
+
+          setIsSearching(false)
+
           return
         }
 
-        // 2c. Check if it is a Transaction Hash
         try {
           const tx = await provider.getTransaction(normalizedHex)
           if (tx) {
             const receipt = await provider.getTransactionReceipt(normalizedHex)
+
             let eventName = tx.to ? 'Smart Contract Call' : 'Contract Deployment'
             let propertyId: string | undefined = undefined
             let documentHash: string | undefined = undefined
@@ -506,6 +567,9 @@ export const BlockchainExplorerPage: React.FC = () => {
             }
 
             applyScopingAndSetResult({
+
+
+
               type: 'transaction',
               data: {
                 hash: tx.hash,
@@ -521,6 +585,7 @@ export const BlockchainExplorerPage: React.FC = () => {
                 status: receipt ? (receipt.status === 1 ? 'Confirmed' : 'Reverted') : 'Confirmed',
               },
             })
+
             return
           }
         } catch {}
@@ -542,12 +607,15 @@ export const BlockchainExplorerPage: React.FC = () => {
                 transactions: block.transactions,
               },
             })
+
+            setIsSearching(false)
+
             return
           }
         } catch {}
       }
 
-      // 3. Check if Ethereum Address (Wallet or Contract)
+      // 2c. Address query
       if (ethers.isAddress(rawQuery)) {
         try {
           const code = await provider.getCode(rawQuery)
@@ -563,7 +631,7 @@ export const BlockchainExplorerPage: React.FC = () => {
             label = 'OwnershipRegistry (PropChain Smart Contract)'
           } else if (lower === CONTRACT_ADDRESSES.TRANSACTION_MANAGER.toLowerCase()) {
             label = 'TransactionManager (PropChain Smart Contract)'
-          } else if (lower === '0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266') {
+          } else if (lower === (import.meta.env.VITE_BLOCKCHAIN_DEPLOYER_ADDRESS || '').toLowerCase()) {
             label = 'Hardhat Genesis Deployer / Platform Authority'
           }
 
@@ -582,15 +650,19 @@ export const BlockchainExplorerPage: React.FC = () => {
               matchingTxsCount: matchingTxs.length,
             },
           })
+          setIsSearching(false)
           return
         } catch {}
       }
 
-      // 4. Check for Property ID match (PROP-...)
+      // 2d. Property ID or hash in local lists
       const propTx = transactions.find(
-        (t) => t.propertyId && t.propertyId.toLowerCase() === rawQuery.toLowerCase()
+        (t) =>
+          (t.propertyId && t.propertyId.toLowerCase() === rawQuery.toLowerCase()) ||
+          t.hash.toLowerCase() === rawQuery.toLowerCase()
       )
       if (propTx) {
+
         applyScopingAndSetResult({ type: 'transaction', data: propTx })
         return
       }
@@ -599,6 +671,10 @@ export const BlockchainExplorerPage: React.FC = () => {
       const localTx = transactions.find((t) => t.hash.toLowerCase() === rawQuery.toLowerCase())
       if (localTx) {
         applyScopingAndSetResult({ type: 'transaction', data: localTx })
+
+
+        setIsSearching(false)
+
         return
       }
 
@@ -606,7 +682,12 @@ export const BlockchainExplorerPage: React.FC = () => {
         (b) => String(b.blockNumber) === rawQuery || b.hash.toLowerCase() === rawQuery.toLowerCase()
       )
       if (localBlock) {
+
         applyScopingAndSetResult({ type: 'block', data: localBlock })
+
+
+        setIsSearching(false)
+
         return
       }
 
@@ -660,13 +741,75 @@ export const BlockchainExplorerPage: React.FC = () => {
         <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 text-xs text-amber-200 flex items-start gap-3">
           <AlertTriangle className="h-5 w-5 text-amber-400 shrink-0 mt-0.5" />
           <div className="space-y-1">
-            <p className="font-semibold text-amber-100">Blockchain Node Unreachable ({RPC_URL})</p>
+            <p className="font-semibold text-amber-100">Blockchain Node Unreachable ({networkInfo.rpcUrl})</p>
             <p className="text-amber-300/80">
               Ensure your Hardhat local node is running (<code className="bg-amber-950/60 px-1 py-0.5 rounded font-mono">npx hardhat node</code> in <code className="bg-amber-950/60 px-1 py-0.5 rounded font-mono">blockchain/</code>). Then click <strong>Refresh Ledger</strong>.
             </p>
           </div>
         </div>
       )}
+
+      {/* Blockchain Statistics Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card className="bg-white border-slate-200 shadow-xs">
+          <CardContent className="p-4 flex items-center justify-between">
+            <div>
+              <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">Network Status</p>
+              <div className="flex items-center gap-2 mt-1">
+                <span className={`h-2.5 w-2.5 rounded-full ${isConnected ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`} />
+                <span className="text-base font-bold text-slate-900">{isConnected ? 'Online & Synced' : 'Offline'}</span>
+              </div>
+              <p className="text-[10px] font-mono text-slate-400 mt-0.5">{networkInfo.name} (Chain #{networkInfo.chainId})</p>
+            </div>
+            <div className={`p-2.5 rounded-xl ${isConnected ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
+              <Activity className="h-5 w-5" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-white border-slate-200 shadow-xs">
+          <CardContent className="p-4 flex items-center justify-between">
+            <div>
+              <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">Latest Block Height</p>
+              <p className="text-xl font-bold font-mono text-blue-600 mt-1">#{networkInfo.latestBlock}</p>
+              <p className="text-[10px] text-slate-400 mt-0.5">{blocks.length} Verified blocks indexed</p>
+            </div>
+            <div className="p-2.5 rounded-xl bg-blue-50 text-blue-600">
+              <Blocks className="h-5 w-5" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-white border-slate-200 shadow-xs">
+          <CardContent className="p-4 flex items-center justify-between">
+            <div>
+              <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">Consensus Transactions</p>
+              <p className="text-xl font-bold font-mono text-indigo-600 mt-1">
+                {stats?.totalTransactions ?? transactions.length}
+              </p>
+              <p className="text-[10px] text-slate-400 mt-0.5">On-chain state transitions</p>
+            </div>
+            <div className="p-2.5 rounded-xl bg-indigo-50 text-indigo-600">
+              <Cpu className="h-5 w-5" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-white border-slate-200 shadow-xs">
+          <CardContent className="p-4 flex items-center justify-between">
+            <div>
+              <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">Gas Price / Fee</p>
+              <p className="text-xl font-bold font-mono text-amber-600 mt-1">
+                {stats?.gasPriceGwei ?? 0.5} <span className="text-xs font-normal text-slate-500">Gwei</span>
+              </p>
+              <p className="text-[10px] text-slate-400 mt-0.5">Automated gas estimation</p>
+            </div>
+            <div className="p-2.5 rounded-xl bg-amber-50 text-amber-600">
+              <Flame className="h-5 w-5" />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Hero Search Bar */}
       <Card className="bg-slate-950 text-white border-slate-800">
@@ -882,6 +1025,7 @@ export const BlockchainExplorerPage: React.FC = () => {
                 <div
                   key={blk.hash}
                   onClick={() =>
+        
                     setSearchResult({
                       type: 'block',
                       data: blk,
@@ -946,6 +1090,7 @@ export const BlockchainExplorerPage: React.FC = () => {
                 <div
                   key={tx.hash}
                   onClick={() =>
+        
                     setSearchResult({
                       type: 'transaction',
                       data: tx,

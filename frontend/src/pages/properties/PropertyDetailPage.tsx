@@ -341,6 +341,7 @@ export const PropertyDetailPage: React.FC = () => {
                           <p className="text-xs font-semibold text-slate-800 truncate">
                             {doc.document_type || doc.title || 'Title Document'}
                           </p>
+
                           <div className="pt-0.5">
                             <HashDisplay
                               value={doc.file_hash || (doc as any).document_hash}
@@ -349,6 +350,11 @@ export const PropertyDetailPage: React.FC = () => {
                               className="text-[10px] py-0 px-1.5"
                             />
                           </div>
+
+
+
+
+
                         </div>
                       </div>
                       <div className="flex items-center space-x-3 shrink-0">
@@ -396,7 +402,7 @@ export const PropertyDetailPage: React.FC = () => {
               <div>
                 <span className="text-slate-400 block text-[11px]">Owner Address / Email</span>
                 <p className="font-mono text-slate-700 break-all bg-slate-50 p-2 rounded border border-slate-100 text-[11px] mt-0.5">
-                  {property.ownerAddress || '0x0000000000000000000000000000000000000000'}
+                  {property.ownerAddress || 'Unassigned'}
                 </p>
               </div>
 

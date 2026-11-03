@@ -59,7 +59,7 @@ export const RegisterPropertyModal: React.FC<RegisterPropertyModalProps> = ({
         description: data.description || `${data.title} located at ${data.address}, ${data.city}`,
         property_type: typeUpper,
         property_category: category,
-        country: 'United States',
+        country: (data as any).country || import.meta.env.VITE_DEFAULT_COUNTRY || '',
         state: data.state,
         city: data.city,
         street_address: data.address,

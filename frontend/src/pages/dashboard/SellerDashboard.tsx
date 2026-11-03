@@ -11,6 +11,7 @@ import {
   FileText,
   UploadCloud,
   RefreshCw,
+  ExternalLink,
 } from 'lucide-react'
 import { PageHeader } from '@/components/common/PageHeader'
 import { StatCard } from '@/components/common/StatCard'
@@ -20,7 +21,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@
 import { Button } from '@/components/ui/Button'
 import { Tabs } from '@/components/ui/Tabs'
 import { RegisterPropertyModal } from '@/pages/properties/RegisterPropertyModal'
-import { formatCurrency, formatDate, getPropertyLabel } from '@/lib/utils'
+import { formatCurrency, formatDate, getPropertyLabel, truncateHash } from '@/lib/utils'
 import { HashDisplay } from '@/components/common/HashDisplay'
 import type { SellerDashboardData, SellerProperty, SellerOffer, SellerDocument } from '@/types/seller'
 import { useAuth } from '@/hooks/useAuth'
@@ -50,10 +51,18 @@ export const SellerDashboard: React.FC = () => {
     loadSellerData()
   }, [])
 
+
   const sellerMetrics = dashboardData?.seller_metrics
   const myProperties: SellerProperty[] = sellerMetrics?.my_properties || []
   const receivedOffers: SellerOffer[] = sellerMetrics?.received_offers || []
   const myDocuments: SellerDocument[] = sellerMetrics?.my_documents || []
+
+
+
+
+
+  const blockchainEvents = (dashboardData?.seller_metrics as any)?.blockchain_events || (dashboardData as any)?.recent_events || []
+
 
   const pendingOffers = receivedOffers.filter((o: SellerOffer) =>
     o.status === 'INITIATED' || o.status === 'PENDING_SELLER_ACCEPTANCE' || o.status === 'OFFER_MADE'
@@ -596,54 +605,121 @@ export const SellerDashboard: React.FC = () => {
 
       {/* Tab 8: Wallet & Blockchain */}
       {activeTab === 'blockchain' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Wallet className="h-5 w-5 text-emerald-600" />
-                Seller Escrow Payout Wallet
-              </CardTitle>
-              <CardDescription>Address authorized to receive released purchase funds upon transaction settlement.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3 text-xs">
-              <div className="p-4 rounded-xl border border-slate-200 bg-slate-50 space-y-2">
-                <div className="flex justify-between">
-                  <span className="text-slate-500">Payout Network</span>
-                  <span className="font-mono font-semibold text-slate-900">EVM Hardhat Node (31337)</span>
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Wallet className="h-5 w-5 text-emerald-600" />
+                  Seller Escrow Payout Wallet
+                </CardTitle>
+                <CardDescription>Address authorized to receive released purchase funds upon transaction settlement.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3 text-xs">
+                <div className="p-4 rounded-xl border border-slate-200 bg-slate-50 space-y-2">
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Payout Network</span>
+                    <span className="font-mono font-semibold text-slate-900">EVM Hardhat Node (31337)</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Settlement Currency</span>
+                    <span className="font-semibold text-slate-900">USDC / Native ETH</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Escrow Security</span>
+                    <span className="text-emerald-600 font-semibold">Multi-sig Consensus Guaranteed</span>
+                  </div>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-500">Settlement Currency</span>
-                  <span className="font-semibold text-slate-900">USDC / Native ETH</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-500">Escrow Security</span>
-                  <span className="text-emerald-600 font-semibold">Multi-sig Consensus Guaranteed</span>
-                </div>
-              </div>
-              <p className="text-slate-500 leading-relaxed">
-                When the Legal Authority registers the deed, the smart contract automatically settles buyer escrow and transfers funds directly to your wallet.
-              </p>
-            </CardContent>
-          </Card>
+                <p className="text-slate-500 leading-relaxed">
+                  When the Legal Authority registers the deed, the smart contract automatically settles buyer escrow and transfers funds directly to your wallet.
+                </p>
+              </CardContent>
+            </Card>
 
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Cpu className="h-5 w-5 text-indigo-600" />
+                  Consensus Events Ledger
+                </CardTitle>
+                <CardDescription>On-chain ownership records anchored for your real estate holdings.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3 text-xs">
+                <p className="text-slate-600">
+                  All property tokens and title hashes registered by your account are permanently etched onto the local EVM blockchain.
+                </p>
+                <Link to="/blockchain-explorer">
+                  <Button variant="outline" size="sm" className="w-full gap-1.5 mt-2">
+                    <Cpu className="h-4 w-4" />
+                    Open Decentralized Ledger Explorer
+                  </Button>
+                </Link>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* On-Chain Consensus Events Table */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Cpu className="h-5 w-5 text-indigo-600" />
-                Consensus Events Ledger
-              </CardTitle>
-              <CardDescription>On-chain ownership records anchored for your real estate holdings.</CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <Cpu className="h-5 w-5 text-indigo-600" />
+                    Consensus Ledger & Ownership Deeds
+                  </CardTitle>
+                  <CardDescription>
+                    Immutable on-chain verification events and transaction digests logged on EVM node 31337.
+                  </CardDescription>
+                </div>
+                <Link to="/blockchain-explorer">
+                  <Button size="sm" variant="outline" className="gap-1 text-xs">
+                    Full Blockchain Explorer <ExternalLink className="h-3.5 w-3.5" />
+                  </Button>
+                </Link>
+              </div>
             </CardHeader>
-            <CardContent className="space-y-3 text-xs">
-              <p className="text-slate-600">
-                All property tokens and title hashes registered by your account are permanently etched onto the local EVM blockchain.
-              </p>
-              <Link to="/blockchain-explorer">
-                <Button variant="outline" size="sm" className="w-full gap-1.5 mt-2">
-                  <Cpu className="h-4 w-4" />
-                  View Blockchain Explorer
-                </Button>
-              </Link>
+            <CardContent className="p-0">
+              {blockchainEvents.length === 0 ? (
+                <div className="p-8 text-center text-xs text-slate-400">
+                  <Cpu className="h-8 w-8 mx-auto text-slate-300 mb-2" />
+                  <p>No recent blockchain events recorded yet.</p>
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Event</TableHead>
+                      <TableHead>Property</TableHead>
+                      <TableHead>Transaction Hash</TableHead>
+                      <TableHead>Block Height</TableHead>
+                      <TableHead>Timestamp</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {blockchainEvents.map((ev: any) => (
+                      <TableRow key={ev.id}>
+                        <TableCell>
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-mono font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                            {ev.event_type}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-xs font-medium text-slate-900">
+                          {ev.property_title || ev.property_number || 'Parcel'}
+                        </TableCell>
+                        <TableCell className="font-mono text-xs text-blue-600">
+                          {truncateHash(ev.tx_hash)}
+                        </TableCell>
+                        <TableCell className="font-mono text-xs text-slate-600">
+                          #{ev.block_number || 1}
+                        </TableCell>
+                        <TableCell className="text-xs text-slate-500">
+                          {formatDate(ev.created_at)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
             </CardContent>
           </Card>
         </div>

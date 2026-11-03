@@ -21,6 +21,8 @@ import { truncateHash } from '@/lib/utils'
 
 export const Header: React.FC = () => {
   const {
+    sidebarCollapsed,
+    toggleSidebar,
     setMobileSidebarOpen,
     notificationsCount,
     clearNotifications,
@@ -102,6 +104,16 @@ export const Header: React.FC = () => {
           <Menu className="h-5 w-5" />
         </button>
 
+        {/* Desktop sidebar toggle trigger */}
+        <button
+          onClick={toggleSidebar}
+          className="hidden md:flex items-center justify-center rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition-colors cursor-pointer shrink-0"
+          aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        >
+          <Menu className="h-5 w-5" />
+        </button>
+
         <div className="relative w-full hidden sm:block">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <input
@@ -128,13 +140,23 @@ export const Header: React.FC = () => {
                 {truncateHash(account, 6, 4)}
               </span>
 
+              <span
+                className={`text-[10px] font-mono px-1.5 py-0.5 rounded font-medium ${
+                  chainId === 11155111
+                    ? 'bg-purple-100 text-purple-800 border border-purple-200'
+                    : 'bg-slate-200 text-slate-700'
+                }`}
+              >
+                {chainId === 11155111 ? 'Sepolia' : chainId === 31337 ? 'Localhost' : `Chain #${chainId || '?'}`}
+              </span>
+
               {chainId && chainId !== targetChainId && (
                 <button
                   onClick={() => switchNetwork(targetChainId)}
                   className="ml-1 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800 hover:bg-amber-200 transition-colors cursor-pointer"
-                  title={`Switch to network ${targetChainId}`}
+                  title={`Switch to ${targetChainId === 11155111 ? 'Sepolia' : 'Local'}`}
                 >
-                  Switch Net
+                  Switch to {targetChainId === 11155111 ? 'Sepolia' : 'Local'}
                 </button>
               )}
 

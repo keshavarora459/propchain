@@ -194,6 +194,33 @@ def get_dashboard_metrics(
     total_volume_sum = db.scalar(vol_stmt)
     total_volume = float(total_volume_sum) if total_volume_sum else 0.0
 
+    recent_events_stmt = (
+        select(OwnershipEvent)
+        .options(
+            joinedload(OwnershipEvent.property),
+            joinedload(OwnershipEvent.previous_owner),
+            joinedload(OwnershipEvent.new_owner),
+        )
+        .order_by(OwnershipEvent.created_at.desc())
+        .limit(20)
+    )
+    db_events = list(db.scalars(recent_events_stmt).unique().all())
+    formatted_events = [
+        {
+            "id": str(e.id),
+            "event_type": e.event_type,
+            "property_id": str(e.property_id),
+            "property_title": e.property.title if e.property else "Real Estate Parcel",
+            "property_number": e.property.property_number if e.property else "PROP",
+            "tx_hash": e.blockchain_tx_hash or "",
+            "block_number": e.block_number or 1,
+            "previous_owner_address": e.previous_owner_address,
+            "new_owner_address": e.new_owner_address,
+            "created_at": e.created_at.isoformat() if e.created_at else None,
+        }
+        for e in db_events
+    ]
+
     payload: Dict[str, Any] = {
         "user_role": user_role,
         "total_properties": total_props,
@@ -205,6 +232,7 @@ def get_dashboard_metrics(
         "pending_purchase_requests": pending_purchase_requests,
         "total_transaction_volume": total_volume,
         "recent_transactions": formatted_txs,
+        "recent_events": formatted_events,
     }
 
     # Role-tailored metrics
@@ -356,7 +384,11 @@ def get_dashboard_metrics(
                 }
                 for t in seller_txs
             ],
+
             "my_documents": formatted_docs,
+
+            "blockchain_events": formatted_events,
+
         }
 
     elif user_role == UserRole.VERIFIER.value:

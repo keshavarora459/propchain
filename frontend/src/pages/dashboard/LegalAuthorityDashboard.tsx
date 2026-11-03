@@ -21,6 +21,7 @@ import { Tabs } from '@/components/ui/Tabs'
 import { formatCurrency, formatDate, getPropertyLabel } from '@/lib/utils'
 import { useAuth } from '@/hooks/useAuth'
 import apiClient from '@/lib/axios'
+import { CONTRACT_ADDRESSES } from '@/contracts/contractConfig'
 
 interface LegalConfirmationFormData {
   deed_number: string
@@ -417,7 +418,7 @@ export const LegalAuthorityDashboard: React.FC = () => {
             </div>
           </CardHeader>
           <CardContent className="p-6 text-center text-xs text-slate-500">
-            <p>Every legally confirmed transaction permanently transfers smart contract ownership on EVM contract 0x5FbDB2315678afecb367f032d93F642f64180aa3.</p>
+            <p>Every legally confirmed transaction permanently transfers smart contract ownership on EVM contract {CONTRACT_ADDRESSES.PROPERTY_REGISTRY}.</p>
             <Link to="/ownership" className="inline-block mt-3">
               <Button size="sm">Go to Ownership Registry</Button>
             </Link>

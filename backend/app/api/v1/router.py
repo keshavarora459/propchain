@@ -8,6 +8,7 @@ from app.api.v1.endpoints import (
     analytics,
     approvals,
     auth,
+    blockchain,
     documents,
     health,
     ownership,
@@ -18,6 +19,12 @@ from app.api.v1.endpoints import (
 )
 
 api_v1_router = APIRouter()
+
+# Mount blockchain telemetry & decentralized ledger router
+api_v1_router.include_router(
+    blockchain.router,
+    tags=["Blockchain"],
+)
 
 # Mount analytics router
 api_v1_router.include_router(

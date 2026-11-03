@@ -432,8 +432,8 @@ class TransactionService:
             select(UserWallet).where(UserWallet.user_id == txn.buyer_id, UserWallet.is_verified == True)
         ).first()
 
-        prev_addr = seller_wallet.wallet_address if seller_wallet else "0x70997970C51812dc3A010C7d01b50e0d17dc79C8"
-        new_addr = buyer_wallet.wallet_address if buyer_wallet else "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC"
+        prev_addr = seller_wallet.wallet_address if seller_wallet else os.getenv("DEFAULT_SELLER_WALLET", "")
+        new_addr = buyer_wallet.wallet_address if buyer_wallet else os.getenv("DEFAULT_BUYER_WALLET", "")
 
         success, tx_hash, err = b_service.execute_ownership_transfer(
             prop=prop,

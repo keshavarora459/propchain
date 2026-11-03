@@ -51,11 +51,12 @@ export const LoginPage: React.FC = () => {
 
   const handleQuickLogin = async (demoEmail: string) => {
     setValue('email', demoEmail)
-    setValue('password', 'Password123!')
+    const demoPassword = import.meta.env.VITE_DEMO_DEFAULT_PASSWORD || ''
+    setValue('password', demoPassword)
     setServerError(null)
     setSubmitting(true)
     try {
-      await login({ email: demoEmail, password: 'Password123!', remember: true })
+      await login({ email: demoEmail, password: demoPassword, remember: true })
       navigate(from, { replace: true })
     } catch (err: unknown) {
       if (err && typeof err === 'object' && 'response' in err) {

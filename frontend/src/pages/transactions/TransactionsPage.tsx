@@ -92,9 +92,9 @@ export const TransactionsPage: React.FC = () => {
             propertyId: t.property?.property_number || t.property_id || 'PROP-PARCEL',
             propertyTitle: t.property?.title || 'Real Estate Property',
             buyerName: t.buyer?.full_name || 'Buyer',
-            buyerWallet: t.buyer_wallet_address || '0x0000000000000000000000000000000000000000',
+            buyerWallet: t.buyer_wallet_address || '',
             sellerName: t.seller?.full_name || 'Seller',
-            sellerWallet: t.seller_wallet_address || '0x0000000000000000000000000000000000000000',
+            sellerWallet: t.seller_wallet_address || '',
             amount: Number(t.purchase_price || t.proposed_amount) || 0,
             currency: t.currency || 'USD',
             status: t.status,
@@ -139,11 +139,11 @@ export const TransactionsPage: React.FC = () => {
       propertyId: '',
       currency: 'USD',
       type: 'Sale',
-      buyerName: user?.full_name || 'Buyer',
-      buyerWallet: '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266',
-      sellerName: 'Registered Owner',
-      sellerWallet: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
-      amount: 100000,
+      buyerName: user?.full_name || '',
+      buyerWallet: (user as any)?.wallet_address || '',
+      sellerName: '',
+      sellerWallet: '',
+      amount: 0,
       escrowReleaseConditions: 'Standard decentralized escrow purchase agreement',
     },
   })
@@ -158,7 +158,7 @@ export const TransactionsPage: React.FC = () => {
         setValue('propertyId', matched.id || matched.propertyId)
         setValue('amount', matched.valuation || 100000)
         setValue('sellerName', matched.currentOwner || (matched as any).owner_name || 'Registered Owner')
-        setValue('sellerWallet', (matched as any).owner_wallet_address || '0x70997970C51812dc3A010C7d01b50e0d17dc79C8')
+        setValue('sellerWallet', (matched as any).owner_wallet_address || (matched as any).ownerAddress || '')
         if (queryAutoInitiate || queryPropertyId) {
           setIsModalOpen(true)
         }
@@ -173,7 +173,7 @@ export const TransactionsPage: React.FC = () => {
     if (found) {
       setValue('amount', found.valuation || 100000)
       setValue('sellerName', found.currentOwner || (found as any).owner_name || 'Registered Owner')
-      setValue('sellerWallet', (found as any).owner_wallet_address || '0x70997970C51812dc3A010C7d01b50e0d17dc79C8')
+      setValue('sellerWallet', (found as any).owner_wallet_address || (found as any).ownerAddress || '')
     }
   }
 
