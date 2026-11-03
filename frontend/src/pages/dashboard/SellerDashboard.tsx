@@ -20,7 +20,9 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@
 import { Button } from '@/components/ui/Button'
 import { Tabs } from '@/components/ui/Tabs'
 import { RegisterPropertyModal } from '@/pages/properties/RegisterPropertyModal'
-import { formatCurrency, formatDate, truncateHash } from '@/lib/utils'
+import { formatCurrency, formatDate } from '@/lib/utils'
+import { HashDisplay } from '@/components/common/HashDisplay'
+import type { SellerDashboardData, SellerProperty, SellerOffer, SellerDocument } from '@/types/seller'
 import { useAuth } from '@/hooks/useAuth'
 import apiClient from '@/lib/axios'
 
@@ -28,7 +30,7 @@ export const SellerDashboard: React.FC = () => {
   const { user } = useAuth()
 
   const [activeTab, setActiveTab] = useState<'overview' | 'properties' | 'documents' | 'verification' | 'offers' | 'transactions' | 'transfer' | 'blockchain'>('overview')
-  const [dashboardData, setDashboardData] = useState<any>(null)
+  const [dashboardData, setDashboardData] = useState<SellerDashboardData | null>(null)
   const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false)
   const [actionInProgress, setActionInProgress] = useState<string | null>(null)
   const [actionMessage, setActionMessage] = useState<string | null>(null)
@@ -48,12 +50,12 @@ export const SellerDashboard: React.FC = () => {
     loadSellerData()
   }, [])
 
-  const sellerMetrics = dashboardData?.seller_metrics || {}
-  const myProperties = sellerMetrics?.my_properties || []
-  const receivedOffers = sellerMetrics?.received_offers || []
-  const myDocuments = sellerMetrics?.my_documents || []
+  const sellerMetrics = dashboardData?.seller_metrics
+  const myProperties: SellerProperty[] = sellerMetrics?.my_properties || []
+  const receivedOffers: SellerOffer[] = sellerMetrics?.received_offers || []
+  const myDocuments: SellerDocument[] = sellerMetrics?.my_documents || []
 
-  const pendingOffers = receivedOffers.filter((o: any) =>
+  const pendingOffers = receivedOffers.filter((o: SellerOffer) =>
     o.status === 'INITIATED' || o.status === 'PENDING_SELLER_ACCEPTANCE' || o.status === 'OFFER_MADE'
   )
 
@@ -192,7 +194,7 @@ export const SellerDashboard: React.FC = () => {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {receivedOffers.slice(0, 4).map((offer: any) => (
+                      {receivedOffers.slice(0, 4).map((offer: SellerOffer) => (
                         <TableRow key={offer.id}>
                           <TableCell className="font-medium text-slate-900 text-xs">{offer.property_title}</TableCell>
                           <TableCell className="text-xs text-slate-600">{offer.buyer_name}</TableCell>
@@ -236,7 +238,7 @@ export const SellerDashboard: React.FC = () => {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {myProperties.slice(0, 4).map((p: any) => (
+                      {myProperties.slice(0, 4).map((p: SellerProperty) => (
                         <TableRow key={p.id}>
                           <TableCell className="font-medium text-slate-900 text-xs">{p.title}</TableCell>
                           <TableCell className="text-xs text-slate-500">{p.city}, {p.state}</TableCell>
@@ -276,7 +278,7 @@ export const SellerDashboard: React.FC = () => {
             </Card>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-              {myProperties.map((p: any) => (
+              {myProperties.map((p: SellerProperty) => (
                 <Card key={p.id} className="p-4 space-y-3">
                   <div className="flex items-start justify-between">
                     <div>
@@ -355,13 +357,22 @@ export const SellerDashboard: React.FC = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {myDocuments.map((doc: any) => (
+                  {myDocuments.map((doc: SellerDocument) => (
                     <TableRow key={doc.id}>
-                      <TableCell className="font-medium text-slate-900 text-xs">{doc.title}</TableCell>
+                      <TableCell className="font-medium text-slate-900 text-xs">
+                        <div>{doc.title || doc.file_name}</div>
+                        {doc.review_notes && (doc.status === 'REJECTED' || doc.status === 'REQUIRES_CORRECTION' || doc.status === 'CORRECTION_REQUESTED') && (
+                          <div className="mt-1 text-[11px] text-amber-700 bg-amber-50 p-1.5 rounded border border-amber-200">
+                            <strong>Review Note:</strong> {doc.review_notes}
+                          </div>
+                        )}
+                      </TableCell>
                       <TableCell className="text-xs text-slate-600">{doc.document_type}</TableCell>
                       <TableCell><StatusBadge status={doc.status} /></TableCell>
-                      <TableCell className="font-mono text-xs text-blue-600">{truncateHash(doc.document_hash)}</TableCell>
-                      <TableCell className="text-xs text-slate-500">{formatDate(doc.created_at)}</TableCell>
+                      <TableCell>
+                        <HashDisplay value={doc.document_hash} explorerLink label="SHA-256" />
+                      </TableCell>
+                      <TableCell className="text-xs text-slate-500">{doc.created_at ? formatDate(doc.created_at) : 'N/A'}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -380,7 +391,7 @@ export const SellerDashboard: React.FC = () => {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {myProperties.map((p: any) => (
+              {myProperties.map((p: SellerProperty) => (
                 <div key={p.id} className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 space-y-3">
                   <div className="flex items-center justify-between">
                     <div>
@@ -389,6 +400,13 @@ export const SellerDashboard: React.FC = () => {
                     </div>
                     <StatusBadge status={p.verification_status} />
                   </div>
+
+                  {p.blockchain_property_id && (
+                    <div className="flex items-center gap-2 text-xs">
+                      <span className="text-slate-500">Blockchain Asset Token:</span>
+                      <HashDisplay value={p.blockchain_property_id} explorerLink />
+                    </div>
+                  )}
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-slate-200 text-xs">
                     <div className="flex items-center gap-2">
@@ -439,7 +457,7 @@ export const SellerDashboard: React.FC = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {receivedOffers.map((offer: any) => {
+                  {receivedOffers.map((offer: SellerOffer) => {
                     const isPending = offer.status === 'INITIATED' || offer.status === 'PENDING_SELLER_ACCEPTANCE' || offer.status === 'OFFER_MADE'
                     const inProgress = actionInProgress === offer.id
                     return (
@@ -449,7 +467,7 @@ export const SellerDashboard: React.FC = () => {
                         <TableCell className="text-xs text-slate-600">{offer.buyer_name}</TableCell>
                         <TableCell className="font-mono text-xs font-bold text-slate-900">{formatCurrency(offer.amount)}</TableCell>
                         <TableCell><StatusBadge status={offer.status} /></TableCell>
-                        <TableCell className="text-xs text-slate-500">{formatDate(offer.created_at)}</TableCell>
+                        <TableCell className="text-xs text-slate-500">{offer.created_at ? formatDate(offer.created_at) : 'N/A'}</TableCell>
                         <TableCell className="text-right">
                           {isPending ? (
                             <div className="flex items-center justify-end gap-1.5">
@@ -510,15 +528,15 @@ export const SellerDashboard: React.FC = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {receivedOffers.map((tx: any) => (
+                  {receivedOffers.map((tx: SellerOffer) => (
                     <TableRow key={tx.id}>
                       <TableCell className="font-mono text-xs font-semibold text-blue-600">{tx.transaction_number}</TableCell>
                       <TableCell className="font-medium text-slate-900 text-xs">{tx.property_title}</TableCell>
                       <TableCell className="text-xs text-slate-600">{tx.buyer_name}</TableCell>
                       <TableCell className="font-mono text-xs font-bold">{formatCurrency(tx.amount)}</TableCell>
                       <TableCell><StatusBadge status={tx.status} /></TableCell>
-                      <TableCell className="font-mono text-xs text-blue-600">
-                        {tx.blockchain_tx_hash ? truncateHash(tx.blockchain_tx_hash) : 'Pending On-Chain Execution'}
+                      <TableCell>
+                        <HashDisplay value={tx.blockchain_tx_hash} explorerLink pendingText="Pending Settlement" />
                       </TableCell>
                     </TableRow>
                   ))}
@@ -538,7 +556,7 @@ export const SellerDashboard: React.FC = () => {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {receivedOffers.map((tx: any) => (
+              {receivedOffers.map((tx: SellerOffer) => (
                 <div key={tx.id} className="p-4 rounded-xl border border-slate-200 bg-white space-y-3">
                   <div className="flex items-center justify-between">
                     <div>
@@ -564,9 +582,9 @@ export const SellerDashboard: React.FC = () => {
                     </div>
                     <div>
                       <span className="text-slate-400 block">On-Chain Deed</span>
-                      <strong className="font-mono text-blue-600">
-                        {tx.blockchain_tx_hash ? truncateHash(tx.blockchain_tx_hash) : 'Pending Confirmation'}
-                      </strong>
+                      <div className="pt-0.5">
+                        <HashDisplay value={tx.blockchain_tx_hash} explorerLink pendingText="Pending Confirmation" className="text-[10px] py-0 px-1" />
+                      </div>
                     </div>
                   </div>
                 </div>

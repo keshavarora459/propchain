@@ -69,7 +69,7 @@ def get_transaction(
     db: Session = Depends(get_db),
 ):
     service = TransactionService(db)
-    return service.get_transaction(transaction_id)
+    return service.get_transaction(transaction_id, current_user=current_user)
 
 
 @router.post(

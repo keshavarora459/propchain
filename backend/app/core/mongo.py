@@ -44,8 +44,10 @@ COLLECTION_MAPPING = {
 def get_mongo_client() -> MongoClient:
     """Obtain or initialize the singleton MongoClient."""
     global _mongo_client
+    settings = get_settings()
+    if settings.APP_ENV in {"test", "testing"}:
+        return None
     if _mongo_client is None:
-        settings = get_settings()
         uri = settings.MONGODB_URI
         if not uri:
             logger.warning("No MONGODB_URI configured in environment.")
@@ -100,6 +102,9 @@ def close_mongo_client() -> None:
 
 def check_mongo_connection() -> Tuple[bool, str, Dict[str, Any]]:
     """Verify MongoDB connectivity and return current cluster telemetry."""
+    settings = get_settings()
+    if settings.APP_ENV in {"test", "testing"}:
+        return False, "MongoDB disabled in test environment", {}
     try:
         client = get_mongo_client()
         info = client.server_info()
@@ -237,6 +242,9 @@ def sync_all_to_mongo(session: Session) -> Dict[str, int]:
 # SQLAlchemy Automatic Event Hook
 def setup_sqlalchemy_mongo_listener() -> None:
     """Register event hooks on SQLAlchemy Session to replicate changes to MongoDB in real time asynchronously."""
+    settings = get_settings()
+    if settings.APP_ENV in {"test", "testing"}:
+        return
     @event.listens_for(Session, "after_flush")
     def receive_after_flush(session: Session, flush_context: Any) -> None:
         """Capture all new, modified, and deleted entities and replicate to MongoDB in background threads."""

@@ -3,7 +3,7 @@ Centralized Role-Based Access Control (RBAC) and Permissions for PropChain.
 Defines roles, account statuses, functional permissions, and authorization matrix.
 """
 from enum import Enum
-from typing import Dict, FrozenSet, List, Set
+from typing import Any, Dict, FrozenSet, List, Set
 
 
 class UserRole(str, Enum):
@@ -53,9 +53,7 @@ ROLE_PERMISSIONS: Dict[UserRole, FrozenSet[Permission]] = {
     UserRole.PROPERTY_OWNER: frozenset({
         Permission.VIEW_DASHBOARD,
         Permission.REGISTER_PROPERTY,
-        Permission.INITIATE_TRANSACTION,
         Permission.VIEW_PROPERTIES,
-        Permission.INITIATE_TRANSACTION,
         Permission.VIEW_BLOCKCHAIN_HISTORY,
     }),
     UserRole.BUYER: frozenset({
@@ -97,3 +95,39 @@ def get_role_permissions(role: UserRole) -> List[str]:
     """Retrieve all permission names granted to a specific role."""
     return [perm.value for perm in ROLE_PERMISSIONS.get(role, frozenset())]
 
+
+def assert_property_access(current_user: Any, prop: Any, allow_marketplace: bool = True) -> None:
+    """
+    Enforce that a user has authorized access to a property.
+    Admins, Verifiers, and Legal Authorities have system-wide access.
+    Property owners can access properties they own or created.
+    If allow_marketplace is True, any authenticated user can view active, verified marketplace listings.
+    Otherwise, raises ForbiddenError.
+    """
+    from app.core.exceptions import ForbiddenError
+
+    if not current_user:
+        raise ForbiddenError("Authentication required.")
+
+    raw_role = current_user.role
+    user_role = raw_role.value if hasattr(raw_role, "value") else str(raw_role)
+
+    # Privileged administrative and verification roles have global view privileges
+    if user_role in {UserRole.ADMIN.value, UserRole.VERIFIER.value, UserRole.LEGAL_AUTHORITY.value}:
+        return
+
+    # Check direct ownership or creation
+    is_owner = (getattr(prop, "current_owner_id", None) == current_user.id) or (
+        getattr(prop, "creator_user_id", None) == current_user.id
+    )
+    if is_owner:
+        return
+
+    # Marketplace view allowed only if verified and active
+    if allow_marketplace:
+        is_verified = getattr(prop, "verification_status", None) == "VERIFIED"
+        is_active = getattr(prop, "status", None) == "ACTIVE"
+        if is_verified and is_active:
+            return
+
+    raise ForbiddenError("Access denied: You do not have permission to view or access this property.")

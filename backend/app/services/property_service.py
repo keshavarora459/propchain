@@ -14,7 +14,7 @@ from app.core.exceptions import (
     NotFoundError,
     ValidationError,
 )
-from app.core.permissions import UserRole, Permission, has_permission
+from app.core.permissions import UserRole, Permission, has_permission, assert_property_access
 from app.models.property import Property
 from app.models.user import User
 from app.repositories.property_repository import PropertyRepository
@@ -113,10 +113,12 @@ class PropertyService:
         created = self.repo.create(prop)
         return self._to_response(created)
 
-    def get_property(self, property_id: uuid.UUID) -> PropertyResponse:
+    def get_property(self, property_id: uuid.UUID, current_user: Optional[User] = None) -> PropertyResponse:
         prop = self.repo.get_by_id(property_id)
         if not prop:
             raise NotFoundError(f"Property with ID '{property_id}' not found.")
+        if current_user is not None:
+            assert_property_access(current_user, prop, allow_marketplace=True)
         return self._to_response(prop)
 
     def list_properties(
@@ -129,6 +131,7 @@ class PropertyService:
         verification_status: Optional[str] = None,
         state: Optional[str] = None,
         city: Optional[str] = None,
+        current_user: Optional[User] = None,
     ) -> PropertyListResponse:
         skip = (page - 1) * page_size
         items, total = self.repo.list_properties(
@@ -140,6 +143,7 @@ class PropertyService:
             verification_status=verification_status,
             state=state,
             city=city,
+            current_user=current_user,
         )
 
         total_pages = (total + page_size - 1) // page_size if total > 0 else 0
@@ -164,6 +168,7 @@ class PropertyService:
             limit=page_size,
             status=status,
             owner_id=current_user.id,
+            current_user=current_user,
         )
         total_pages = (total + page_size - 1) // page_size if total > 0 else 0
         return PropertyListResponse(

@@ -4,10 +4,12 @@ Repository for Property database operations in PropChain.
 import uuid
 from typing import List, Optional, Tuple
 
-from sqlalchemy import or_, select, func
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session, joinedload
 
+from app.core.permissions import UserRole
 from app.models.property import Property
+from app.models.user import User
 
 
 class PropertyRepository:
@@ -34,23 +36,22 @@ class PropertyRepository:
 
     def find_duplicate(
         self,
-        state: str,
-        city: str,
-        postal_code: str,
-        street_address: str,
         survey_number: Optional[str] = None,
         ulpin: Optional[str] = None,
         registration_number: Optional[str] = None,
+        state: str = "",
+        city: str = "",
+        postal_code: str = "",
+        street_address: str = "",
     ) -> Optional[Property]:
-        """
-        Detects likely duplicate property records using cadastral identifiers
-        or an exact match of location and street address.
-        """
         conditions = []
+
         if ulpin and ulpin.strip():
             conditions.append(Property.ulpin == ulpin.strip())
+
         if registration_number and registration_number.strip():
             conditions.append(Property.registration_number == registration_number.strip())
+
         if survey_number and survey_number.strip():
             conditions.append(
                 (Property.survey_number == survey_number.strip())
@@ -81,6 +82,7 @@ class PropertyRepository:
         city: Optional[str] = None,
         owner_id: Optional[uuid.UUID] = None,
         creator_id: Optional[uuid.UUID] = None,
+        current_user: Optional[User] = None,
     ) -> Tuple[List[Property], int]:
         # Automatic safeguard: If cache is empty, hydrate all from MongoDB Atlas immediately
         if self.db.query(Property).count() == 0:
@@ -96,6 +98,39 @@ class PropertyRepository:
         )
 
         filters = []
+
+        # Role-based privacy scoping
+        if current_user is not None:
+            raw_role = current_user.role
+            user_role = raw_role.value if hasattr(raw_role, "value") else str(raw_role)
+            if user_role == UserRole.PROPERTY_OWNER.value:
+                # PROPERTY_OWNER can ONLY see:
+                # 1. Properties they own or created, plus
+                # 2. Properties that are verified and active (marketplace listings)
+                filters.append(
+                    or_(
+                        Property.current_owner_id == current_user.id,
+                        Property.creator_user_id == current_user.id,
+                        and_(
+                            Property.verification_status == "VERIFIED",
+                            Property.status == "ACTIVE",
+                        ),
+                    )
+                )
+            elif user_role == UserRole.BUYER.value:
+                # BUYER can only see active verified marketplace listings (or properties they own)
+                filters.append(
+                    or_(
+                        and_(
+                            Property.verification_status == "VERIFIED",
+                            Property.status == "ACTIVE",
+                        ),
+                        Property.current_owner_id == current_user.id,
+                        Property.creator_user_id == current_user.id,
+                    )
+                )
+            # ADMIN, VERIFIER, LEGAL_AUTHORITY remain unrestricted
+
         if search and search.strip():
             term = f"%{search.strip()}%"
             filters.append(
@@ -126,7 +161,12 @@ class PropertyRepository:
             filters.append(Property.city.ilike(city.strip()))
 
         if owner_id:
-            filters.append(Property.current_owner_id == owner_id)
+            filters.append(
+                or_(
+                    Property.current_owner_id == owner_id,
+                    Property.creator_user_id == owner_id,
+                )
+            )
 
         if creator_id:
             filters.append(Property.creator_user_id == creator_id)
@@ -148,4 +188,3 @@ class PropertyRepository:
         self.db.commit()
         self.db.refresh(prop)
         return prop
-

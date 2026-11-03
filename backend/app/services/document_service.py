@@ -127,6 +127,13 @@ class DocumentService:
         if not prop:
             raise NotFoundError(f"Property with ID '{property_id}' not found.")
 
+        raw_role = current_user.role
+        user_role = raw_role.value if hasattr(raw_role, "value") else str(raw_role)
+        if user_role == UserRole.PROPERTY_OWNER.value:
+            is_owner = (prop.current_owner_id == current_user.id) or (prop.creator_user_id == current_user.id)
+            if not is_owner:
+                raise ForbiddenError("Access denied: You can only view documents for your own properties.")
+
         docs = self.doc_repo.list_by_property(property_id)
         return [DocumentResponse.model_validate(d) for d in docs]
 
@@ -139,14 +146,42 @@ class DocumentService:
         if not doc:
             raise NotFoundError(f"Document with ID '{document_id}' not found.")
 
+        prop = self.prop_repo.get_by_id(doc.property_id)
+        raw_role = current_user.role
+        user_role = raw_role.value if hasattr(raw_role, "value") else str(raw_role)
+
+        if user_role == UserRole.PROPERTY_OWNER.value:
+            is_owner = (doc.uploader_user_id == current_user.id) or (
+                prop and ((prop.current_owner_id == current_user.id) or (prop.creator_user_id == current_user.id))
+            )
+            if not is_owner:
+                raise ForbiddenError("Access denied: You can only view documents for your own properties.")
+
         processing = None
-        if doc.processing_records:
+        # Never leak verifier OCR internal records or candidate metadata to property owners
+        if user_role != UserRole.PROPERTY_OWNER.value and doc.processing_records:
             processing = DocumentProcessingResponse.model_validate(doc.processing_records[0])
 
-        verifications = [
-            DocumentVerificationResponse.model_validate(v)
-            for v in (doc.verification_records or [])
-        ]
+        verifications = []
+        if user_role == UserRole.PROPERTY_OWNER.value:
+            # For property owners, only expose clean review notes if actioned with correction or rejection
+            if doc.status in ["REJECTED", "REQUIRES_CORRECTION", "CORRECTION_REQUESTED"] and doc.verification_records:
+                for v in doc.verification_records:
+                    verifications.append(
+                        DocumentVerificationResponse(
+                            id=v.id,
+                            document_id=v.document_id,
+                            verifier_user_id=None,
+                            action=v.action,
+                            comments=v.comments or "Correction requested by title reviewer.",
+                            created_at=v.created_at,
+                        )
+                    )
+        else:
+            verifications = [
+                DocumentVerificationResponse.model_validate(v)
+                for v in (doc.verification_records or [])
+            ]
 
         resp = DocumentDetailResponse.model_validate(doc)
         resp.processing = processing
@@ -161,6 +196,17 @@ class DocumentService:
         doc = self.doc_repo.get_by_id(document_id)
         if not doc:
             raise NotFoundError(f"Document with ID '{document_id}' not found.")
+
+        prop = self.prop_repo.get_by_id(doc.property_id)
+        raw_role = current_user.role
+        user_role = raw_role.value if hasattr(raw_role, "value") else str(raw_role)
+
+        if user_role == UserRole.PROPERTY_OWNER.value:
+            is_owner = (doc.uploader_user_id == current_user.id) or (
+                prop and ((prop.current_owner_id == current_user.id) or (prop.creator_user_id == current_user.id))
+            )
+            if not is_owner:
+                raise ForbiddenError("Access denied: You can only download documents for your own properties.")
 
         content = self.storage.read_file(doc.storage_path, is_encrypted=doc.is_encrypted)
         return content, doc.original_filename, doc.mime_type

@@ -2,9 +2,10 @@ import React, { useState, useEffect } from 'react'
 import { FileBadge, History, Search, Building2, Loader2 } from 'lucide-react'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Timeline, type TimelineEvent } from '@/components/common/Timeline'
+import { HashDisplay } from '@/components/common/HashDisplay'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card'
 import { Input } from '@/components/ui/Input'
-import { formatCurrency, truncateHash, formatDate } from '@/lib/utils'
+import { formatCurrency, formatDate } from '@/lib/utils'
 import { propertyService } from '@/services/propertyService'
 import type { Property } from '@/types/property'
 import apiClient from '@/lib/axios'
@@ -89,9 +90,10 @@ export const OwnershipRegistryPage: React.FC = () => {
               <p className="text-slate-500">
                 Owner Wallet: <span className="text-slate-800">{evt.new_owner_wallet || activeProperty.ownerAddress}</span>
               </p>
-              <p className="text-slate-500 truncate">
-                On-Chain Proof: <span className="text-blue-600">{truncateHash(evt.tx_hash, 10, 8)}</span>
-              </p>
+              <div className="text-slate-500 flex items-center gap-1.5 flex-wrap">
+                <span>On-Chain Proof:</span>
+                <HashDisplay value={evt.tx_hash} explorerLink className="text-[10px] py-0 px-1.5" />
+              </div>
             </div>
           ),
         })

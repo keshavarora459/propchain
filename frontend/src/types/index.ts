@@ -6,4 +6,4 @@ export * from './approval'
 export * from './fraud'
 export * from './blockchain'
 export * from './auth'
-
+export * from './seller'

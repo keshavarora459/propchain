@@ -94,9 +94,6 @@ class TransactionService:
             ).first()
 
         if not prop:
-            prop = self.db.scalars(select(Property)).first()
-
-        if not prop:
             raise NotFoundError(f"Property with ID '{data.property_id}' not found.")
 
         if prop.status != "ACTIVE":
@@ -185,7 +182,7 @@ class TransactionService:
 
         return self._to_response(txn)
 
-    def get_transaction(self, transaction_id: uuid.UUID) -> TransactionDetailResponse:
+    def get_transaction(self, transaction_id: uuid.UUID, current_user: Optional[User] = None) -> TransactionDetailResponse:
         stmt = (
             select(PropertyTransaction)
             .options(
@@ -201,6 +198,19 @@ class TransactionService:
         txn = self.db.scalars(stmt).unique().first()
         if not txn:
             raise NotFoundError(f"Transaction with ID '{transaction_id}' not found.")
+
+        if current_user:
+            raw_role = current_user.role
+            user_role = raw_role.value if hasattr(raw_role, "value") else str(raw_role)
+            if user_role == UserRole.PROPERTY_OWNER.value:
+                is_seller = (txn.seller_id == current_user.id) or (
+                    txn.property and ((txn.property.current_owner_id == current_user.id) or (txn.property.creator_user_id == current_user.id))
+                )
+                if not is_seller:
+                    raise ForbiddenError("Access denied: You can only view transactions for your own properties.")
+            elif user_role == UserRole.BUYER.value:
+                if txn.buyer_id != current_user.id:
+                    raise ForbiddenError("Access denied: You can only view your own transactions.")
 
         base_resp = self._to_response(txn)
         detail = TransactionDetailResponse(**base_resp.model_dump())
@@ -233,6 +243,13 @@ class TransactionService:
         )
 
         filters = []
+        raw_role = current_user.role
+        user_role = raw_role.value if hasattr(raw_role, "value") else str(raw_role)
+        if user_role == UserRole.PROPERTY_OWNER.value:
+            filters.append(PropertyTransaction.seller_id == current_user.id)
+        elif user_role == UserRole.BUYER.value:
+            filters.append(PropertyTransaction.buyer_id == current_user.id)
+
         if property_id:
             filters.append(PropertyTransaction.property_id == property_id)
 

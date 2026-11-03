@@ -3,19 +3,30 @@ Pytest Fixtures and Test Configuration for PropChain Backend.
 Provides test isolation and mocks for database sessions and test client.
 """
 import os
+import sys
 import uuid
 from typing import Generator
 import pytest
+
+# Ensure backend directory is first in sys.path and remove conflicting foreign paths
+backend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if backend_dir not in sys.path:
+    sys.path.insert(0, backend_dir)
+sys.path = [p for p in sys.path if "payroll" not in p]
+
+# Force test environment and disable MongoDB Atlas
+os.environ["APP_ENV"] = "test"
+os.environ["DEBUG"] = "true"
+os.environ["MONGO_URI"] = ""
+
+from app.core.config import Settings, get_settings
+get_settings.cache_clear()
+
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
-# Force test environment
-os.environ["APP_ENV"] = "test"
-os.environ["DEBUG"] = "true"
-
-from app.core.config import Settings, get_settings
 from app.core.database import get_engine, get_session_factory
 from app.dependencies.database import get_db
 from app.main import app

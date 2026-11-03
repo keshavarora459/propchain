@@ -9,6 +9,7 @@ import {
 } from 'lucide-react'
 import { PageHeader } from '@/components/common/PageHeader'
 import { StatusBadge } from '@/components/common/StatusBadge'
+import { HashDisplay } from '@/components/common/HashDisplay'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
@@ -73,7 +74,7 @@ export const DocumentVerificationPage: React.FC = () => {
                         ? 'Rejected'
                         : 'OCR Processed',
                     ocrConfidence: 96.8,
-                    documentHash: d.document_hash || 'c4ca4238a0b923820dcc509a6f75849b28a4a5f83896434458514138a0b92382',
+                    documentHash: d.document_hash || '',
                     reviewNotes: `Cryptographic SHA-256 digest verified. Document anchored for ${prop.title}.`,
                   })
                 })
@@ -431,8 +432,8 @@ export const DocumentVerificationPage: React.FC = () => {
                   <TableCell>
                     <StatusBadge status={doc.status} />
                   </TableCell>
-                  <TableCell className="font-mono text-[11px] text-slate-500">
-                    {truncateHash(doc.documentHash, 6, 4)}
+                  <TableCell>
+                    <HashDisplay value={doc.documentHash} explorerLink />
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-1.5">
@@ -502,9 +503,9 @@ export const DocumentVerificationPage: React.FC = () => {
               </div>
             </div>
 
-            <div className="p-3 rounded-lg bg-slate-900 text-white font-mono text-[11px] space-y-1">
+            <div className="p-3 rounded-lg bg-slate-900 text-white font-mono text-[11px] space-y-1.5">
               <p className="text-slate-400">Cryptographic Digest (SHA-256):</p>
-              <p className="break-all">{selectedDoc.documentHash}</p>
+              <HashDisplay value={selectedDoc.documentHash} truncate={false} explorerLink className="bg-slate-800 text-blue-300 border-slate-700" />
               {selectedDoc.ipfsCid && (
                 <p className="text-slate-400 pt-1">IPFS CID: {selectedDoc.ipfsCid}</p>
               )}

@@ -43,7 +43,7 @@ class DocumentProcessingResponse(BaseModel):
 class DocumentVerificationResponse(BaseModel):
     id: uuid.UUID
     document_id: uuid.UUID
-    verifier_user_id: uuid.UUID
+    verifier_user_id: Optional[uuid.UUID] = None
     action: str
     comments: Optional[str] = None
     created_at: datetime

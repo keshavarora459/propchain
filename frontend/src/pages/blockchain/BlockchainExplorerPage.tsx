@@ -1,4 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react'
+import { useSearchParams } from 'react-router-dom'
+import { useAuth } from '@/hooks/useAuth'
+import apiClient from '@/lib/axios'
+import { HashDisplay } from '@/components/common/HashDisplay'
 import {
   Cpu,
   Search,
@@ -76,10 +80,28 @@ function getAddressLabel(address?: string | null): string {
 }
 
 export const BlockchainExplorerPage: React.FC = () => {
+  const { user } = useAuth()
+  const [searchParams] = useSearchParams()
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResult, setSearchResult] = useState<any | null>(null)
   const [isSearching, setIsSearching] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
+  const [userRecords, setUserRecords] = useState<{
+    property_ids: string[]
+    document_hashes: string[]
+    tx_hashes: string[]
+    wallet_addresses: string[]
+  } | null>(null)
+
+  useEffect(() => {
+    if (user?.role === 'PROPERTY_OWNER' || user?.role === 'BUYER') {
+      apiClient.get('/blockchain/my-records')
+        .then((res) => {
+          if (res.data) setUserRecords(res.data)
+        })
+        .catch((err) => console.warn('Could not fetch user blockchain records:', err))
+    }
+  }, [user?.role])
 
   const [blocks, setBlocks] = useState<RealBlock[]>([])
   const [transactions, setTransactions] = useState<RealTx[]>([])
@@ -308,12 +330,52 @@ export const BlockchainExplorerPage: React.FC = () => {
     loadBlockchainData()
   }, [loadBlockchainData])
 
+  useEffect(() => {
+    const q = searchParams.get('q')
+    if (q) {
+      setSearchQuery(q)
+      runSearch(q)
+    }
+  }, [searchParams])
+
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault()
-    const rawQuery = searchQuery.trim()
+    await runSearch(searchQuery.trim())
+  }
+
+  const runSearch = async (rawQuery: string) => {
     if (!rawQuery) {
       setSearchResult(null)
       return
+    }
+
+    const applyScopingAndSetResult = (res: any) => {
+      if ((user?.role === 'PROPERTY_OWNER' || user?.role === 'BUYER') && userRecords) {
+        if (res.type === 'transaction') {
+          const t = res.data
+          const isAllowed = (t.propertyId && userRecords.property_ids.some((p: string) => p.toLowerCase() === t.propertyId.toLowerCase())) ||
+            (t.documentHash && userRecords.document_hashes.some((d: string) => d.toLowerCase() === t.documentHash.toLowerCase())) ||
+            userRecords.tx_hashes.some((h: string) => h.toLowerCase() === t.hash.toLowerCase()) ||
+            userRecords.wallet_addresses.some((w: string) => (t.from && w.toLowerCase() === t.from.toLowerCase()) || (t.to && w.toLowerCase() === t.to.toLowerCase()))
+          if (!isAllowed) {
+            setSearchResult({ type: 'not_found', query: rawQuery, customMessage: 'No matching record found among your properties.' })
+            return
+          }
+        } else if (res.type === 'address') {
+          const addr = res.data.address.toLowerCase()
+          if (!userRecords.wallet_addresses.includes(addr)) {
+            setSearchResult({ type: 'not_found', query: rawQuery, customMessage: 'No matching record found among your properties.' })
+            return
+          }
+        } else if (res.type === 'block') {
+          const hasOwnTx = displayedTransactions.some((t) => t.blockNumber === res.data.blockNumber)
+          if (!hasOwnTx) {
+            setSearchResult({ type: 'not_found', query: rawQuery, customMessage: 'No matching record found among your properties.' })
+            return
+          }
+        }
+      }
+      setSearchResult(res)
     }
 
     setIsSearching(true)
@@ -325,7 +387,7 @@ export const BlockchainExplorerPage: React.FC = () => {
         const blockNum = parseInt(rawQuery, 10)
         const block = await provider.getBlock(blockNum, true)
         if (block) {
-          setSearchResult({
+          applyScopingAndSetResult({
             type: 'block',
             data: {
               blockNumber: block.number,
@@ -377,7 +439,7 @@ export const BlockchainExplorerPage: React.FC = () => {
                 }
               } catch {}
 
-              setSearchResult({
+              applyScopingAndSetResult({
                 type: 'transaction',
                 data: {
                   hash: ev.transactionHash,
@@ -405,7 +467,7 @@ export const BlockchainExplorerPage: React.FC = () => {
           (t) => t.documentHash && t.documentHash.toLowerCase() === normalizedHex.toLowerCase()
         )
         if (localDocTx) {
-          setSearchResult({ type: 'transaction', data: localDocTx })
+          applyScopingAndSetResult({ type: 'transaction', data: localDocTx })
           return
         }
 
@@ -443,7 +505,7 @@ export const BlockchainExplorerPage: React.FC = () => {
               } catch {}
             }
 
-            setSearchResult({
+            applyScopingAndSetResult({
               type: 'transaction',
               data: {
                 hash: tx.hash,
@@ -467,7 +529,7 @@ export const BlockchainExplorerPage: React.FC = () => {
         try {
           const block = await provider.getBlock(normalizedHex, true)
           if (block) {
-            setSearchResult({
+            applyScopingAndSetResult({
               type: 'block',
               data: {
                 blockNumber: block.number,
@@ -509,7 +571,7 @@ export const BlockchainExplorerPage: React.FC = () => {
             (t) => t.from.toLowerCase() === lower || t.to.toLowerCase() === lower
           )
 
-          setSearchResult({
+          applyScopingAndSetResult({
             type: 'address',
             data: {
               address: rawQuery,
@@ -529,14 +591,14 @@ export const BlockchainExplorerPage: React.FC = () => {
         (t) => t.propertyId && t.propertyId.toLowerCase() === rawQuery.toLowerCase()
       )
       if (propTx) {
-        setSearchResult({ type: 'transaction', data: propTx })
+        applyScopingAndSetResult({ type: 'transaction', data: propTx })
         return
       }
 
       // 5. Fallback check in locally loaded items
       const localTx = transactions.find((t) => t.hash.toLowerCase() === rawQuery.toLowerCase())
       if (localTx) {
-        setSearchResult({ type: 'transaction', data: localTx })
+        applyScopingAndSetResult({ type: 'transaction', data: localTx })
         return
       }
 
@@ -544,7 +606,7 @@ export const BlockchainExplorerPage: React.FC = () => {
         (b) => String(b.blockNumber) === rawQuery || b.hash.toLowerCase() === rawQuery.toLowerCase()
       )
       if (localBlock) {
-        setSearchResult({ type: 'block', data: localBlock })
+        applyScopingAndSetResult({ type: 'block', data: localBlock })
         return
       }
 
@@ -564,6 +626,16 @@ export const BlockchainExplorerPage: React.FC = () => {
   }
 
   const isConnected = networkInfo.status === 'Connected'
+
+  const displayedTransactions = ((user?.role === 'PROPERTY_OWNER' || user?.role === 'BUYER') && userRecords)
+    ? transactions.filter((t) => {
+        const matchProp = t.propertyId && userRecords.property_ids.some(pid => pid.toLowerCase() === t.propertyId!.toLowerCase())
+        const matchDoc = t.documentHash && userRecords.document_hashes.some(dh => dh.toLowerCase() === t.documentHash!.toLowerCase())
+        const matchHash = userRecords.tx_hashes.some(th => th.toLowerCase() === t.hash.toLowerCase())
+        const matchAddr = userRecords.wallet_addresses.some(wa => wa.toLowerCase() === t.from.toLowerCase() || wa.toLowerCase() === t.to.toLowerCase())
+        return matchProp || matchDoc || matchHash || matchAddr
+      })
+    : transactions
 
   return (
     <div className="space-y-6">
@@ -656,9 +728,9 @@ export const BlockchainExplorerPage: React.FC = () => {
           <CardContent className="text-xs">
             {searchResult.type === 'transaction' ? (
               <div className="space-y-2 font-mono">
-                <div className="flex justify-between py-1 border-b border-blue-100">
+                <div className="flex justify-between py-1 border-b border-blue-100 items-center">
                   <span className="text-slate-500">Tx Hash:</span>
-                  <span className="font-bold text-slate-900 break-all">{searchResult.data.hash}</span>
+                  <HashDisplay value={searchResult.data.hash} explorerLink className="bg-transparent border-0 px-0" />
                 </div>
                 <div className="flex justify-between py-1 border-b border-blue-100">
                   <span className="text-slate-500">Status:</span>
@@ -770,7 +842,7 @@ export const BlockchainExplorerPage: React.FC = () => {
             ) : (
               <div className="text-slate-600 space-y-1">
                 <p className="font-medium text-slate-800">
-                  No matching block, transaction, address, or document hash found for "{searchResult.query}".
+                  {searchResult.customMessage || `No matching block, transaction, address, or document hash found for "${searchResult.query}".`}
                 </p>
                 <p className="text-[11px] text-slate-500">
                   Please verify the query format: Block number (e.g. <code>1</code>), Transaction hash (<code>0x...</code>), Document hash (64 hex characters), Address (<code>0x...</code>), or Property ID (<code>PROP-...</code>).
@@ -858,15 +930,19 @@ export const BlockchainExplorerPage: React.FC = () => {
                 <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2 text-slate-700" />
                 Querying transactions...
               </div>
-            ) : transactions.length === 0 ? (
+            ) : displayedTransactions.length === 0 ? (
               <div className="p-8 text-center text-slate-500">
-                <p className="font-medium text-slate-600">No on-chain transactions yet</p>
+                <p className="font-medium text-slate-600">
+                  {(user?.role === 'PROPERTY_OWNER' || user?.role === 'BUYER') ? 'No on-chain transactions found for your account' : 'No on-chain transactions yet'}
+                </p>
                 <p className="text-[11px] text-slate-400 mt-1">
-                  Transactions will appear here when contracts are deployed, properties are registered, or deeds are transferred.
+                  {(user?.role === 'PROPERTY_OWNER' || user?.role === 'BUYER')
+                    ? 'Transactions will appear here once your registered properties or escrow transfers are anchored on-chain.'
+                    : 'Transactions will appear here when contracts are deployed, properties are registered, or deeds are transferred.'}
                 </p>
               </div>
             ) : (
-              transactions.map((tx) => (
+              displayedTransactions.map((tx) => (
                 <div
                   key={tx.hash}
                   onClick={() =>
@@ -879,9 +955,7 @@ export const BlockchainExplorerPage: React.FC = () => {
                   title="Click to inspect transaction"
                 >
                   <div className="flex items-center justify-between">
-                    <span className="font-mono font-semibold text-slate-900">
-                      {truncateHash(tx.hash, 8, 6)}
-                    </span>
+                    <HashDisplay value={tx.hash} explorerLink className="bg-transparent border-0 px-0" />
                     <div className="flex items-center gap-2">
                       <span className="text-[10px] font-mono text-blue-600">Block #{tx.blockNumber}</span>
                       <StatusBadge status={tx.status} />

@@ -66,6 +66,7 @@ def list_properties(
         verification_status=verification_status,
         state=state,
         city=city,
+        current_user=current_user,
     )
 
 
@@ -101,7 +102,7 @@ def get_property(
     db: Session = Depends(get_db),
 ):
     service = PropertyService(db)
-    return service.get_property(property_id)
+    return service.get_property(property_id, current_user=current_user)
 
 
 @router.patch(

@@ -12,11 +12,12 @@ import {
 } from 'lucide-react'
 import { PageHeader } from '@/components/common/PageHeader'
 import { StatusBadge } from '@/components/common/StatusBadge'
+import { HashDisplay } from '@/components/common/HashDisplay'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { Input } from '@/components/ui/Input'
-import { formatCurrency, formatDate, truncateHash } from '@/lib/utils'
+import { formatCurrency, formatDate } from '@/lib/utils'
 import { propertyService } from '@/services/propertyService'
 import { ownershipService } from '@/services/ownershipService'
 import type { Property } from '@/types/property'
@@ -340,9 +341,14 @@ export const PropertyDetailPage: React.FC = () => {
                           <p className="text-xs font-semibold text-slate-800 truncate">
                             {doc.document_type || doc.title || 'Title Document'}
                           </p>
-                          <span className="text-[10px] font-mono text-slate-400 block truncate">
-                            SHA-256: {truncateHash(doc.file_hash || '0xda39a3ee5e6b4b0d3255bfef95601890afd80709', 10, 8)}
-                          </span>
+                          <div className="pt-0.5">
+                            <HashDisplay
+                              value={doc.file_hash || (doc as any).document_hash}
+                              label="SHA-256"
+                              explorerLink
+                              className="text-[10px] py-0 px-1.5"
+                            />
+                          </div>
                         </div>
                       </div>
                       <div className="flex items-center space-x-3 shrink-0">

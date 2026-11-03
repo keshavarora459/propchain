@@ -3,6 +3,7 @@ Analytics and Dashboard Telemetry Endpoints for PropChain.
 Calculates live aggregated metrics directly from PostgreSQL/SQLite database and blockchain,
 with tailored telemetry for each role: BUYER, PROPERTY_OWNER, VERIFIER, LEGAL_AUTHORITY, ADMIN.
 """
+from datetime import datetime
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends
@@ -32,29 +33,78 @@ def get_dashboard_metrics(
     raw_role = current_user.role
     user_role = raw_role.value if hasattr(raw_role, "value") else str(raw_role)
 
-    # 1. Platform-wide baseline metrics
-    total_props = db.scalar(select(func.count(Property.id))) or 0
+    # 1. Baseline metrics scoped by role
+    base_prop_filter = []
+    if user_role == UserRole.PROPERTY_OWNER.value:
+        base_prop_filter.append(
+            or_(
+                Property.current_owner_id == current_user.id,
+                Property.creator_user_id == current_user.id,
+                and_(
+                    Property.verification_status == "VERIFIED",
+                    Property.status == "ACTIVE",
+                ),
+            )
+        )
+    elif user_role == UserRole.BUYER.value:
+        base_prop_filter.append(
+            or_(
+                and_(
+                    Property.verification_status == "VERIFIED",
+                    Property.status == "ACTIVE",
+                ),
+                Property.current_owner_id == current_user.id,
+                Property.creator_user_id == current_user.id,
+            )
+        )
+
+    prop_base = select(Property)
+    if base_prop_filter:
+        prop_base = prop_base.where(*base_prop_filter)
+
+    total_props = db.scalar(select(func.count()).select_from(prop_base.subquery())) or 0
     verified_props = db.scalar(
-        select(func.count(Property.id)).where(Property.verification_status == "VERIFIED")
+        select(func.count()).select_from(
+            prop_base.where(Property.verification_status == "VERIFIED").subquery()
+        )
     ) or 0
     pending_props = db.scalar(
-        select(func.count(Property.id)).where(Property.verification_status == "PENDING")
+        select(func.count()).select_from(
+            prop_base.where(Property.verification_status == "PENDING").subquery()
+        )
     ) or 0
 
-    valuation_sum = db.scalar(select(func.sum(Property.valuation)))
+    val_sub = prop_base.subquery()
+    valuation_sum = db.scalar(select(func.sum(val_sub.c.valuation)))
     total_valuation = float(valuation_sum) if valuation_sum else 0.0
 
-    active_txns = db.scalar(
-        select(func.count(PropertyTransaction.id)).where(
-            PropertyTransaction.status.notin_(["COMPLETED", "CANCELLED", "REJECTED"])
-        )
-    ) or 0
-
-    pending_approvals_count = db.scalar(
-        select(func.count(TransactionApproval.id)).where(
-            TransactionApproval.status == "PENDING"
-        )
-    ) or 0
+    if user_role == UserRole.PROPERTY_OWNER.value:
+        active_txns = db.scalar(
+            select(func.count(PropertyTransaction.id)).where(
+                PropertyTransaction.seller_id == current_user.id,
+                PropertyTransaction.status.notin_(["COMPLETED", "CANCELLED", "REJECTED"]),
+            )
+        ) or 0
+        pending_approvals_count = 0
+    elif user_role == UserRole.BUYER.value:
+        active_txns = db.scalar(
+            select(func.count(PropertyTransaction.id)).where(
+                PropertyTransaction.buyer_id == current_user.id,
+                PropertyTransaction.status.notin_(["COMPLETED", "CANCELLED", "REJECTED"]),
+            )
+        ) or 0
+        pending_approvals_count = 0
+    else:
+        active_txns = db.scalar(
+            select(func.count(PropertyTransaction.id)).where(
+                PropertyTransaction.status.notin_(["COMPLETED", "CANCELLED", "REJECTED"])
+            )
+        ) or 0
+        pending_approvals_count = db.scalar(
+            select(func.count(TransactionApproval.id)).where(
+                TransactionApproval.status == "PENDING"
+            )
+        ) or 0
 
     # 5. Pending purchase requests specifically for this seller
     seller_pending_stmt = (
@@ -101,19 +151,22 @@ def get_dashboard_metrics(
         for t in seller_pending_txs
     ]
 
-    # Recent transactions
-    recent_txs = list(
-        db.scalars(
-            select(PropertyTransaction)
-            .options(
-                joinedload(PropertyTransaction.property),
-                joinedload(PropertyTransaction.buyer),
-                joinedload(PropertyTransaction.seller),
-            )
-            .order_by(PropertyTransaction.created_at.desc())
-            .limit(10)
-        ).unique().all()
+    # Recent transactions (scoped for privacy if buyer or property owner)
+    recent_txs_stmt = (
+        select(PropertyTransaction)
+        .options(
+            joinedload(PropertyTransaction.property),
+            joinedload(PropertyTransaction.buyer),
+            joinedload(PropertyTransaction.seller),
+        )
+        .order_by(PropertyTransaction.created_at.desc())
     )
+    if user_role == UserRole.PROPERTY_OWNER.value:
+        recent_txs_stmt = recent_txs_stmt.where(PropertyTransaction.seller_id == current_user.id)
+    elif user_role == UserRole.BUYER.value:
+        recent_txs_stmt = recent_txs_stmt.where(PropertyTransaction.buyer_id == current_user.id)
+
+    recent_txs = list(db.scalars(recent_txs_stmt.limit(10)).unique().all())
 
     formatted_txs = [
         {
@@ -131,11 +184,14 @@ def get_dashboard_metrics(
         for t in recent_txs
     ]
 
-    total_volume_sum = db.scalar(
-        select(func.sum(PropertyTransaction.proposed_amount)).where(
-            PropertyTransaction.status == "COMPLETED"
-        )
+    vol_stmt = select(func.sum(PropertyTransaction.proposed_amount)).where(
+        PropertyTransaction.status == "COMPLETED"
     )
+    if user_role == UserRole.PROPERTY_OWNER.value:
+        vol_stmt = vol_stmt.where(PropertyTransaction.seller_id == current_user.id)
+    elif user_role == UserRole.BUYER.value:
+        vol_stmt = vol_stmt.where(PropertyTransaction.buyer_id == current_user.id)
+    total_volume_sum = db.scalar(vol_stmt)
     total_volume = float(total_volume_sum) if total_volume_sum else 0.0
 
     payload: Dict[str, Any] = {
@@ -219,11 +275,56 @@ def get_dashboard_metrics(
         )
 
         portfolio_val = sum(float(p.valuation or 0) for p in seller_props)
+        verified_props_count = len([p for p in seller_props if p.verification_status == "VERIFIED"])
+        active_sales_count = len([t for t in seller_txs if t.status not in ["COMPLETED", "CANCELLED", "REJECTED"]])
+        completed_sales_count = len([t for t in seller_txs if t.status == "COMPLETED"])
+        received_offers_count = len([t for t in seller_txs if t.status in ["INITIATED", "PENDING_SELLER_ACCEPTANCE", "OFFER_MADE"]])
+
+        seller_prop_ids = [p.id for p in seller_props]
+        doc_cond = [PropertyDocument.uploader_user_id == current_user.id]
+        if seller_prop_ids:
+            doc_cond.append(PropertyDocument.property_id.in_(seller_prop_ids))
+
+        seller_docs = list(
+            db.scalars(
+                select(PropertyDocument)
+                .options(joinedload(PropertyDocument.verification_records))
+                .where(or_(*doc_cond))
+                .order_by(PropertyDocument.created_at.desc())
+            ).unique().all()
+        )
+
+        formatted_docs = []
+        for d in seller_docs:
+            review_note = None
+            if d.status in ["REJECTED", "CORRECTION_REQUESTED", "REQUIRES_CORRECTION"]:
+                if d.verification_records:
+                    last_rec = sorted(d.verification_records, key=lambda x: x.created_at or datetime.min, reverse=True)[0]
+                    review_note = last_rec.comments or "Correction requested by title reviewer."
+                else:
+                    review_note = "Correction requested by title reviewer."
+
+            formatted_docs.append({
+                "id": str(d.id),
+                "property_id": str(d.property_id),
+                "title": d.title,
+                "file_name": d.original_filename,
+                "original_filename": d.original_filename,
+                "document_type": d.document_type,
+                "status": d.status,
+                "document_hash": d.document_hash,
+                "created_at": d.created_at.isoformat() if d.created_at else None,
+                "review_notes": review_note,
+            })
 
         payload["seller_metrics"] = {
             "listed_properties_count": len(seller_props),
+            "verified_properties_count": verified_props_count,
             "portfolio_valuation": portfolio_val,
-            "received_offers_count": len([t for t in seller_txs if t.status == "PENDING_SELLER_ACCEPTANCE"]),
+            "portfolio_valuation_usd": portfolio_val,
+            "received_offers_count": received_offers_count,
+            "active_sales_count": active_sales_count,
+            "completed_sales_count": completed_sales_count,
             "pending_purchase_requests": pending_purchase_requests,
             "my_properties": [
                 {
@@ -231,9 +332,12 @@ def get_dashboard_metrics(
                     "property_number": p.property_number,
                     "title": p.title,
                     "city": p.city,
+                    "state": p.state,
+                    "property_type": p.property_type,
                     "valuation": float(p.valuation) if p.valuation else 0.0,
                     "status": p.status,
                     "verification_status": p.verification_status,
+                    "blockchain_property_id": p.blockchain_property_id,
                 }
                 for p in seller_props
             ],
@@ -245,11 +349,14 @@ def get_dashboard_metrics(
                     "property_title": t.property.title if t.property else "Parcel",
                     "buyer_name": t.buyer.full_name if t.buyer else "Buyer",
                     "purchase_price": float(t.proposed_amount) if t.proposed_amount else 0.0,
+                    "amount": float(t.proposed_amount) if t.proposed_amount else 0.0,
                     "status": t.status,
+                    "blockchain_tx_hash": t.blockchain_tx_hash,
                     "created_at": t.created_at.isoformat() if t.created_at else None,
                 }
                 for t in seller_txs
             ],
+            "my_documents": formatted_docs,
         }
 
     elif user_role == UserRole.VERIFIER.value:
