@@ -39,8 +39,12 @@ class BlockchainService:
         self._load_contracts()
 
     def _load_contracts(self):
-        repo_root = Path(__file__).resolve().parent.parent.parent.parent
-        deployments_dir = repo_root / "blockchain" / "deployments"
+        custom_dir = os.getenv("BLOCKCHAIN_DEPLOYMENTS_DIR")
+        if custom_dir and Path(custom_dir).is_dir():
+            deployments_dir = Path(custom_dir)
+        else:
+            repo_root = Path(__file__).resolve().parent.parent.parent.parent
+            deployments_dir = repo_root / "blockchain" / "deployments"
         chain_id = os.getenv("BLOCKCHAIN_CHAIN_ID", "31337")
 
         deployment_file = (

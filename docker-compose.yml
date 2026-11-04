@@ -1,0 +1,62 @@
+services:
+  blockchain:
+    build:
+      context: ./blockchain
+      dockerfile: Dockerfile
+    container_name: propchain-blockchain
+    ports:
+      - "8545:8545"
+    volumes:
+      - blockchain-deployments:/app/deployments
+    networks:
+      - propchain-network
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: propchain-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - APP_NAME=PropChain API
+      - APP_ENV=development
+      - DEBUG=true
+      - BACKEND_HOST=0.0.0.0
+      - BACKEND_PORT=8000
+      - FRONTEND_URL=http://localhost:5173
+      - DATABASE_URL=sqlite:///:memory:
+      - JWT_SECRET_KEY=propchain_development_jwt_secret_key_1234567890_phase4
+      - BLOCKCHAIN_RPC_URL=http://blockchain:8545
+      - BLOCKCHAIN_DEPLOYMENTS_DIR=/app/deployments
+      - MONGODB_URI=mongodb+srv://keshavarora459_db_user:lpIaurNyXgFmlQmP@cluster0.9egz68d.mongodb.net/?retryWrites=true&w=majority
+      - MONGODB_DB_NAME=propchain
+    volumes:
+      - blockchain-deployments:/app/deployments:ro
+    depends_on:
+      - blockchain
+    networks:
+      - propchain-network
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: propchain-frontend
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+    networks:
+      - propchain-network
+    restart: unless-stopped
+
+volumes:
+  blockchain-deployments:
+
+networks:
+  propchain-network:
+    driver: bridge
+
