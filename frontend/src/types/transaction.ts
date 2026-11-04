@@ -48,4 +48,8 @@ export interface Transaction {
   blockchainTxHash?: string
   blockchain_tx_hash?: string
   blockNumber?: number
+  blockchain_block_number?: number
+  blockchain_error?: string
+  property_number?: string
+  propertyNumber?: string
 }

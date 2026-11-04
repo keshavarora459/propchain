@@ -64,6 +64,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                         conn.commit()
                     except Exception:
                         pass
+                for col_name, col_type in [
+                    ("blockchain_block_number", "INTEGER"),
+                    ("blockchain_error", "TEXT"),
+                ]:
+                    try:
+                        conn.execute(text(f"ALTER TABLE property_transactions ADD COLUMN {col_name} {col_type}"))
+                        conn.commit()
+                    except Exception:
+                        pass
         except Exception as mig_exc:
             logger.debug("SQLite column ensure notice: %s", mig_exc)
 

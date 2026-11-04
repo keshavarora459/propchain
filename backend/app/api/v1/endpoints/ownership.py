@@ -396,6 +396,7 @@ def get_blockchain_overview(
             "to_address": ev.new_owner_address or "",
             "previous_owner_id": str(ev.previous_owner_id) if ev.previous_owner_id else "",
             "new_owner_id": str(ev.new_owner_id) if ev.new_owner_id else "",
+            "deal_number": ev.transaction_id or "",
             "tx_hash": ev.blockchain_tx_hash or "",
             "block_number": ev.block_number or 0,
             "timestamp": ev.confirmed_at.isoformat() if ev.confirmed_at else ev.created_at.isoformat(),
@@ -574,6 +575,13 @@ def get_blockchain_overview(
                         "timestamp": b_time,
                     })
 
+                matching_transfer = next(
+                    (t for t in transfer_list if t.get("block_number") == b_num or (t.get("tx_hash") and t.get("tx_hash").lower() in [h.lower() for h in block_tx_hashes])),
+                    None
+                )
+                if matching_transfer or has_transfer:
+                    b_type = "Ownership Transferred"
+
                 blocks_list.append({
                     "blockNumber": b_num,
                     "hash": b_hash,
@@ -588,6 +596,7 @@ def get_blockchain_overview(
                     "stateRoot": st_root,
                     "receiptsRoot": rc_root,
                     "blockType": b_type,
+                    "transferDetails": matching_transfer,
                     "transactions": block_tx_hashes,
                 })
             except Exception as b_err:

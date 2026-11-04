@@ -22,6 +22,8 @@ import { formatCurrency, formatDate, getPropertyLabel } from '@/lib/utils'
 import { useAuth } from '@/hooks/useAuth'
 import apiClient from '@/lib/axios'
 import { CONTRACT_ADDRESSES } from '@/contracts/contractConfig'
+import { HashDisplay } from '@/components/common/HashDisplay'
+import { TransactionLifecycleTimeline } from '@/components/common/TransactionLifecycleTimeline'
 
 interface LegalConfirmationFormData {
   deed_number: string
@@ -43,6 +45,33 @@ export const LegalAuthorityDashboard: React.FC = () => {
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [feedbackMessage, setFeedbackMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [retryingTxnId, setRetryingTxnId] = useState<string | null>(null)
+
+  const handleRetryConveyance = async (txnId: string) => {
+    setRetryingTxnId(txnId)
+    setFeedbackMessage(null)
+    try {
+      const res = await apiClient.post(`/transactions/${txnId}/retry-conveyance`)
+      const updatedTxn = res.data
+      const blkStr = updatedTxn.blockchain_block_number ? ` in block #${updatedTxn.blockchain_block_number}` : ''
+      const txStr = updatedTxn.blockchain_tx_hash ? ` (Tx: ${updatedTxn.blockchain_tx_hash})` : ''
+      setFeedbackMessage({
+        type: 'success',
+        text: `✓ Conveyance transfer succeeded on blockchain${blkStr}${txStr}! Status is now COMPLETED.`,
+      })
+      await loadLegalData()
+    } catch (err: any) {
+      console.error('Statutory retry failed:', err)
+      const errorMsg = err.response?.data?.message || err.response?.data?.detail || err.message
+      setFeedbackMessage({
+        type: 'error',
+        text: `Retry failed: ${errorMsg}`,
+      })
+      await loadLegalData()
+    } finally {
+      setRetryingTxnId(null)
+    }
+  }
 
   const [formData, setFormData] = useState<LegalConfirmationFormData>({
     deed_number: '',
@@ -92,7 +121,7 @@ export const LegalAuthorityDashboard: React.FC = () => {
     setIsSubmitting(true)
     try {
       const compositeRef = `${formData.deed_number} (Book ${formData.book_number}, Vol ${formData.volume_number})`
-      await apiClient.post(`/transactions/${selectedTxn.id}/legal-confirm`, {
+      const res = await apiClient.post(`/transactions/${selectedTxn.id}/legal-confirm`, {
         registration_reference: compositeRef,
         registry_jurisdiction: formData.jurisdiction,
         registration_date: formData.registration_date,
@@ -102,20 +131,25 @@ export const LegalAuthorityDashboard: React.FC = () => {
         comments: formData.comments,
       })
 
+      const confirmedData = res.data
+      const blkStr = confirmedData.blockchain_block_number ? ` in block #${confirmedData.blockchain_block_number}` : ''
+      const txStr = confirmedData.blockchain_tx_hash ? ` (Tx: ${confirmedData.blockchain_tx_hash})` : ''
       setFeedbackMessage({
         type: 'success',
-        text: `✓ Statutory deed ${formData.deed_number} confirmed! On-chain smart contract transfer executed automatically.`,
+        text: `✓ Statutory deed ${formData.deed_number} confirmed! Ownership transferred on blockchain${blkStr}${txStr}.`,
       })
       setIsConfirmModalOpen(false)
       setSelectedTxn(null)
       await loadLegalData()
-      setTimeout(() => setFeedbackMessage(null), 6000)
+      setTimeout(() => setFeedbackMessage(null), 8000)
     } catch (err: any) {
       console.error('Statutory legal confirmation failed:', err)
+      const errorMsg = err.response?.data?.message || err.response?.data?.detail || err.message
       setFeedbackMessage({
         type: 'error',
-        text: `Legal confirmation error: ${err.response?.data?.message || err.message}`,
+        text: errorMsg,
       })
+      await loadLegalData()
     } finally {
       setIsSubmitting(false)
     }
@@ -253,15 +287,44 @@ export const LegalAuthorityDashboard: React.FC = () => {
                         <TableCell className="text-xs text-slate-600">{txn.buyer_name}</TableCell>
                         <TableCell className="text-xs text-slate-600">{txn.seller_name}</TableCell>
                         <TableCell className="font-mono text-xs font-bold text-slate-900">{formatCurrency(txn.purchase_price)}</TableCell>
-                        <TableCell><StatusBadge status={txn.status} /></TableCell>
+                        <TableCell>
+                          <StatusBadge status={txn.status} />
+                          {txn.blockchain_error && (
+                            <p className="text-[10px] text-rose-600 font-mono mt-0.5 line-clamp-1" title={txn.blockchain_error}>
+                              {txn.blockchain_error}
+                            </p>
+                          )}
+                        </TableCell>
                         <TableCell className="text-right">
-                          <Button
-                            size="sm"
-                            onClick={() => handleOpenConfirmModal(txn)}
-                            className="bg-purple-600 hover:bg-purple-500 text-white text-xs h-8 px-3"
-                          >
-                            Enter Deed & Confirm
-                          </Button>
+                          {txn.status === 'LEGALLY_REGISTERED' ? (
+                            <Button
+                              size="sm"
+                              isLoading={retryingTxnId === txn.id}
+                              disabled={retryingTxnId === txn.id}
+                              onClick={() => handleRetryConveyance(txn.id)}
+                              className="bg-amber-600 hover:bg-amber-500 text-white text-xs h-8 px-3"
+                            >
+                              Retry blockchain transfer
+                            </Button>
+                          ) : txn.status === 'COMPLETED' ? (
+                            <div className="text-right text-[11px] font-mono text-emerald-700">
+                              <span className="font-semibold block">Completed ✓</span>
+                              <span>Block #{txn.blockchain_block_number ?? 'N/A'}</span>
+                              {txn.blockchain_tx_hash && (
+                                <HashDisplay value={txn.blockchain_tx_hash} explorerLink className="text-[10px] p-0 border-0 bg-transparent" />
+                              )}
+                            </div>
+                          ) : txn.status === 'READY_FOR_LEGAL_CONFIRMATION' ? (
+                            <Button
+                              size="sm"
+                              onClick={() => handleOpenConfirmModal(txn)}
+                              className="bg-purple-600 hover:bg-purple-500 text-white text-xs h-8 px-3"
+                            >
+                              Enter Deed & Confirm
+                            </Button>
+                          ) : (
+                            <span className="text-xs text-slate-400 font-medium">Awaiting Verifier Approval</span>
+                          )}
                         </TableCell>
                       </TableRow>
                     ))}
@@ -308,15 +371,44 @@ export const LegalAuthorityDashboard: React.FC = () => {
                       <TableCell className="text-xs text-slate-600">{txn.buyer_name}</TableCell>
                       <TableCell className="text-xs text-slate-600">{txn.seller_name}</TableCell>
                       <TableCell className="font-mono text-xs font-bold">{formatCurrency(txn.purchase_price)}</TableCell>
-                      <TableCell><StatusBadge status={txn.status} /></TableCell>
+                      <TableCell>
+                        <StatusBadge status={txn.status} />
+                        {txn.blockchain_error && (
+                          <p className="text-[10px] text-rose-600 font-mono mt-0.5 line-clamp-1" title={txn.blockchain_error}>
+                            {txn.blockchain_error}
+                          </p>
+                        )}
+                      </TableCell>
                       <TableCell className="text-right">
-                        <Button
-                          size="sm"
-                          onClick={() => handleOpenConfirmModal(txn)}
-                          className="bg-purple-600 hover:bg-purple-500 text-white text-xs h-8 px-3"
-                        >
-                          Record Deed & Confirm
-                        </Button>
+                        {txn.status === 'LEGALLY_REGISTERED' ? (
+                          <Button
+                            size="sm"
+                            isLoading={retryingTxnId === txn.id}
+                            disabled={retryingTxnId === txn.id}
+                            onClick={() => handleRetryConveyance(txn.id)}
+                            className="bg-amber-600 hover:bg-amber-500 text-white text-xs h-8 px-3"
+                          >
+                            Retry blockchain transfer
+                          </Button>
+                        ) : txn.status === 'COMPLETED' ? (
+                          <div className="text-right text-[11px] font-mono text-emerald-700">
+                            <span className="font-semibold block">Completed ✓</span>
+                            <span>Block #{txn.blockchain_block_number ?? 'N/A'}</span>
+                            {txn.blockchain_tx_hash && (
+                              <HashDisplay value={txn.blockchain_tx_hash} explorerLink className="text-[10px] p-0 border-0 bg-transparent" />
+                            )}
+                          </div>
+                        ) : txn.status === 'READY_FOR_LEGAL_CONFIRMATION' ? (
+                          <Button
+                            size="sm"
+                            onClick={() => handleOpenConfirmModal(txn)}
+                            className="bg-purple-600 hover:bg-purple-500 text-white text-xs h-8 px-3"
+                          >
+                            Record Deed & Confirm
+                          </Button>
+                        ) : (
+                          <span className="text-xs text-slate-400 font-medium">Awaiting Verifier Approval</span>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -434,6 +526,14 @@ export const LegalAuthorityDashboard: React.FC = () => {
           title="Official Statutory Deed Registration"
         >
           <form onSubmit={handleSubmitLegalConfirmation} className="space-y-4 text-xs">
+            <TransactionLifecycleTimeline
+              status={selectedTxn?.status}
+              blockchainError={selectedTxn?.blockchain_error}
+              blockchainBlockNumber={selectedTxn?.blockchain_block_number}
+              blockchainTxHash={selectedTxn?.blockchain_tx_hash}
+              compact
+            />
+
             <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg text-purple-900">
               <p className="font-semibold text-xs">Conveyance Transaction:</p>
               <p className="font-mono text-[11px] mt-0.5">

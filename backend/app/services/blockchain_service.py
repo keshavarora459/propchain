@@ -344,12 +344,22 @@ class BlockchainService:
         previous_owner_address: str,
         new_owner_address: str,
         transaction_id_str: str,
-    ) -> Tuple[bool, Optional[str], Optional[str]]:
+    ) -> Tuple[bool, Optional[str], Optional[int], Optional[str]]:
         """
         Executes on-chain transfer in OwnershipRegistry and updates local ownership history.
+        Returns: (success, tx_hash, block_number, error_message)
         """
         if not self.is_network_connected() or not self.ownership_registry:
-            return False, None, "Blockchain EVM node unreachable or contracts not deployed."
+            return False, None, None, "Blockchain EVM node unreachable or contracts not deployed."
+
+        from app.core.config import get_settings
+        settings = get_settings()
+
+        # Fallback to PLATFORM_CUSTODY_WALLET if addresses are not provided
+        if not previous_owner_address or not str(previous_owner_address).strip():
+            previous_owner_address = settings.PLATFORM_CUSTODY_WALLET
+        if not new_owner_address or not str(new_owner_address).strip():
+            new_owner_address = settings.PLATFORM_CUSTODY_WALLET
 
         op = BlockchainOperation(
             operation_type="TRANSFER_OWNERSHIP",
@@ -361,10 +371,19 @@ class BlockchainService:
         self.db.commit()
 
         try:
-            prev_addr = Web3.to_checksum_address(previous_owner_address)
+            # Check recorded current owner on-chain to match registeredCurrent in contract
+            try:
+                curr_owner = self.ownership_registry.functions.getCurrentOwner(prop.property_number).call()
+                if curr_owner and curr_owner != "0x0000000000000000000000000000000000000000":
+                    prev_addr = curr_owner
+                else:
+                    prev_addr = Web3.to_checksum_address(previous_owner_address)
+            except Exception:
+                prev_addr = Web3.to_checksum_address(previous_owner_address)
+
             new_addr = Web3.to_checksum_address(new_owner_address)
 
-            nonce = self.w3.eth.get_transaction_count(self.deployer_account.address)
+            nonce = self.w3.eth.get_transaction_count(self.deployer_account.address, "pending")
             tx = self.ownership_registry.functions.recordOwnershipTransfer(
                 prop.property_number,
                 prev_addr,
@@ -390,10 +409,22 @@ class BlockchainService:
                 op.status = "REVERTED"
                 op.error_message = "Transfer transaction reverted on chain."
                 self.db.commit()
-                return False, tx_hash, "Transfer transaction reverted on chain."
+                return False, tx_hash, None, "Transfer transaction reverted on chain."
 
+            block_num = receipt["blockNumber"]
             op.status = "CONFIRMED"
-            op.block_number = receipt["blockNumber"]
+            op.block_number = block_num
+
+            # Fetch authentic block timestamp
+            block_timestamp = None
+            try:
+                block_info = self.w3.eth.get_block(block_num)
+                if block_info and "timestamp" in block_info:
+                    block_timestamp = datetime.fromtimestamp(block_info["timestamp"], tz=timezone.utc)
+            except Exception:
+                pass
+            if not block_timestamp:
+                block_timestamp = datetime.now(timezone.utc)
 
             # Record ownership event
             transfer_event = OwnershipEvent(
@@ -405,18 +436,36 @@ class BlockchainService:
                 transaction_id=transaction_id_str,
                 event_type="TRANSFER",
                 blockchain_tx_hash=tx_hash,
-                block_number=receipt["blockNumber"],
-                confirmed_at=datetime.now(timezone.utc),
+                block_number=block_num,
+                confirmed_at=block_timestamp,
             )
             self.db.add(transfer_event)
+
+            # Record blockchain event for explorer indexing
+            reg_contract_addr = self.ownership_registry.address or self.get_contract_address() or "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512"
+            bc_event = BlockchainEvent(
+                contract_address=reg_contract_addr,
+                event_name="OwnershipTransferred",
+                block_number=block_num,
+                tx_hash=tx_hash,
+                log_index=0,
+                payload={
+                    "property_id": prop.property_number,
+                    "previous_owner": prev_addr,
+                    "new_owner": new_addr,
+                    "transaction_id": transaction_id_str,
+                    "timestamp": int(block_timestamp.timestamp()),
+                },
+            )
+            self.db.add(bc_event)
             self.db.commit()
 
-            return True, tx_hash, None
+            return True, tx_hash, block_num, None
 
         except Exception as e:
             logger.error("Error transferring ownership on chain: %s", e)
             op.status = "FAILED"
             op.error_message = str(e)
             self.db.commit()
-            return False, None, str(e)
+            return False, None, None, str(e)
 

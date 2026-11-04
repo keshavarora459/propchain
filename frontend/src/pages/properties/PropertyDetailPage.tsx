@@ -17,6 +17,8 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { Input } from '@/components/ui/Input'
+import { Tabs } from '@/components/ui/Tabs'
+import { truncateHash } from '@/lib/utils'
 import { formatCurrency, formatDate, getPropertyLabel } from '@/lib/utils'
 import { propertyService } from '@/services/propertyService'
 import { ownershipService } from '@/services/ownershipService'
@@ -33,6 +35,8 @@ export const PropertyDetailPage: React.FC = () => {
   const [documents, setDocuments] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isVerifying, setIsVerifying] = useState(false)
+  const [activeTab, setActiveTab] = useState<'details' | 'transfer' | 'documents'>('details')
+  const [ownershipRecords, setOwnershipRecords] = useState<any[]>([])
   const [conveyanceCount, setConveyanceCount] = useState<number>(1)
 
   // Direct Make Offer modal states
@@ -76,17 +80,16 @@ export const PropertyDetailPage: React.FC = () => {
         console.warn('Could not load property documents from backend:', err)
       })
 
-    // Fetch conveyance count if available
+    // Fetch complete conveyance records
     apiClient
       .get<any>(`/properties/${id}/ownership-history`)
       .then((res) => {
-        if (Array.isArray(res.data)) {
-          setConveyanceCount(Math.max(1, res.data.length))
-        } else if (res.data?.items && Array.isArray(res.data.items)) {
-          setConveyanceCount(Math.max(1, res.data.items.length))
-        }
+        const items = Array.isArray(res.data) ? res.data : (res.data?.items && Array.isArray(res.data.items) ? res.data.items : [])
+        setOwnershipRecords(items)
+        setConveyanceCount(Math.max(1, items.length))
       })
       .catch(() => {
+        setOwnershipRecords([])
         setConveyanceCount(1)
       })
   }, [id])
@@ -297,10 +300,114 @@ export const PropertyDetailPage: React.FC = () => {
         </div>
       )}
 
+      {/* Navigation Tabs */}
+      <Tabs
+        tabs={[
+          { id: 'details', label: 'Physical Asset Specifications' },
+          { id: 'documents', label: 'Title Deeds & Records', count: documents.length },
+          { id: 'transfer', label: 'Ownership Transfer', count: ownershipRecords.length },
+        ]}
+        activeTab={activeTab}
+        onChange={(t) => setActiveTab(t as any)}
+      />
+
       {/* Top Details Grid */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Main Metadata Card */}
         <div className="lg:col-span-2 space-y-6">
+          {activeTab === 'transfer' && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <ShieldCheck className="h-5 w-5 text-emerald-600" />
+                  <span>On-Chain Ownership Conveyance Proof</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {ownershipRecords.length === 0 ? (
+                  <div className="p-8 text-center text-xs text-slate-400">
+                    <p>No recorded ownership transfer events for this property yet.</p>
+                    {(property.blockchain_tx_hash || (property as any).anchor_tx_hash) && (
+                      <div className="mt-4 p-4 rounded-xl border border-emerald-200 bg-emerald-50 text-left space-y-2">
+                        <span className="font-semibold text-emerald-800 text-xs">Genesis Property Anchor:</span>
+                        <div className="flex justify-between text-xs">
+                          <span className="text-slate-500">Block:</span>
+                          <span className="font-mono font-bold text-slate-800">
+                            #{property.blockchain_block_number || 1}
+                          </span>
+                        </div>
+                        <div className="flex justify-between text-xs">
+                          <span className="text-slate-500">Transaction Hash:</span>
+                          <HashDisplay
+                            value={property.blockchain_tx_hash || (property as any).anchor_tx_hash}
+                            explorerLink
+                          />
+                        </div>
+                        <div className="flex justify-between text-xs">
+                          <span className="text-slate-500">Initial Owner:</span>
+                          <span className="font-semibold text-slate-800">{property.currentOwner}</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {ownershipRecords.map((rec: any, idx: number) => {
+                      const isTransfer = rec.event_type === 'TRANSFER' || rec.previous_owner_name || rec.previous_owner_address
+                      return (
+                        <div key={rec.id || idx} className="p-4 rounded-xl border border-slate-200 bg-white space-y-3 shadow-xs">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-bold px-2 py-0.5 rounded bg-blue-100 text-blue-800 font-mono">
+                                {isTransfer ? 'Ownership Transferred' : 'Initial Registration'}
+                              </span>
+                              {rec.transaction_id && (
+                                <span className="font-mono text-xs text-slate-500 font-semibold">{rec.transaction_id}</span>
+                              )}
+                            </div>
+                            <span className="text-xs text-slate-500 font-mono">
+                              {formatDate(rec.confirmed_at || rec.created_at)}
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs pt-2 border-t border-slate-100">
+                            <div>
+                              <span className="text-slate-400 block text-[11px]">Previous Owner</span>
+                              <strong className="text-slate-700 block">
+                                {rec.previous_owner_name || (rec.previous_owner_address ? truncateHash(rec.previous_owner_address, 6, 4) : 'Genesis')}
+                              </strong>
+                            </div>
+                            <div>
+                              <span className="text-slate-400 block text-[11px]">New Owner</span>
+                              <strong className="text-slate-900 block">
+                                {rec.new_owner_name || (rec.new_owner_address ? truncateHash(rec.new_owner_address, 6, 4) : property.currentOwner)}
+                              </strong>
+                            </div>
+                            <div>
+                              <span className="text-slate-400 block text-[11px]">Recorded Block</span>
+                              <strong className="font-mono text-blue-600 block">
+                                #{rec.block_number || rec.blockchain_block_number || 'N/A'}
+                              </strong>
+                            </div>
+                            <div>
+                              <span className="text-slate-400 block text-[11px]">On-Chain Transfer Proof</span>
+                              <HashDisplay
+                                value={rec.blockchain_tx_hash || rec.tx_hash}
+                                explorerLink
+                                className="text-[11px] p-0 border-0 bg-transparent"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {activeTab === 'details' && (
           <Card>
             <CardHeader>
               <CardTitle>Physical Asset Specifications</CardTitle>
@@ -359,7 +466,10 @@ export const PropertyDetailPage: React.FC = () => {
             </CardContent>
           </Card>
 
+          )}
+
           {/* Legal Documents */}
+          {(activeTab === 'details' || activeTab === 'documents') && (
           <Card>
             <CardHeader>
               <CardTitle>Authenticated Title Deeds & Deeds of Conveyance</CardTitle>
@@ -426,6 +536,7 @@ export const PropertyDetailPage: React.FC = () => {
               )}
             </CardContent>
           </Card>
+          )}
         </div>
 
         {/* Right Sidebar: Ownership & Blockchain Ledger */}

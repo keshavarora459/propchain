@@ -47,6 +47,7 @@ class TransactionService:
         resp = TransactionResponse.model_validate(txn)
         if txn.property:
             resp.property_title = txn.property.title
+            resp.property_number = txn.property.property_number
         if txn.buyer:
             resp.buyer_name = txn.buyer.full_name
         if txn.seller:
@@ -407,28 +408,49 @@ class TransactionService:
 
     def execute_conveyance_on_chain(self, txn: PropertyTransaction, current_user: User):
         """Executes smart contract transfer in OwnershipRegistry and updates property ownership."""
+        from app.core.config import get_settings
+        from app.models.wallet import UserWallet
+        from app.models.user_activity import UserActivityLog
+        from web3 import Web3
+
         b_service = BlockchainService(self.db)
         if not b_service.is_network_connected():
-            # In offline/test environments where blockchain node is unreachable, finalize DB ownership
-            prop = txn.property
-            if prop:
-                prop.current_owner_id = txn.buyer_id
-                txn.status = "COMPLETED"
-                self.db.commit()
-            return
+            err_msg = "Blockchain EVM node unreachable. Ensure Hardhat/EVM node is running."
+            txn.blockchain_error = err_msg
+            self.db.commit()
+            raise BadRequestError(f"Blockchain transfer failed: {err_msg}")
 
         prop = txn.property
+        if not prop:
+            prop = self.db.get(Property, txn.property_id)
+        if not prop:
+            err_msg = "Associated property not found."
+            txn.blockchain_error = err_msg
+            self.db.commit()
+            raise BadRequestError(f"Blockchain transfer failed: {err_msg}")
+
+        settings = get_settings()
+
         seller_wallet = self.db.scalars(
-            select(UserWallet).where(UserWallet.user_id == txn.seller_id, UserWallet.is_verified == True)
+            select(UserWallet).where(UserWallet.user_id == txn.seller_id)
         ).first()
         buyer_wallet = self.db.scalars(
-            select(UserWallet).where(UserWallet.user_id == txn.buyer_id, UserWallet.is_verified == True)
+            select(UserWallet).where(UserWallet.user_id == txn.buyer_id)
         ).first()
 
-        prev_addr = seller_wallet.wallet_address if seller_wallet else os.getenv("DEFAULT_SELLER_WALLET", "")
-        new_addr = buyer_wallet.wallet_address if buyer_wallet else os.getenv("DEFAULT_BUYER_WALLET", "")
+        prev_addr = (seller_wallet.wallet_address if seller_wallet and seller_wallet.wallet_address else None) or settings.PLATFORM_CUSTODY_WALLET
+        new_addr = (buyer_wallet.wallet_address if buyer_wallet and buyer_wallet.wallet_address else None) or settings.PLATFORM_CUSTODY_WALLET
 
-        success, tx_hash, err = b_service.execute_ownership_transfer(
+        try:
+            prev_addr = Web3.to_checksum_address(prev_addr)
+            new_addr = Web3.to_checksum_address(new_addr)
+        except Exception as addr_err:
+            err_msg = f"Invalid wallet address: {addr_err}"
+            txn.blockchain_error = err_msg
+            self.db.commit()
+            raise BadRequestError(f"Blockchain transfer failed: {err_msg}")
+
+        success, tx_hash, block_num, err = b_service.execute_ownership_transfer(
             prop=prop,
             previous_owner_user_id=txn.seller_id,
             new_owner_user_id=txn.buyer_id,
@@ -437,17 +459,94 @@ class TransactionService:
             transaction_id_str=txn.transaction_number,
         )
 
-        if success and tx_hash:
-            from_status = txn.status
-            txn.status = "COMPLETED"
-            txn.blockchain_tx_hash = tx_hash
-            prop.current_owner_id = txn.buyer_id
-            self._record_status_change(
-                txn,
-                from_status,
-                "COMPLETED",
-                current_user.id,
-                f"Conveyance executed on EVM blockchain. Tx: {tx_hash}",
-            )
+        if not success or not tx_hash:
+            err_msg = err or "Smart contract call failed on chain."
+            txn.blockchain_error = err_msg
             self.db.commit()
+            raise BadRequestError(f"Blockchain transfer failed: {err_msg}")
+
+        # Conveyance succeeded on-chain
+        from_status = txn.status
+        txn.status = "COMPLETED"
+        txn.blockchain_tx_hash = tx_hash
+        txn.blockchain_block_number = block_num
+        txn.blockchain_error = None
+
+        # Change property owner to buyer and delist from marketplace
+        prop.current_owner_id = txn.buyer_id
+        prop.status = "INACTIVE"
+        self.db.add(prop)
+
+        # Cancel all other open offers on that property
+        other_open_txns = list(
+            self.db.scalars(
+                select(PropertyTransaction).where(
+                    PropertyTransaction.property_id == prop.id,
+                    PropertyTransaction.id != txn.id,
+                    PropertyTransaction.status.notin_(["COMPLETED", "CANCELLED", "REJECTED"]),
+                )
+            ).all()
+        )
+        for other_txn in other_open_txns:
+            prev_st = other_txn.status
+            other_txn.status = "CANCELLED"
+            self._record_status_change(
+                other_txn,
+                prev_st,
+                "CANCELLED",
+                current_user.id,
+                f"Offer auto-cancelled: Property purchased by another buyer (Deal {txn.transaction_number}).",
+            )
+
+        # Write status history entry
+        self._record_status_change(
+            txn,
+            from_status,
+            "COMPLETED",
+            current_user.id,
+            f"Ownership transferred on blockchain (Block #{block_num}, Tx: {tx_hash}). Conveyance completed.",
+        )
+
+        # Notify both buyer and seller:
+        buyer_name = txn.buyer.full_name if txn.buyer else "Buyer"
+        prop_name = prop.title or prop.property_number or "Property"
+        notif_msg = f"Ownership of {prop_name} has been transferred to {buyer_name}. Recorded on the blockchain in block #{block_num}."
+
+        try:
+            self.db.add(UserActivityLog(
+                user_id=txn.buyer_id,
+                activity_type="NOTIFICATION",
+                description=notif_msg,
+            ))
+            self.db.add(UserActivityLog(
+                user_id=txn.seller_id,
+                activity_type="NOTIFICATION",
+                description=notif_msg,
+            ))
+        except Exception as notif_e:
+            logger.warning("Error creating user notifications: %s", notif_e)
+
+        self.db.commit()
+        self.db.refresh(txn)
+
+    def retry_conveyance(self, transaction_id: uuid.UUID, current_user: User) -> TransactionResponse:
+        """Retries smart contract conveyance execution for a transaction in LEGALLY_REGISTERED state."""
+        user_role = UserRole(current_user.role)
+        if user_role != UserRole.LEGAL_AUTHORITY:
+            raise ForbiddenError("Only an authorized Legal Authority account can retry conveyance transfer.")
+
+        txn = self.db.get(PropertyTransaction, transaction_id)
+        if not txn:
+            raise NotFoundError(f"Transaction with ID '{transaction_id}' not found.")
+
+        if txn.status != "LEGALLY_REGISTERED":
+            raise BadRequestError(
+                f"Cannot retry conveyance on transaction with status '{txn.status}'. Status must be LEGALLY_REGISTERED."
+            )
+
+        self.execute_conveyance_on_chain(txn, current_user)
+        return self._to_response(txn)
+
+    # Alias for approvals endpoint compatibility
+    verify_documents = verifier_approve
 

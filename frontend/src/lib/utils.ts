@@ -242,3 +242,113 @@ export function checkDocumentTypeMismatch(
 
   return false
 }
+
+
+/**
+ * Canonical 6-stage lifecycle for real estate conveyance deals:
+ * Offer made -> Seller accepted -> Verifier approved deal documents -> Legal registration approved -> Ownership transferred on blockchain -> Completed
+ */
+export const TRANSACTION_LIFECYCLE_STEPS = [
+  { step: 1, label: 'Offer made', description: 'Buyer submitted purchase proposal' },
+  { step: 2, label: 'Seller accepted', description: 'Seller accepted terms of conveyance' },
+  { step: 3, label: 'Verifier approved deal documents', description: 'Certified verifier reviewed deal documents' },
+  { step: 4, label: 'Legal registration approved', description: 'Statutory land registry deed entered' },
+  { step: 5, label: 'Ownership transferred on blockchain', description: 'Smart contract recorded on EVM ledger' },
+  { step: 6, label: 'Completed', description: 'Conveyance settled and title re-assigned' },
+] as const
+
+export interface LifecycleStepState {
+  number: number
+  label: string
+  description: string
+  state: 'completed' | 'current' | 'upcoming' | 'error'
+}
+
+export function getTransactionLifecycleProgress(
+  rawStatus?: string | null,
+  blockchainError?: string | null
+): {
+  currentStepIndex: number
+  currentStepLabel: string
+  isCompleted: boolean
+  isCancelledOrRejected: boolean
+  hasBlockchainError: boolean
+  steps: LifecycleStepState[]
+} {
+  const status = (rawStatus || '').toUpperCase().trim()
+  const isCancelledOrRejected = status === 'CANCELLED' || status === 'REJECTED'
+  const isCompleted = status === 'COMPLETED'
+  const hasBlockchainError = Boolean(blockchainError && blockchainError.trim().length > 0)
+
+  // 0-indexed:
+  // 0 = Offer made (PENDING_SELLER_ACCEPTANCE / INITIATED)
+  // 1 = Seller accepted (PENDING_DOCUMENT_VERIFICATION / SELLER_ACCEPTED)
+  // 2 = Verifier approved deal documents (READY_FOR_LEGAL_CONFIRMATION / DOCUMENTS_VERIFIED / PENDING_LEGAL_CONFIRMATION)
+  // 3 = Legal registration approved (LEGALLY_REGISTERED)
+  // 4 = Ownership transferred on blockchain (recorded on EVM)
+  // 5 = Completed
+  let activeIndex = 0
+
+  if (isCompleted) {
+    activeIndex = 5
+  } else if (status === 'LEGALLY_REGISTERED') {
+    // Legal registration approved; if blockchain error occurred or awaiting retry, step 5 is active/errored
+    activeIndex = 4
+  } else if (
+    status === 'READY_FOR_LEGAL_CONFIRMATION' ||
+    status === 'DOCUMENTS_VERIFIED' ||
+    status === 'PENDING_LEGAL_CONFIRMATION'
+  ) {
+    activeIndex = 3 // Awaiting Legal registration
+  } else if (
+    status === 'PENDING_DOCUMENT_VERIFICATION' ||
+    status === 'SELLER_ACCEPTED' ||
+    status === 'DOCUMENT_VERIFICATION'
+  ) {
+    activeIndex = 2 // Awaiting Verifier approval
+  } else if (
+    status === 'PENDING_SELLER_ACCEPTANCE' ||
+    status === 'INITIATED' ||
+    status === 'OFFER_MADE'
+  ) {
+    activeIndex = 1 // Awaiting Seller acceptance
+  }
+
+  const steps: LifecycleStepState[] = TRANSACTION_LIFECYCLE_STEPS.map((s, idx) => {
+    let state: 'completed' | 'current' | 'upcoming' | 'error' = 'upcoming'
+
+    if (isCompleted) {
+      state = 'completed'
+    } else if (isCancelledOrRejected) {
+      state = idx <= activeIndex ? 'error' : 'upcoming'
+    } else if (idx < activeIndex) {
+      state = 'completed'
+    } else if (idx === activeIndex) {
+      if (status === 'LEGALLY_REGISTERED' && hasBlockchainError) {
+        state = 'error'
+      } else {
+        state = 'current'
+      }
+    } else {
+      state = 'upcoming'
+    }
+
+    return {
+      number: s.step,
+      label: s.label,
+      description: s.description,
+      state,
+    }
+  })
+
+  const currentStepLabel = TRANSACTION_LIFECYCLE_STEPS[activeIndex]?.label || 'In Progress'
+
+  return {
+    currentStepIndex: activeIndex,
+    currentStepLabel,
+    isCompleted,
+    isCancelledOrRejected,
+    hasBlockchainError,
+    steps,
+  }
+}

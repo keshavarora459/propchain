@@ -52,6 +52,7 @@ export interface RealBlock {
   stateRoot?: string
   receiptsRoot?: string
   blockType?: string
+  transferDetails?: any
   transactions?: string[]
 }
 
@@ -93,6 +94,7 @@ export interface OwnershipTransferTx {
   from_address: string
   to_owner: string
   to_address: string
+  deal_number?: string
   tx_hash: string
   block_number: number
   timestamp: string
@@ -190,7 +192,7 @@ function getBlockVisualTheme(blockType?: string, isGenesis?: boolean) {
       topAccentClass: 'bg-gradient-to-r from-indigo-500 to-purple-500',
       iconClass: 'text-indigo-400',
       badgeClass: 'bg-indigo-950/80 text-indigo-300 border-indigo-500/40',
-      label: 'Ownership Transfer',
+      label: 'Ownership Transferred',
     }
   }
   return {
@@ -678,7 +680,7 @@ export const BlockchainExplorerPage: React.FC = () => {
             Property Registration
           </span>
           <span className="px-2 py-0.5 rounded border bg-indigo-950/70 text-indigo-300 border-indigo-500/40">
-            Ownership Transfer
+            Ownership Transferred
           </span>
           <span className="px-2 py-0.5 rounded border bg-cyan-950/70 text-cyan-300 border-cyan-500/40">
             Smart Contract Interaction
@@ -745,9 +747,27 @@ export const BlockchainExplorerPage: React.FC = () => {
                         <span className="font-mono font-bold text-sm text-white">Block #{blk.blockNumber}</span>
                       </div>
                       <span className={`text-[10px] font-semibold px-2 py-0.5 rounded border ${theme.badgeClass}`}>
-                        {theme.label}
+                        {blk.blockType?.toLowerCase().includes('ownership') ? 'Ownership Transferred' : theme.label}
                       </span>
                     </div>
+
+                    {/* Ownership Transfer Summary if applicable */}
+                    {(() => {
+                      const tInfo = blk.transferDetails || ownershipTransfers.find((ot) => ot.block_number === blk.blockNumber || (ot.tx_hash && blk.transactions?.includes(ot.tx_hash)))
+                      if (!tInfo && !blk.blockType?.toLowerCase().includes('ownership')) return null
+                      return (
+                        <div className="mb-2 p-2 rounded-lg bg-indigo-950/80 border border-indigo-500/40 text-[10px] space-y-1">
+                          <div className="flex items-center justify-between text-indigo-300 font-semibold">
+                            <span className="truncate">{tInfo?.property_title || tInfo?.property_id || 'Property'}</span>
+                            <span className="font-mono text-[9px] text-indigo-400 bg-indigo-900/60 px-1.5 py-0.5 rounded">{tInfo?.deal_number || 'TXN-CONVEY'}</span>
+                          </div>
+                          <div className="text-[10px] text-slate-300 flex items-center justify-between pt-0.5 border-t border-indigo-500/20">
+                            <span className="truncate">From: {tInfo?.from_owner || 'Seller'}</span>
+                            <span className="truncate">To: {tInfo?.to_owner || 'Buyer'}</span>
+                          </div>
+                        </div>
+                      )
+                    })()}
 
                     {/* Body: Hashes and Tx Count */}
                     <div className="space-y-1.5 text-[11px] font-mono">
@@ -1829,7 +1849,7 @@ export const BlockchainExplorerPage: React.FC = () => {
                   <div>
                     <h3 className="font-bold text-base text-white">Block #{selectedBlock.blockNumber}</h3>
                     <span className={`text-[10px] font-semibold px-2 py-0.5 rounded border inline-block mt-0.5 ${getBlockTypeBadgeClass(selectedBlock.blockType)}`}>
-                      {selectedBlock.blockType || 'Consensus Block'}
+                      {selectedBlock.blockType?.toLowerCase().includes('ownership') ? 'Ownership Transferred' : (selectedBlock.blockType || 'Consensus Block')}
                     </span>
                   </div>
                 </div>
@@ -1881,6 +1901,43 @@ export const BlockchainExplorerPage: React.FC = () => {
                     </p>
                   )}
                 </div>
+
+                {/* Ownership Transfer Details Card */}
+                {(() => {
+                  const tInfo = selectedBlock.transferDetails || ownershipTransfers.find((ot) => ot.block_number === selectedBlock.blockNumber || (ot.tx_hash && selectedBlock.transactions?.includes(ot.tx_hash)))
+                  if (!tInfo && !selectedBlock.blockType?.toLowerCase().includes('ownership')) return null
+                  return (
+                    <div className="p-3.5 rounded-xl bg-indigo-950/50 border border-indigo-500/50 space-y-2.5">
+                      <div className="flex items-center justify-between border-b border-indigo-500/30 pb-2">
+                        <span className="text-xs font-bold text-indigo-300">Ownership Transferred</span>
+                        <span className="font-mono text-[11px] font-bold text-indigo-200 bg-indigo-900/80 px-2 py-0.5 rounded border border-indigo-500/40">
+                          {tInfo?.deal_number || 'TXN-CONVEYANCE'}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        <div>
+                          <span className="text-[10px] text-slate-400 block">Property Name</span>
+                          <strong className="text-white block font-medium text-xs">{tInfo?.property_title || tInfo?.property_id || 'Property'}</strong>
+                          {tInfo?.property_id && <span className="text-[10px] font-mono text-indigo-300">{tInfo.property_id}</span>}
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-slate-400 block">Deal Number</span>
+                          <strong className="text-white block font-mono font-medium text-xs">{tInfo?.deal_number || 'TXN-SETTLED'}</strong>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-slate-400 block">Previous Owner</span>
+                          <strong className="text-slate-200 block text-xs">{tInfo?.from_owner || 'Previous Owner'}</strong>
+                          {tInfo?.from_address && <span className="text-[9px] font-mono text-slate-400 truncate block">{tInfo.from_address}</span>}
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-slate-400 block">New Owner</span>
+                          <strong className="text-emerald-300 block text-xs">{tInfo?.to_owner || 'New Owner'}</strong>
+                          {tInfo?.to_address && <span className="text-[9px] font-mono text-slate-400 truncate block">{tInfo.to_address}</span>}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })()}
 
                 <div className="grid grid-cols-2 gap-3 pt-2">
                   <div className="p-3 rounded-lg bg-slate-950/60 border border-slate-800">

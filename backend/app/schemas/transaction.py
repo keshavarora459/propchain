@@ -46,8 +46,11 @@ class TransactionResponse(BaseModel):
     seller_rejection_reason: Optional[str] = None
     blockchain_tx_hash: Optional[str] = None
     property_title: Optional[str] = None
+    property_number: Optional[str] = None
     buyer_name: Optional[str] = None
     seller_name: Optional[str] = None
+    blockchain_block_number: Optional[int] = None
+    blockchain_error: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 

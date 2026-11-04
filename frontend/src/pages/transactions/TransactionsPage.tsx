@@ -12,6 +12,8 @@ import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { initiateTransactionSchema, type InitiateTransactionFormData, normalizeWalletAddress } from '@/schemas/transactionSchema'
 import { formatCurrency, formatDate, getPropertyLabel } from '@/lib/utils'
+import { HashDisplay } from '@/components/common/HashDisplay'
+import { TransactionLifecycleTimeline } from '@/components/common/TransactionLifecycleTimeline'
 import type { Transaction } from '@/types/transaction'
 import type { Property } from '@/types/property'
 import { propertyService } from '@/services/propertyService'
@@ -96,21 +98,33 @@ export const TransactionsPage: React.FC = () => {
             escrowStatusText = 'Statutory Review'
           }
 
+          const propNum = t.property_number || t.property?.property_number || (t.property_id ? `PROP-${String(t.property_id).slice(0, 8).toUpperCase()}` : 'PROP-PARCEL')
+          const propTitle = t.property_title || t.property?.title || propNum || 'Property'
+          const bName = t.buyer_name || t.buyer?.full_name || 'Buyer'
+          const sName = t.seller_name || t.seller?.full_name || 'Seller'
+          const bWallet = t.buyer_wallet_address || (t.buyer?.wallets?.[0]?.wallet_address) || ''
+          const sWallet = t.seller_wallet_address || (t.seller?.wallets?.[0]?.wallet_address) || ''
+
           return {
             id: t.id,
             transactionId: t.transaction_number || `TXN-${t.id.slice(0, 6)}`,
-            propertyId: t.property?.property_number || t.property_id || 'PROP-PARCEL',
-            propertyTitle: t.property?.title || 'Real Estate Property',
-            buyerName: t.buyer?.full_name || 'Buyer',
-            buyerWallet: t.buyer_wallet_address || '',
-            sellerName: t.seller?.full_name || 'Seller',
-            sellerWallet: t.seller_wallet_address || '',
+            propertyId: propNum,
+            propertyTitle: propTitle,
+            buyerName: bName,
+            buyerWallet: bWallet,
+            sellerName: sName,
+            sellerWallet: sWallet,
             amount: Number(t.purchase_price || t.proposed_amount) || 0,
             currency: t.currency || 'USD',
             status: t.status,
             type: t.transaction_type || 'Sale',
             escrowStatus: escrowStatusText,
             initiatedAt: t.created_at || new Date().toISOString(),
+            blockchainTxHash: t.blockchain_tx_hash,
+            blockchain_tx_hash: t.blockchain_tx_hash,
+            blockNumber: t.blockchain_block_number,
+            blockchain_block_number: t.blockchain_block_number,
+            blockchain_error: t.blockchain_error,
           }
         })
         setTransactions(liveTxns)
@@ -350,7 +364,14 @@ export const TransactionsPage: React.FC = () => {
               {filteredTransactions.map((txn) => (
                 <TableRow key={txn.id}>
                   <TableCell className="font-mono text-xs font-semibold text-slate-900">
-                    {txn.transactionId}
+                    <div>
+                      <span className="text-blue-600 block">{txn.transactionId}</span>
+                      {txn.status === 'COMPLETED' && (txn.blockNumber || txn.blockchain_block_number) && (
+                        <span className="text-[10px] text-emerald-600 block font-mono">
+                          Block #{txn.blockNumber || txn.blockchain_block_number}
+                        </span>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell>
                     <p className="font-semibold text-slate-900">{getPropertyLabel(txn)}</p>
@@ -368,9 +389,20 @@ export const TransactionsPage: React.FC = () => {
                     {formatCurrency(txn.amount)}
                   </TableCell>
                   <TableCell>
-                    <span className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium bg-slate-100 text-slate-700">
-                      {txn.escrowStatus}
-                    </span>
+                    <div className="space-y-1">
+                      <span className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium bg-slate-100 text-slate-700">
+                        {txn.escrowStatus}
+                      </span>
+                      {txn.status === 'COMPLETED' && (txn.blockchainTxHash || txn.blockchain_tx_hash) && (
+                        <div>
+                          <HashDisplay
+                            value={txn.blockchainTxHash || txn.blockchain_tx_hash}
+                            explorerLink
+                            className="text-[10px] py-0 px-1 border-0 bg-emerald-50 text-emerald-800"
+                          />
+                        </div>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell>
                     <StatusBadge status={txn.status} />
@@ -504,11 +536,23 @@ export const TransactionsPage: React.FC = () => {
         <Modal
           isOpen={!!selectedTxn}
           onClose={() => setSelectedTxn(null)}
-          title={`Escrow Audit: ${selectedTxn.transactionId}`}
+          title={`Escrow Audit: ${selectedTxn.transactionId}${
+            selectedTxn.status === 'COMPLETED'
+              ? ` — Block #${selectedTxn.blockNumber || selectedTxn.blockchain_block_number || ''}`
+              : ''
+          }`}
           description={`Initiated on ${formatDate(selectedTxn.initiatedAt)}`}
-          maxWidth="md"
+          maxWidth="lg"
         >
           <div className="space-y-4 text-xs">
+            {/* Unified 6-Stage Conveyance Timeline */}
+            <TransactionLifecycleTimeline
+              status={selectedTxn.status}
+              blockchainError={selectedTxn.blockchain_error}
+              blockchainBlockNumber={selectedTxn.blockNumber || selectedTxn.blockchain_block_number}
+              blockchainTxHash={selectedTxn.blockchainTxHash || selectedTxn.blockchain_tx_hash}
+            />
+
             <div className="p-3 bg-slate-50 rounded-lg space-y-2 border border-slate-100">
               <div className="flex justify-between items-start">
                 <span className="text-slate-400">Property:</span>
@@ -523,9 +567,24 @@ export const TransactionsPage: React.FC = () => {
                   {formatCurrency(selectedTxn.amount)} {selectedTxn.currency}
                 </span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Escrow State:</span>
-                <span className="font-medium text-blue-600">{selectedTxn.escrowStatus}</span>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-400">Settlement State:</span>
+                {selectedTxn.status === 'COMPLETED' ? (
+                  <div className="text-right">
+                    <span className="font-mono text-emerald-600 font-semibold block text-[11px]">
+                      Concluded in Block #{selectedTxn.blockNumber || selectedTxn.blockchain_block_number}
+                    </span>
+                    {(selectedTxn.blockchainTxHash || selectedTxn.blockchain_tx_hash) && (
+                      <HashDisplay
+                        value={selectedTxn.blockchainTxHash || selectedTxn.blockchain_tx_hash}
+                        explorerLink
+                        className="text-[10px] p-0 border-0 bg-transparent text-emerald-800"
+                      />
+                    )}
+                  </div>
+                ) : (
+                  <span className="font-medium text-blue-600">{selectedTxn.escrowStatus}</span>
+                )}
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-400">Transaction Status:</span>
@@ -539,13 +598,32 @@ export const TransactionsPage: React.FC = () => {
                 <span>On-Chain Escrow Security Details</span>
               </div>
               <div>
-                <span className="text-slate-500 block text-[10px]">BUYER:</span>
-                <span className="break-all">{selectedTxn.buyerName} ({selectedTxn.buyerWallet})</span>
+                <span className="text-slate-400 block text-[10px]">BUYER (Counterparty):</span>
+                <span className="break-all font-semibold text-white">{selectedTxn.buyerName}</span>
+                {selectedTxn.buyerWallet && (
+                  <span className="text-slate-400 block text-[10px] break-all">{selectedTxn.buyerWallet}</span>
+                )}
               </div>
               <div>
-                <span className="text-slate-500 block text-[10px]">SELLER:</span>
-                <span className="break-all">{selectedTxn.sellerName} ({selectedTxn.sellerWallet})</span>
+                <span className="text-slate-400 block text-[10px]">SELLER (Counterparty):</span>
+                <span className="break-all font-semibold text-white">{selectedTxn.sellerName}</span>
+                {selectedTxn.sellerWallet && (
+                  <span className="text-slate-400 block text-[10px] break-all">{selectedTxn.sellerWallet}</span>
+                )}
               </div>
+              {selectedTxn.status === 'COMPLETED' && (selectedTxn.blockchainTxHash || selectedTxn.blockchain_tx_hash) && (
+                <div className="pt-2 border-t border-slate-800">
+                  <span className="text-emerald-400 block text-[10px] font-semibold">ON-CHAIN PROOF OF CONVEYANCE:</span>
+                  <div className="text-[10px] mt-0.5">
+                    <span>Block: #{selectedTxn.blockNumber || selectedTxn.blockchain_block_number}</span>
+                    <HashDisplay
+                      value={selectedTxn.blockchainTxHash || selectedTxn.blockchain_tx_hash}
+                      explorerLink
+                      className="bg-transparent border-0 p-0 text-emerald-300 text-[10px]"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="flex justify-between items-center pt-2 border-t border-slate-100">

@@ -106,12 +106,15 @@ class PropertyRepository:
             user_role = raw_role.value if hasattr(raw_role, "value") else str(raw_role)
             if user_role == UserRole.PROPERTY_OWNER.value:
                 # PROPERTY_OWNER can ONLY see:
-                # 1. Properties they own or created, plus
+                # 1. Properties they currently own, plus
                 # 2. Properties that are verified and active (marketplace listings)
                 filters.append(
                     or_(
                         Property.current_owner_id == current_user.id,
-                        Property.creator_user_id == current_user.id,
+                        and_(
+                            Property.current_owner_id.is_(None),
+                            Property.creator_user_id == current_user.id,
+                        ),
                         and_(
                             Property.verification_status == "VERIFIED",
                             Property.status == "ACTIVE",
@@ -186,7 +189,10 @@ class PropertyRepository:
             filters.append(
                 or_(
                     Property.current_owner_id == owner_id,
-                    Property.creator_user_id == owner_id,
+                    and_(
+                        Property.current_owner_id.is_(None),
+                        Property.creator_user_id == owner_id,
+                    ),
                 )
             )
 

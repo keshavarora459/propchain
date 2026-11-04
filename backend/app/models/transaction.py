@@ -6,7 +6,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Optional
 
-from sqlalchemy import DateTime, ForeignKey, Index, Numeric, String, Text, Uuid
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, Numeric, String, Text, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import BaseModel
@@ -60,6 +60,8 @@ class PropertyTransaction(BaseModel):
     )
     seller_rejection_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     blockchain_tx_hash: Mapped[Optional[str]] = mapped_column(String(66), nullable=True, index=True)
+    blockchain_block_number: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    blockchain_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # Relationships
     property = relationship("Property", backref="transactions")
@@ -91,4 +93,3 @@ class TransactionStatusHistory(BaseModel):
     # Relationships
     transaction = relationship("PropertyTransaction", back_populates="status_history")
     changed_by = relationship("User", foreign_keys=[changed_by_user_id])
-

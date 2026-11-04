@@ -17,6 +17,7 @@ import {
 import { PageHeader } from '@/components/common/PageHeader'
 import { StatCard } from '@/components/common/StatCard'
 import { StatusBadge } from '@/components/common/StatusBadge'
+import { TransactionLifecycleTimeline } from '@/components/common/TransactionLifecycleTimeline'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import { Button } from '@/components/ui/Button'
@@ -576,44 +577,62 @@ export const SellerDashboard: React.FC = () => {
         <Card>
           <CardHeader>
             <CardTitle>Ownership Conveyance & Statutory Deed Transfer</CardTitle>
-            <CardDescription>Detailed stage-by-stage status of property deed re-assignments.</CardDescription>
+            <CardDescription>Detailed stage-by-stage status of property deed re-assignments across all 6 conveyance milestones.</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              {receivedOffers.map((tx: SellerOffer) => (
-                <div key={tx.id} className="p-4 rounded-xl border border-slate-200 bg-white space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <span className="font-mono text-xs font-bold text-blue-600">{tx.transaction_number}</span>
-                      <h4 className="font-semibold text-slate-900 text-sm">{getPropertyLabel(tx)}</h4>
+            {receivedOffers.length === 0 ? (
+              <div className="p-12 text-center text-xs text-slate-400">
+                <p>No transactions undergoing ownership conveyance at this time.</p>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {receivedOffers.map((tx: SellerOffer) => (
+                  <div key={tx.id} className="p-5 rounded-xl border border-slate-200 bg-white space-y-4 shadow-xs">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="font-mono text-xs font-bold text-blue-600">{tx.transaction_number}</span>
+                        <h4 className="font-semibold text-slate-900 text-sm">{getPropertyLabel(tx)}</h4>
+                      </div>
+                      <StatusBadge status={tx.status} />
                     </div>
-                    <StatusBadge status={tx.status} />
-                  </div>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-slate-100 text-[11px]">
-                    <div>
-                      <span className="text-slate-400 block">Buyer</span>
-                      <strong className="text-slate-800">{tx.buyer_name}</strong>
-                    </div>
-                    <div>
-                      <span className="text-slate-400 block">Escrow Amount</span>
-                      <strong className="font-mono text-slate-800">{formatCurrency(tx.amount)}</strong>
-                    </div>
-                    <div>
-                      <span className="text-slate-400 block">Deed Re-assignment</span>
-                      <strong className={tx.status === 'COMPLETED' ? 'text-emerald-600' : 'text-amber-600'}>
-                        {tx.status === 'COMPLETED' ? 'Title Transferred' : 'In Settlement'}
-                      </strong>
-                    </div>
-                    <div>
-                      <span className="text-slate-400 block">On-Chain Deed</span>
-                      <div className="pt-0.5">
-                        <HashDisplay value={tx.blockchain_tx_hash} explorerLink pendingText="Pending Confirmation" className="text-[10px] py-0 px-1" />
+
+                    {/* Standardized 6-Step Conveyance Timeline */}
+                    <TransactionLifecycleTimeline
+                      status={tx.status}
+                      blockchainTxHash={tx.blockchain_tx_hash}
+                    />
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-3 border-t border-slate-100 text-xs">
+                      <div>
+                        <span className="text-slate-400 block text-[11px]">New Owner / Buyer</span>
+                        <strong className="text-slate-800">{tx.buyer_name}</strong>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block text-[11px]">Escrow Amount</span>
+                        <strong className="font-mono text-slate-800">{formatCurrency(tx.amount)}</strong>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block text-[11px]">Conveyance State</span>
+                        <strong className={tx.status === 'COMPLETED' ? 'text-emerald-600' : 'text-blue-600'}>
+                          {tx.status === 'COMPLETED' ? 'Title Transferred ✓' : 'Settlement Active'}
+                        </strong>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block text-[11px]">On-Chain Transfer Proof</span>
+                        <div className="pt-0.5">
+                          <HashDisplay
+                            value={tx.blockchain_tx_hash}
+                            explorerLink
+                            pendingText="Pending Transfer"
+                            className="text-[11px] py-0.5 px-2"
+                          />
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       )}

@@ -288,7 +288,15 @@ def get_dashboard_metrics(
         seller_props = list(
             db.scalars(
                 select(Property)
-                .where(or_(Property.current_owner_id == current_user.id, Property.creator_user_id == current_user.id))
+                .where(
+                    or_(
+                        Property.current_owner_id == current_user.id,
+                        and_(
+                            Property.current_owner_id.is_(None),
+                            Property.creator_user_id == current_user.id,
+                        ),
+                    )
+                )
                 .order_by(Property.created_at.desc())
             ).all()
         )
@@ -513,7 +521,12 @@ def get_dashboard_metrics(
                     joinedload(PropertyTransaction.seller),
                 )
                 .where(
-                    PropertyTransaction.status.in_(["READY_FOR_LEGAL_CONFIRMATION", "DOCUMENTS_VERIFIED", "PENDING_LEGAL_CONFIRMATION"])
+                    PropertyTransaction.status.in_([
+                        "READY_FOR_LEGAL_CONFIRMATION",
+                        "DOCUMENTS_VERIFIED",
+                        "PENDING_LEGAL_CONFIRMATION",
+                        "LEGALLY_REGISTERED",
+                    ])
                 )
                 .order_by(PropertyTransaction.created_at.desc())
             ).unique().all()
@@ -542,6 +555,9 @@ def get_dashboard_metrics(
                     "seller_name": t.seller.full_name if t.seller else "Seller",
                     "purchase_price": float(t.proposed_amount) if t.proposed_amount else 0.0,
                     "status": t.status,
+                    "blockchain_tx_hash": t.blockchain_tx_hash,
+                    "blockchain_block_number": t.blockchain_block_number,
+                    "blockchain_error": t.blockchain_error,
                     "created_at": t.created_at.isoformat() if t.created_at else None,
                 }
                 for t in ready_for_legal_txs

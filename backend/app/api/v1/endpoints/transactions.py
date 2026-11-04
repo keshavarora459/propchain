@@ -130,3 +130,17 @@ def legal_confirm_transaction(
     service = TransactionService(db)
     return service.legal_confirm(transaction_id, payload, current_user)
 
+
+@router.post(
+    "/{transaction_id}/retry-conveyance",
+    response_model=TransactionResponse,
+    summary="Retry on-chain conveyance transfer for a legally registered transaction (Legal Authority)",
+)
+def retry_conveyance_transaction(
+    transaction_id: uuid.UUID,
+    current_user: User = Depends(require_permission(Permission.CONFIRM_LEGAL_REGISTRATION)),
+    db: Session = Depends(get_db),
+):
+    service = TransactionService(db)
+    return service.retry_conveyance(transaction_id, current_user)
+
