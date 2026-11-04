@@ -269,6 +269,34 @@ class UserRepository:
         db.commit()
         return log_entry
 
+    def delete_user(self, db: Session, user_id: uuid.UUID) -> bool:
+        """Permanently delete a user from SQLite and MongoDB Atlas."""
+        user = self.get_by_id(db, user_id)
+        if not user:
+            return False
+
+        self.revoke_all_user_tokens(db, user_id)
+        from app.models.wallet import UserWallet
+        db.query(UserWallet).filter(UserWallet.user_id == user_id).delete()
+
+        db.delete(user)
+        db.commit()
+
+        # Purge from MongoDB Atlas
+        try:
+            from app.core.mongo import get_mongo_db
+            mongo_db = get_mongo_db()
+            if mongo_db is not None:
+                str_id = str(user_id)
+                mongo_db["users"].delete_one({"_id": str_id})
+                mongo_db["refresh_tokens"].delete_many({"user_id": str_id})
+                mongo_db["wallets"].delete_many({"user_id": str_id})
+                mongo_db["user_activity_logs"].delete_many({"user_id": str_id})
+        except Exception:
+            pass
+
+        return True
+
 
 user_repository = UserRepository()
 

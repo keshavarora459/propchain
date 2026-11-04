@@ -111,7 +111,7 @@ async def trigger_mongodb_sync(response: Response):
 
     session_factory = get_session_factory()
     with session_factory() as session:
-        hydrated = hydrate_all_from_mongo(session)
+        hydrated = hydrate_all_from_mongo(session, clear_existing=True)
     return {
         "status": "success",
         "message": "Hydrated successfully from MongoDB Atlas",

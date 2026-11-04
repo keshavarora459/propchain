@@ -131,6 +131,37 @@ class UserService:
         )
         return UserResponse.from_orm_with_permissions(updated_user)
 
+    def delete_user_admin(
+        self,
+        db: Session,
+        target_user_id: uuid.UUID,
+        admin_user_id: uuid.UUID,
+        ip_address: Optional[str] = None,
+    ) -> bool:
+        """Admin action to permanently delete a user account."""
+        target_user = user_repository.get_by_id(db, target_user_id)
+        if not target_user:
+            raise ResourceNotFoundException("Target user not found.")
+
+        # Prevent admin from deleting themselves
+        if target_user.id == admin_user_id:
+            raise PropChainException(
+                message="Administrators cannot delete their own active accounts.",
+                status_code=400,
+            )
+
+        user_email = target_user.email
+        deleted = user_repository.delete_user(db, target_user_id)
+
+        user_repository.record_activity(
+            db=db,
+            user_id=admin_user_id,
+            activity_type="ADMIN_USER_DELETE",
+            description=f"Admin deleted user {user_email} (ID: {target_user_id})",
+            ip_address=ip_address,
+        )
+        return deleted
+
 
 user_service = UserService()
 

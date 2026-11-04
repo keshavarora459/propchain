@@ -145,3 +145,31 @@ async def update_user_status(
         data=updated,
     )
 
+
+@router.delete(
+    "/{user_id}",
+    response_model=APIResponse[dict],
+    status_code=status.HTTP_200_OK,
+    summary="Delete User (Admin Only)",
+    description="Permanently delete a user account and associated credentials.",
+)
+async def delete_user(
+    user_id: uuid.UUID,
+    request: Request,
+    admin_user: User = Depends(require_role(UserRole.ADMIN)),
+    db: Session = Depends(get_db),
+) -> APIResponse[dict]:
+    """Admin action to permanently delete a user."""
+    ip_addr = request.client.host if request.client else None
+    user_service.delete_user_admin(
+        db=db,
+        target_user_id=user_id,
+        admin_user_id=admin_user.id,
+        ip_address=ip_addr,
+    )
+    return APIResponse[dict](
+        success=True,
+        message="User account deleted successfully.",
+        data={"user_id": str(user_id)},
+    )
+

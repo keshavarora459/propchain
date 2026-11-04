@@ -356,8 +356,8 @@ def safe_uuid(val: Any) -> Optional[uuid.UUID]:
         return None
 
 
-def hydrate_all_from_mongo(session: Session) -> Dict[str, int]:
-    """Hydrate all tables from MongoDB Atlas collections into the in-memory engine on startup."""
+def hydrate_all_from_mongo(session: Session, clear_existing: bool = False) -> Dict[str, int]:
+    """Hydrate all tables from MongoDB Atlas collections into the in-memory engine on startup or on demand."""
     db = get_mongo_db()
     if db is None:
         return {}
@@ -370,7 +370,21 @@ def hydrate_all_from_mongo(session: Session) -> Dict[str, int]:
     from app.models.user import User
     from app.models.wallet import UserWallet
 
-    logger.info("Hydrating in-memory database directly from MongoDB Atlas...")
+    if clear_existing:
+        try:
+            session.query(TransactionApproval).delete()
+            session.query(PropertyTransaction).delete()
+            session.query(PropertyDocument).delete()
+            session.query(Property).delete()
+            session.query(OwnershipEvent).delete()
+            session.query(BlockchainEvent).delete()
+            session.query(UserWallet).delete()
+            session.commit()
+        except Exception as e:
+            session.rollback()
+            logger.warning("Error clearing tables during resync: %s", e)
+
+    logger.info("Hydrating in-memory database directly from MongoDB Atlas (clear_existing=%s)...", clear_existing)
     hydrated: Dict[str, int] = {}
 
     # 1. Users (Deduplicate by email and ID, prioritizing most recently updated)

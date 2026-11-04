@@ -8,6 +8,8 @@ import {
   Cpu,
   Clock,
   RefreshCw,
+  Trash2,
+  Database,
 } from 'lucide-react'
 import { PageHeader } from '@/components/common/PageHeader'
 import { StatCard } from '@/components/common/StatCard'
@@ -29,6 +31,48 @@ export const AdminDashboard: React.FC = () => {
   const [dashboardData, setDashboardData] = useState<any>(null)
   const [userList, setUserList] = useState<any[]>([])
   const [propertyList, setPropertyList] = useState<any[]>([])
+  const [isSyncingMongo, setIsSyncingMongo] = useState<boolean>(false)
+
+  const handleSyncMongo = async () => {
+    setIsSyncingMongo(true)
+    try {
+      await apiClient.post('/health/mongodb/sync')
+      await loadAdminData()
+      alert('Database cache successfully synchronized with MongoDB Atlas!')
+    } catch (err: any) {
+      console.error('Failed to sync with MongoDB:', err)
+      alert('Failed to sync with MongoDB Atlas: ' + (err.message || 'Unknown error'))
+    } finally {
+      setIsSyncingMongo(false)
+    }
+  }
+
+  const handleDeletePropertyAdmin = async (propertyId: string, title?: string) => {
+    const label = title || 'this property'
+    if (!window.confirm(`Are you sure you want to permanently delete "${label}"? This will delete all records from the database and MongoDB Atlas.`)) {
+      return
+    }
+    try {
+      await propertyService.deleteProperty(propertyId)
+      await loadAdminData()
+    } catch (err: any) {
+      console.error('Failed to delete property:', err)
+      alert(err.response?.data?.message || err.response?.data?.detail || 'Failed to delete property.')
+    }
+  }
+
+  const handleDeleteUserAdmin = async (userId: string, email: string) => {
+    if (!window.confirm(`Are you sure you want to permanently delete user "${email}"? This action cannot be undone.`)) {
+      return
+    }
+    try {
+      await authService.deleteUser(userId)
+      await loadAdminData()
+    } catch (err: any) {
+      console.error('Failed to delete user:', err)
+      alert(err.response?.data?.message || err.response?.data?.detail || 'Failed to delete user.')
+    }
+  }
 
   const loadAdminData = async () => {
     try {
@@ -68,6 +112,16 @@ export const AdminDashboard: React.FC = () => {
         description="Comprehensive network oversight: manage user credentials, monitor real estate listings, inspect atomic escrow transactions, and audit consensus telemetry."
         actions={
           <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleSyncMongo}
+              isLoading={isSyncingMongo}
+              leftIcon={<Database className="h-3.5 w-3.5 text-emerald-600" />}
+              className="border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+            >
+              Sync with MongoDB Atlas
+            </Button>
             <Button variant="outline" size="sm" onClick={loadAdminData} leftIcon={<RefreshCw className="h-3.5 w-3.5" />}>
               Refresh Telemetry
             </Button>
@@ -244,6 +298,7 @@ export const AdminDashboard: React.FC = () => {
                   <TableHead>Role</TableHead>
                   <TableHead>Account Status</TableHead>
                   <TableHead>Registered At</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -258,6 +313,18 @@ export const AdminDashboard: React.FC = () => {
                     </TableCell>
                     <TableCell><StatusBadge status={u.account_status} /></TableCell>
                     <TableCell className="text-xs text-slate-500">{formatDate(u.created_at)}</TableCell>
+                    <TableCell className="text-right">
+                      {u.role !== 'ADMIN' && (
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteUserAdmin(u.id, u.email)}
+                          className="p-1 rounded text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                          title="Delete user"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -369,6 +436,7 @@ export const AdminDashboard: React.FC = () => {
                   <TableHead>Valuation</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Verification</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -385,6 +453,16 @@ export const AdminDashboard: React.FC = () => {
                     <TableCell className="font-mono text-xs font-bold">{formatCurrency(p.valuation)}</TableCell>
                     <TableCell><StatusBadge status={p.status} /></TableCell>
                     <TableCell><StatusBadge status={p.verificationStatus} label={getVerificationLabel(p, user?.role)} /></TableCell>
+                    <TableCell className="text-right">
+                      <button
+                        type="button"
+                        onClick={() => handleDeletePropertyAdmin(p.id, getPropertyLabel(p))}
+                        className="p-1 rounded text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                        title="Delete property"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>

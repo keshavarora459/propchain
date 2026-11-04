@@ -3,6 +3,7 @@ import {
   Search,
   CheckCircle2,
   RotateCw,
+  Trash2,
 } from 'lucide-react'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card'
@@ -54,6 +55,22 @@ export const UserManagementPage: React.FC = () => {
       await loadUsers()
     } catch (err) {
       console.error('Failed to update status:', err)
+    } finally {
+      setActionInProgress(null)
+    }
+  }
+
+  const handleDeleteUser = async (userId: string, email: string) => {
+    if (!window.confirm(`Are you sure you want to permanently delete user "${email}"? This action cannot be undone.`)) {
+      return
+    }
+    setActionInProgress(userId)
+    try {
+      await authService.deleteUser(userId)
+      await loadUsers()
+    } catch (err: any) {
+      console.error('Failed to delete user:', err)
+      alert(err.response?.data?.message || 'Failed to delete user.')
     } finally {
       setActionInProgress(null)
     }
@@ -182,7 +199,7 @@ export const UserManagementPage: React.FC = () => {
                                 size="sm"
                                 disabled={actionInProgress === u.id}
                                 onClick={() => handleStatusChange(u.id, 'SUSPENDED')}
-                                className="text-xs text-red-600 hover:bg-red-50 hover:border-red-200"
+                                className="text-xs text-amber-600 hover:bg-amber-50 hover:border-amber-200"
                               >
                                 Suspend
                               </Button>
@@ -197,6 +214,17 @@ export const UserManagementPage: React.FC = () => {
                                 Activate
                               </Button>
                             )}
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              disabled={actionInProgress === u.id}
+                              onClick={() => handleDeleteUser(u.id, u.email)}
+                              className="text-xs text-red-700 bg-red-50 hover:bg-red-100 border-red-200 gap-1"
+                              title="Delete user permanently"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                              Delete
+                            </Button>
                           </div>
                         )}
                       </TableCell>

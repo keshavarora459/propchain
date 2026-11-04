@@ -70,6 +70,10 @@ export const authService = {
     )
     return response.data.data
   },
+
+  async deleteUser(userId: string): Promise<void> {
+    await apiClient.delete(`/users/${userId}`)
+  },
 }
 
 export default authService
