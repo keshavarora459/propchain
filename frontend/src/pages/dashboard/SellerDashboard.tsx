@@ -12,6 +12,7 @@ import {
   UploadCloud,
   RefreshCw,
   ExternalLink,
+  ShieldCheck,
 } from 'lucide-react'
 import { PageHeader } from '@/components/common/PageHeader'
 import { StatCard } from '@/components/common/StatCard'
@@ -21,7 +22,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@
 import { Button } from '@/components/ui/Button'
 import { Tabs } from '@/components/ui/Tabs'
 import { RegisterPropertyModal } from '@/pages/properties/RegisterPropertyModal'
-import { formatCurrency, formatDate, getPropertyLabel, truncateHash } from '@/lib/utils'
+import { formatCurrency, formatDate, getPropertyLabel, getVerificationLabel, truncateHash } from '@/lib/utils'
 import { HashDisplay } from '@/components/common/HashDisplay'
 import type { SellerDashboardData, SellerProperty, SellerOffer, SellerDocument } from '@/types/seller'
 import { useAuth } from '@/hooks/useAuth'
@@ -253,7 +254,7 @@ export const SellerDashboard: React.FC = () => {
                           <TableCell className="font-medium text-slate-900 text-xs">{getPropertyLabel(p)}</TableCell>
                           <TableCell className="text-xs text-slate-500">{p.city}, {p.state}</TableCell>
                           <TableCell className="font-mono text-xs font-bold">{formatCurrency(p.valuation)}</TableCell>
-                          <TableCell><StatusBadge status={p.verification_status} /></TableCell>
+                          <TableCell><StatusBadge status={p.verification_status} label={getVerificationLabel(p, user?.role)} /></TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -298,7 +299,7 @@ export const SellerDashboard: React.FC = () => {
                       <h4 className="font-semibold text-slate-900 mt-1 text-sm">{getPropertyLabel(p)}</h4>
                       <p className="text-xs text-slate-500">{p.city}, {p.state}</p>
                     </div>
-                    <StatusBadge status={p.verification_status} />
+                    <StatusBadge status={p.verification_status} label={getVerificationLabel(p, user?.role)} />
                   </div>
                   <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
                     <span className="text-slate-500">Property No.:</span>
@@ -308,6 +309,19 @@ export const SellerDashboard: React.FC = () => {
                     <span className="text-slate-500">Valuation:</span>
                     <span className="font-mono font-bold text-slate-900">{formatCurrency(p.valuation)}</span>
                   </div>
+                  {(p.verification_status || '').toUpperCase() === 'VERIFIED' && (
+                    <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center gap-1.5 text-[11px] text-emerald-700 font-medium">
+                      <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                      <span>Recorded on blockchain {p.blockchain_block_number ? `(Block #${p.blockchain_block_number})` : ''}</span>
+                      {(p.blockchain_tx_hash || (p as any).anchor_tx_hash) && (
+                        <HashDisplay
+                          value={p.blockchain_tx_hash || (p as any).anchor_tx_hash}
+                          explorerLink
+                          className="bg-transparent border-0 px-0 py-0 text-emerald-800"
+                        />
+                      )}
+                    </div>
+                  )}
                   <div className="pt-2 flex items-center gap-2">
                     <Link to={`/properties/${p.id}`} className="flex-1">
                       <Button variant="outline" size="sm" className="w-full text-xs">
@@ -408,7 +422,7 @@ export const SellerDashboard: React.FC = () => {
                       <h4 className="font-semibold text-slate-900 text-sm">{getPropertyLabel(p)}</h4>
                       <p className="text-xs text-slate-400 font-mono">Parcel ID: {p.property_number}</p>
                     </div>
-                    <StatusBadge status={p.verification_status} />
+                    <StatusBadge status={p.verification_status} label={getVerificationLabel(p, user?.role)} />
                   </div>
 
                   {p.blockchain_property_id && (

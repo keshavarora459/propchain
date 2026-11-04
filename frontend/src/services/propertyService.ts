@@ -58,11 +58,18 @@ export function normalizeProperty(p: any): Property {
     registeredAt,
     creator_user_id: p.creator_user_id ? String(p.creator_user_id) : undefined,
     current_owner_id: p.current_owner_id ? String(p.current_owner_id) : undefined,
-    blockchain_tx_hash: p.blockchain_tx_hash,
+    blockchain_tx_hash: p.blockchain_tx_hash || p.anchor_tx_hash,
+    anchor_tx_hash: p.anchor_tx_hash || p.blockchain_tx_hash,
     blockchain_block_number: p.blockchain_block_number,
     blockchain_contract_address: p.blockchain_contract_address,
     blockchain_registration_timestamp: p.blockchain_registration_timestamp,
     blockchain_error: p.blockchain_error,
+    verified_at: p.verified_at,
+    verified_by_id: p.verified_by_id,
+    verified_by_name: p.verified_by_name,
+    approved_documents_count: p.approved_documents_count ?? p.approvedDocsCount ?? 0,
+    required_documents_count: p.required_documents_count ?? p.requiredCount ?? 4,
+    allow_duplicate_override: Boolean(p.allow_duplicate_override ?? p.allowDuplicateOverride),
   }
 }
 
@@ -78,6 +85,7 @@ export const propertyService = {
       state: filter?.state,
       city: filter?.city,
       mine: filter?.mine,
+      verified_by_me: filter?.verified_by_me,
     }
     const response = await apiClient.get<PropertyListResponse>('/properties', { params })
     return {

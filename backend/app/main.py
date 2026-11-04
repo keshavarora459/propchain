@@ -44,8 +44,28 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         # Ensure all tables exist in the in-memory engine
         from app.models.base import Base
         from app.core.database import get_engine
+        from sqlalchemy import text
         import app.models
-        Base.metadata.create_all(bind=get_engine())
+        engine = get_engine()
+        Base.metadata.create_all(bind=engine)
+
+        # Dynamic schema migration safeguard for SQLite
+        try:
+            with engine.connect() as conn:
+                for col_name, col_type in [
+                    ("verified_at", "DATETIME"),
+                    ("verified_by_id", "CHAR(32)"),
+                    ("blockchain_tx_hash", "VARCHAR(66)"),
+                    ("blockchain_block_number", "INTEGER"),
+                    ("blockchain_anchored_at", "DATETIME"),
+                ]:
+                    try:
+                        conn.execute(text(f"ALTER TABLE properties ADD COLUMN {col_name} {col_type}"))
+                        conn.commit()
+                    except Exception:
+                        pass
+        except Exception as mig_exc:
+            logger.debug("SQLite column ensure notice: %s", mig_exc)
 
         # Hydrate all records directly from MongoDB Atlas as the source of truth
         mongo_ok, mongo_msg, mongo_stats = check_mongo_connection()

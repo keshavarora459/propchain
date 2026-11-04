@@ -10,6 +10,7 @@ import {
   X,
   FileCheck2,
   AlertCircle,
+  ShieldCheck,
 } from 'lucide-react'
 import { useSearchParams, Link, useNavigate } from 'react-router-dom'
 import { PageHeader } from '@/components/common/PageHeader'
@@ -22,7 +23,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@
 import { Button } from '@/components/ui/Button'
 import { RegisterPropertyModal } from './RegisterPropertyModal'
 import { PROPERTY_TYPES, VERIFICATION_STATUSES } from '@/constants/options'
-import { formatCurrency, getPropertyLabel, cn } from '@/lib/utils'
+import { formatCurrency, getPropertyLabel, getVerificationLabel, cn } from '@/lib/utils'
 import type { Property } from '@/types/property'
 import { propertyService } from '@/services/propertyService'
 import { useAuth } from '@/hooks/useAuth'
@@ -284,6 +285,60 @@ export const PropertiesPage: React.FC = () => {
           >
             <ShoppingBag className="h-4 w-4" />
             <span>Marketplace</span>
+          </button>
+        </div>
+      )}
+
+      {/* Admin and Legal Authority Verified Filter Chips */}
+      {(isAdmin || user?.role === 'LEGAL_AUTHORITY') && (
+        <div className="flex flex-wrap items-center gap-2 pt-1">
+          <button
+            onClick={() => {
+              setStatusFilter('')
+              setCurrentPage(1)
+            }}
+            className={cn(
+              'px-3 py-1.5 rounded-full text-xs font-semibold border transition-all cursor-pointer flex items-center gap-1.5',
+              statusFilter === ''
+                ? 'bg-slate-900 text-white border-slate-900 shadow-xs'
+                : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+            )}
+          >
+            <span>All Properties</span>
+            <span
+              className={cn(
+                'px-1.5 py-0.2 rounded-full text-[10px] font-mono',
+                statusFilter === '' ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-700'
+              )}
+            >
+              {properties.length}
+            </span>
+          </button>
+
+          <button
+            onClick={() => {
+              setStatusFilter(statusFilter.toLowerCase() === 'verified' ? '' : 'Verified')
+              setCurrentPage(1)
+            }}
+            className={cn(
+              'px-3 py-1.5 rounded-full text-xs font-semibold border transition-all cursor-pointer flex items-center gap-1.5',
+              statusFilter.toLowerCase() === 'verified'
+                ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                : 'bg-emerald-50/70 text-emerald-800 border-emerald-200 hover:border-emerald-300'
+            )}
+          >
+            <ShieldCheck className="h-3.5 w-3.5" />
+            <span>Verified</span>
+            <span
+              className={cn(
+                'px-1.5 py-0.2 rounded-full text-[10px] font-mono',
+                statusFilter.toLowerCase() === 'verified'
+                  ? 'bg-emerald-700 text-white'
+                  : 'bg-emerald-100 text-emerald-800'
+              )}
+            >
+              {properties.filter((p) => (p.verification_status || p.verificationStatus || '').toString().toUpperCase() === 'VERIFIED').length}
+            </span>
           </button>
         </div>
       )}
@@ -551,7 +606,10 @@ export const PropertiesPage: React.FC = () => {
                       </p>
                     </TableCell>
                     <TableCell>
-                      <StatusBadge status={prop.verificationStatus} />
+                      <StatusBadge
+                        status={prop.verificationStatus}
+                        label={getVerificationLabel(prop, user?.role)}
+                      />
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-2">
@@ -577,7 +635,7 @@ export const PropertiesPage: React.FC = () => {
                             )}
                             {isSubmitted && (
                               <span className="text-[11px] font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded">
-                                Waiting for verifier
+                                {getVerificationLabel(prop, user?.role)}
                               </span>
                             )}
                             <Link

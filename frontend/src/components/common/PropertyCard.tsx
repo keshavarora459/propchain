@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom'
 import { MapPin, Maximize2, ShieldCheck, ArrowRight, FileCheck2, AlertCircle, Clock } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/Card'
 import { StatusBadge } from './StatusBadge'
-import { formatCurrency, getPropertyLabel } from '@/lib/utils'
+import { HashDisplay } from '@/components/common/HashDisplay'
+import { formatCurrency, getPropertyLabel, getVerificationLabel } from '@/lib/utils'
 import type { Property } from '@/types/property'
 import { useAuth } from '@/hooks/useAuth'
 
@@ -50,7 +51,10 @@ export const PropertyCard: React.FC<PropertyCardProps> = ({ property }) => {
           <span className="text-[10px] font-mono text-slate-300 bg-white/10 px-2 py-0.5 rounded backdrop-blur-xs">
             Parcel ID: {property.propertyId}
           </span>
-          <StatusBadge status={property.verification_status || property.verificationStatus || 'Pending'} />
+          <StatusBadge
+            status={property.verification_status || property.verificationStatus || 'Pending'}
+            label={getVerificationLabel(property, user?.role)}
+          />
         </div>
 
         <div className="relative z-10">
@@ -84,6 +88,20 @@ export const PropertyCard: React.FC<PropertyCardProps> = ({ property }) => {
             {property.currentOwner}
           </span>
         </div>
+
+        {isVerified && (
+          <div className="pt-1.5 flex flex-wrap items-center gap-1.5 text-[11px] text-emerald-700 font-medium">
+            <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+            <span>Recorded on blockchain {property.blockchain_block_number ? `(Block #${property.blockchain_block_number})` : ''}</span>
+            {(property.blockchain_tx_hash || property.anchor_tx_hash) && (
+              <HashDisplay
+                value={property.blockchain_tx_hash || property.anchor_tx_hash}
+                explorerLink
+                className="bg-transparent border-0 px-0 py-0 text-emerald-800"
+              />
+            )}
+          </div>
+        )}
 
         <div className="pt-2 flex items-center gap-2">
           {isSeller && isOwner ? (
@@ -129,10 +147,10 @@ export const PropertyCard: React.FC<PropertyCardProps> = ({ property }) => {
                   <Link
                     to={`/documents?propertyId=${property.id || property.propertyId}`}
                     className="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg bg-slate-100 hover:bg-slate-200 text-xs font-medium text-slate-700 transition-colors"
-                    title="Waiting for verifier review"
+                    title={getVerificationLabel(property, user?.role)}
                   >
-                    <Clock className="h-3.5 w-3.5 text-blue-600" />
-                    <span>Waiting for verifier</span>
+                    <Clock className="h-3.5 w-3.5 text-blue-600 shrink-0" />
+                    <span className="truncate max-w-[130px]">{getVerificationLabel(property, user?.role)}</span>
                   </Link>
                   <Link
                     to={`/properties/${property.id}`}

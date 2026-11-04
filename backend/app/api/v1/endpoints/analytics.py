@@ -366,6 +366,10 @@ def get_dashboard_metrics(
                     "status": p.status,
                     "verification_status": p.verification_status,
                     "blockchain_property_id": p.blockchain_property_id,
+                    "blockchain_tx_hash": p.blockchain_tx_hash,
+                    "anchor_tx_hash": p.blockchain_tx_hash,
+                    "blockchain_block_number": p.blockchain_block_number,
+                    "verified_at": p.verified_at.isoformat() if p.verified_at else None,
                 }
                 for p in seller_props
             ],
@@ -467,8 +471,19 @@ def get_dashboard_metrics(
             for d in submitted_docs[:10]
         ]
 
+        awaiting_props_count = len([
+            p for p in pending_verification_props
+            if (p.verification_status or "").upper() in {"SUBMITTED", "CORRECTION_REQUESTED", "REQUIRES_CORRECTION"}
+        ])
+        all_verified_count = db.scalar(
+            select(func.count()).select_from(
+                select(Property).where(Property.verification_status == "VERIFIED").subquery()
+            )
+        ) or 0
+
         payload["verifier_metrics"] = {
-            "properties_to_verify_count": len(pending_verification_props),
+            "properties_to_verify_count": awaiting_props_count,
+            "verified_properties_count": all_verified_count,
             "documents_to_verify_count": pending_docs_count,
             "pending_documents_count": pending_docs_count,
             "properties_to_verify": prop_queue,

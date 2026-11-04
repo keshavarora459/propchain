@@ -38,6 +38,16 @@ class Settings(BaseSettings):
     BACKEND_HOST: str = Field(default="127.0.0.1", description="Backend bind host")
     BACKEND_PORT: int = Field(default=8000, description="Backend bind port")
 
+    # Blockchain / Platform Custody
+    PLATFORM_CUSTODY_WALLET: str = Field(
+        default="0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+        description="Platform custody wallet address used when seller has not linked a wallet",
+    )
+    ALLOW_DUPLICATE_DOCS_ON_VERIFY: bool = Field(
+        default=False,
+        description="DEV ONLY: allow property verification even if duplicate documents exist across properties",
+    )
+
     # Frontend integration
     FRONTEND_URL: str = Field(default="http://localhost:5173", description="Allowed frontend origin URL")
     ADDITIONAL_ALLOWED_ORIGINS: List[str] = Field(
@@ -101,7 +111,7 @@ class Settings(BaseSettings):
         case_sensitive=True,
     )
 
-    @field_validator("DEBUG", mode="before")
+    @field_validator("DEBUG", "ALLOW_DUPLICATE_DOCS_ON_VERIFY", mode="before")
     @classmethod
     def parse_debug(cls, v: Any) -> bool:
         if isinstance(v, bool):

@@ -55,6 +55,7 @@ def list_properties(
     state: Optional[str] = Query(None, description="Filter by state"),
     city: Optional[str] = Query(None, description="Filter by city"),
     mine: Optional[bool] = Query(False, description="Filter only properties owned or created by current user"),
+    verified_by_me: Optional[bool] = Query(False, description="Filter properties verified by current user"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -70,6 +71,7 @@ def list_properties(
         city=city,
         mine=mine,
         current_user=current_user,
+        verified_by_me=verified_by_me,
     )
 
 
@@ -155,7 +157,7 @@ def submit_for_verification(
 @router.post(
     "/{property_id}/verify",
     response_model=PropertyResponse,
-    summary="Approve all 4 documents and verify property, anchoring on blockchain (Verifier or Admin)",
+    summary="Approve all 4 documents and verify property, anchoring on blockchain (Verifier only)",
 )
 def verify_property(
     property_id: uuid.UUID,
@@ -173,7 +175,7 @@ class RejectPropertyRequest(BaseModel):
 @router.post(
     "/{property_id}/reject",
     response_model=PropertyResponse,
-    summary="Reject property verification (Verifier or Admin)",
+    summary="Reject property verification (Verifier only)",
 )
 def reject_property(
     property_id: uuid.UUID,

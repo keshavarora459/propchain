@@ -49,6 +49,10 @@ export interface Property {
   blockchain_contract_address?: string
   blockchain_registration_timestamp?: string
   blockchain_error?: string
+  anchor_tx_hash?: string
+  verified_at?: string
+  verified_by_id?: string
+  verified_by_name?: string
   registeredAt: string
   created_at?: string
   imageUrl?: string
@@ -57,6 +61,10 @@ export interface Property {
   current_owner_id?: string
   submitted_at?: string
   seller_name?: string
+  approved_documents_count?: number
+  required_documents_count?: number
+  allow_duplicate_override?: boolean
+  allowDuplicateOverride?: boolean
 }
 
 export interface PropertyFilter {
@@ -71,6 +79,7 @@ export interface PropertyFilter {
   state?: string
   city?: string
   mine?: boolean
+  verified_by_me?: boolean
 }
 
 export interface PropertyListResponse {

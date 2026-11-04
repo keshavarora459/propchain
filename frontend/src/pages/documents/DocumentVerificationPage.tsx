@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useSearchParams, Link } from 'react-router-dom'
 import {
   UploadCloud,
   FileText,
@@ -23,7 +23,7 @@ import { Button } from '@/components/ui/Button'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import { Modal } from '@/components/ui/Modal'
 import { Select } from '@/components/ui/Select'
-import { truncateHash, formatDate, getPropertyLabel } from '@/lib/utils'
+import { truncateHash, formatDate, getPropertyLabel, getVerificationLabel, checkDocumentTypeMismatch, cn } from '@/lib/utils'
 import type { DocumentRecord, DocumentType } from '@/types/document'
 import type { Property } from '@/types/property'
 import { propertyService } from '@/services/propertyService'
@@ -57,12 +57,17 @@ export const DocumentVerificationPage: React.FC = () => {
   const [uploadNotice, setUploadNotice] = useState<string | null>(null)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [showHistory, setShowHistory] = useState(false)
+  const [verifierTab, setVerifierTab] = useState<'awaiting' | 'verified' | 'correction_rejected'>('awaiting')
   const [isUpdating, setIsUpdating] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [isSubmittingReview, setIsSubmittingReview] = useState(false)
   const [correctionDoc, setCorrectionDoc] = useState<DocumentRecord | null>(null)
   const [correctionNote, setCorrectionNote] = useState<string>('')
   const [isVerifyingProperty, setIsVerifyingProperty] = useState<string | null>(null)
+  const [propertyErrors, setPropertyErrors] = useState<
+    Record<string, { message: string; duplicateDoc?: DocumentRecord; duplicatePropName?: string }>
+  >({})
+  const [recentlyVerifiedIds, setRecentlyVerifiedIds] = useState<Set<string>>(new Set())
 
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -257,10 +262,10 @@ export const DocumentVerificationPage: React.FC = () => {
               return ownerId === uid || creatorId === uid
             })
           } else if (isVerifier) {
-            // Item 7: Show only properties with status SUBMITTED, CORRECTION_REQUESTED, or recently verified
+            // Include submitted, needs correction, rejected, and verified properties
             sellerItems = sellerItems.filter((p: any) => {
               const s = (p.verification_status || p.verificationStatus || '').toString().toUpperCase()
-              return s === 'SUBMITTED' || s === 'CORRECTION_REQUESTED' || s === 'REQUIRES_CORRECTION' || s === 'VERIFIED'
+              return s === 'SUBMITTED' || s === 'CORRECTION_REQUESTED' || s === 'REQUIRES_CORRECTION' || s === 'REJECTED' || s === 'VERIFIED'
             })
           }
           setProperties(sellerItems)
@@ -534,25 +539,70 @@ export const DocumentVerificationPage: React.FC = () => {
 
   const handleVerifyProperty = async (propertyId: string) => {
     setIsVerifyingProperty(propertyId)
+    // Clear any previous verification error on retry (Requirement 1)
+    setPropertyErrors((prev) => {
+      const next = { ...prev }
+      delete next[propertyId]
+      return next
+    })
+    setUploadError(null)
     try {
       const res = await propertyService.verifyProperty(propertyId)
       setProperties((prev) =>
         prev.map((p) =>
           p.id === propertyId || p.propertyId === propertyId
-            ? { ...p, ...res }
+            ? { ...p, ...res, verification_status: 'VERIFIED', verificationStatus: 'Verified', status: 'ACTIVE' }
             : p
         )
       )
-      const isBcRegistered = (res.status || '').toUpperCase() === 'BLOCKCHAIN_REGISTERED'
+      // Track recently verified so button is replaced with green badge and block/hash
+      setRecentlyVerifiedIds((prev) => new Set(prev).add(propertyId))
+      const blkStr = res.blockchain_block_number ? `Block #${res.blockchain_block_number}` : ''
+      const txHash = res.blockchain_tx_hash || res.anchor_tx_hash
+      const txStr = txHash ? ` (Tx: ${truncateHash(txHash, 8, 6)})` : ''
       setUploadNotice(
-        isBcRegistered
-          ? `✓ Property "${res.title}" has been verified and permanently anchored on blockchain! (Tx: ${truncateHash(res.blockchain_tx_hash || '', 8, 6)})`
-          : `✓ Property "${res.title}" verified. Blockchain anchoring status: ${res.status || 'PENDING'}.`
+        `✓ Property "${res.title}" has been verified and permanently recorded on the blockchain in ${blkStr}!${txStr}`
       )
       setTimeout(() => setUploadNotice(null), 8000)
     } catch (err: any) {
-      setUploadError(err.response?.data?.message || err.message || 'Failed to verify property')
-      setTimeout(() => setUploadError(null), 6000)
+      console.error('Failed to verify property:', err)
+      const errorMsg = err.response?.data?.message || err.message || 'Failed to verify property'
+      
+      const propDocs = documents.filter(
+        (d) =>
+          (d.propertyId === propertyId || d.property_id === propertyId) &&
+          (d.status || '').toUpperCase() !== 'REPLACED'
+      )
+      let duplicateDoc = propDocs.find((d) => d.is_cross_property_duplicate)
+      let duplicatePropName = duplicateDoc?.duplicate_property_name
+
+      if (errorMsg.toLowerCase().includes('duplicate')) {
+        const match = errorMsg.match(/'([^']+)'\s+is a duplicate of\s+([^.]+)/i)
+        if (match) {
+          const docTitle = match[1]
+          duplicatePropName = duplicatePropName || match[2].trim()
+          if (!duplicateDoc) {
+            duplicateDoc = propDocs.find(
+              (d) =>
+                (d.documentName || '').toLowerCase() === docTitle.toLowerCase() ||
+                (d.documentType || '').toLowerCase() === docTitle.toLowerCase()
+            )
+          }
+        }
+        if (!duplicateDoc && propDocs.length > 0) {
+          duplicateDoc = propDocs[0]
+        }
+      }
+
+      // Requirement 1 & 2: Show backend message in a red banner inside that property's card. Keep it visible until verifier clicks Dismiss or retries.
+      setPropertyErrors((prev) => ({
+        ...prev,
+        [propertyId]: {
+          message: errorMsg,
+          duplicateDoc,
+          duplicatePropName,
+        },
+      }))
     } finally {
       setIsVerifyingProperty(null)
     }
@@ -560,20 +610,24 @@ export const DocumentVerificationPage: React.FC = () => {
 
   const handleRejectProperty = async (propertyId: string, reason?: string) => {
     setIsVerifyingProperty(propertyId)
+    setUploadError(null)
     try {
       const res = await propertyService.rejectProperty(propertyId, reason)
       setProperties((prev) =>
         prev.map((p) =>
           p.id === propertyId || p.propertyId === propertyId
-            ? { ...p, ...res, verificationStatus: 'Rejected', verification_status: 'REJECTED' }
+            ? { ...p, ...res, verificationStatus: 'Rejected', verification_status: 'REJECTED', status: 'REJECTED' }
             : p
         )
       )
+      setVerifierTab('correction_rejected')
       setUploadNotice(`✓ Property "${res.title}" has been rejected. It will not be anchored on-chain.`)
       setTimeout(() => setUploadNotice(null), 8000)
     } catch (err: any) {
-      setUploadError(err.response?.data?.message || err.message || 'Failed to reject property')
-      setTimeout(() => setUploadError(null), 6000)
+      console.error('Failed to reject property:', err)
+      const errorMsg = err.response?.data?.message || err.message || 'Failed to reject property'
+      setUploadError(errorMsg)
+      setTimeout(() => setUploadError(null), 8000)
     } finally {
       setIsVerifyingProperty(null)
     }
@@ -687,6 +741,25 @@ export const DocumentVerificationPage: React.FC = () => {
     }
     setIsUpdating(false)
   }
+
+  const awaitingProps = properties.filter((p) => {
+    const s = (p.verification_status || p.verificationStatus || '').toString().toUpperCase()
+    return s === 'SUBMITTED' || recentlyVerifiedIds.has(p.id) || recentlyVerifiedIds.has(p.propertyId)
+  })
+  const verifiedProps = properties.filter((p) => {
+    const s = (p.verification_status || p.verificationStatus || '').toString().toUpperCase()
+    return s === 'VERIFIED'
+  })
+  const correctionOrRejectedProps = properties.filter((p) => {
+    const s = (p.verification_status || p.verificationStatus || '').toString().toUpperCase()
+    return (
+      s === 'CORRECTION_REQUESTED' ||
+      s === 'REQUIRES_CORRECTION' ||
+      s === 'NEEDS_CORRECTION' ||
+      s === 'REJECTED' ||
+      s === 'PENDING'
+    )
+  })
 
   const displayedDocuments = documents.filter((doc) => {
     const s = (doc.status || '').toUpperCase()
@@ -1117,7 +1190,7 @@ export const DocumentVerificationPage: React.FC = () => {
                     {isPropertyVerified
                       ? 'Property Verified'
                       : isPropertySubmitted && !isPropertyNeedsCorrection
-                      ? 'Waiting for verifier'
+                      ? getVerificationLabel(selectedProperty, user?.role)
                       : isPropertyNeedsCorrection
                       ? 'Re-submit for Verification'
                       : allRequiredUploaded
@@ -1153,7 +1226,7 @@ export const DocumentVerificationPage: React.FC = () => {
                 <ShieldCheck className="h-6 w-6" />
               </div>
               <p className="text-sm font-semibold text-slate-800">
-                Waiting for verifier
+                {getVerificationLabel(selectedProperty, user?.role)}
               </p>
               <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
                 Submitted for verification. A verifier will review your documents. Uploading is locked until review is complete or a correction is requested.
@@ -1250,30 +1323,91 @@ export const DocumentVerificationPage: React.FC = () => {
 
       {/* Document Listing & Verification State */}
       <div className="bg-white rounded-xl border border-slate-200/80 shadow-xs overflow-hidden">
-        <div className="p-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-          <div>
-            <h3 className="text-sm font-semibold text-slate-900">
-              {isSeller ? 'My Property Documents' : 'Ingested Deeds & Verification Queue'}
-            </h3>
-            <p className="text-xs text-slate-500">
-              {isSeller
-                ? 'Your uploaded documents, review statuses, and cryptographic blockchain proof.'
-                : 'Verifier review queue with optical text parsing and on-chain verification.'}
-            </p>
+        {isSeller ? (
+          <div className="p-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <h3 className="text-sm font-semibold text-slate-900">My Property Documents</h3>
+              <p className="text-xs text-slate-500">
+                Your uploaded documents, review statuses, and cryptographic blockchain proof.
+              </p>
+            </div>
+            <div className="flex items-center gap-4">
+              <label className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={showHistory}
+                  onChange={(e) => setShowHistory(e.target.checked)}
+                  className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-3.5 w-3.5"
+                />
+                <span>Show history</span>
+              </label>
+              <span className="text-xs text-slate-500 font-mono">{displayedDocuments.length} Records</span>
+            </div>
           </div>
-          <div className="flex items-center gap-4">
-            <label className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={showHistory}
-                onChange={(e) => setShowHistory(e.target.checked)}
-                className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-3.5 w-3.5"
-              />
-              <span>Show history</span>
-            </label>
-            <span className="text-xs text-slate-500 font-mono">{displayedDocuments.length} Records</span>
+        ) : (
+          <div className="flex items-center gap-2 border-b border-slate-200 px-4 pt-2 bg-slate-50/50">
+            <button
+              type="button"
+              onClick={() => setVerifierTab('awaiting')}
+              className={cn(
+                'flex items-center gap-2 px-4 py-2.5 text-xs font-semibold border-b-2 transition-all cursor-pointer -mb-[1px]',
+                verifierTab === 'awaiting'
+                  ? 'border-blue-600 text-blue-600'
+                  : 'border-transparent text-slate-500 hover:text-slate-800'
+              )}
+            >
+              <span>Awaiting verification</span>
+              <span
+                className={cn(
+                  'rounded-full px-2 py-0.5 text-[10px] font-mono',
+                  verifierTab === 'awaiting' ? 'bg-blue-100 text-blue-800' : 'bg-slate-100 text-slate-700'
+                )}
+              >
+                {awaitingProps.length}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setVerifierTab('verified')}
+              className={cn(
+                'flex items-center gap-2 px-4 py-2.5 text-xs font-semibold border-b-2 transition-all cursor-pointer -mb-[1px]',
+                verifierTab === 'verified'
+                  ? 'border-emerald-600 text-emerald-600'
+                  : 'border-transparent text-slate-500 hover:text-slate-800'
+              )}
+            >
+              <span>Verified</span>
+              <span
+                className={cn(
+                  'rounded-full px-2 py-0.5 text-[10px] font-mono',
+                  verifierTab === 'verified' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-700'
+                )}
+              >
+                {verifiedProps.length}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setVerifierTab('correction_rejected')}
+              className={cn(
+                'flex items-center gap-2 px-4 py-2.5 text-xs font-semibold border-b-2 transition-all cursor-pointer -mb-[1px]',
+                verifierTab === 'correction_rejected'
+                  ? 'border-amber-600 text-amber-600'
+                  : 'border-transparent text-slate-500 hover:text-slate-800'
+              )}
+            >
+              <span>Needs correction / Rejected</span>
+              <span
+                className={cn(
+                  'rounded-full px-2 py-0.5 text-[10px] font-mono',
+                  verifierTab === 'correction_rejected' ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-700'
+                )}
+              >
+                {correctionOrRejectedProps.length}
+              </span>
+            </button>
           </div>
-        </div>
+        )}
 
         {displayedDocuments.length === 0 ? (
           <div className="py-12 text-center text-xs text-slate-400">
@@ -1378,29 +1512,22 @@ export const DocumentVerificationPage: React.FC = () => {
         ) : (
           /* Verifier Grouped Queue View (Part 2) */
           <div className="p-4 space-y-6">
-            {properties.filter((p) => {
-              const s = (p.verification_status || p.verificationStatus || '').toString().toUpperCase()
-              return s !== 'PENDING'
-            }).length === 0 ? (
-              <div className="py-12 text-center text-xs text-slate-400">
-                <CheckCircle className="h-8 w-8 mx-auto text-emerald-500 mb-2" />
-                <p className="font-semibold text-slate-700 text-sm">No properties in verification queue</p>
-                <p className="mt-1">Properties submitted by sellers will appear here for title review.</p>
-              </div>
-            ) : (
-              properties
-                .filter((p) => {
-                  const s = (p.verification_status || p.verificationStatus || '').toString().toUpperCase()
-                  return s === 'SUBMITTED' || s === 'CORRECTION_REQUESTED' || s === 'REQUIRES_CORRECTION' || s === 'VERIFIED'
-                })
-                .map((prop) => {
+            {/* TAB 1: Awaiting verification */}
+            {verifierTab === 'awaiting' && (
+              awaitingProps.length === 0 ? (
+                <div className="py-12 text-center text-xs text-slate-400">
+                  <CheckCircle className="h-8 w-8 mx-auto text-emerald-500 mb-2" />
+                  <p className="font-semibold text-slate-700 text-sm">No properties awaiting verification</p>
+                  <p className="mt-1">All submitted properties have been processed or moved to Verified.</p>
+                </div>
+              ) : (
+                awaitingProps.map((prop) => {
                   const propDocs = documents.filter(
                     (d) =>
                       (d.propertyId === prop.propertyId || d.property_id === prop.id) &&
                       (d.status || '').toUpperCase() !== 'REPLACED'
                   )
 
-                  // Item 6: Count distinct active required document types uploaded
                   const reqLabels = ['Title Deed', 'Cadastral Survey', 'Tax Clearance', 'Encumbrance Certificate']
                   const uploadedTypes = new Set(
                     propDocs.map((d) => {
@@ -1417,14 +1544,19 @@ export const DocumentVerificationPage: React.FC = () => {
                     (d) => (d.status || '').toUpperCase() === 'VERIFIED'
                   ).length
 
-                  // Item 3: Check if any active doc has an unresolved cross-property duplicate
                   const hasUnresolvedDuplicate = propDocs.some((d) => d.is_cross_property_duplicate)
-
-                  // Item 5: Read same field everywhere
                   const propStatus = (prop.verification_status || prop.verificationStatus || 'SUBMITTED').toString()
-                  const isPropVerified = propStatus.toUpperCase() === 'VERIFIED'
+                  const isPropVerified =
+                    propStatus.toUpperCase() === 'VERIFIED' ||
+                    recentlyVerifiedIds.has(prop.id) ||
+                    recentlyVerifiedIds.has(prop.propertyId)
                   const isPropRejected = propStatus.toUpperCase() === 'REJECTED'
-                  const canVerify = uploadedCount === 4 && approvedCount === 4 && !isPropVerified && !isPropRejected && !hasUnresolvedDuplicate
+                  const canVerify =
+                    uploadedCount === 4 &&
+                    approvedCount === 4 &&
+                    !isPropVerified &&
+                    !isPropRejected &&
+                    (!hasUnresolvedDuplicate || Boolean(prop.allow_duplicate_override))
 
                   return (
                     <Card key={prop.id} className="overflow-hidden border border-slate-200">
@@ -1435,7 +1567,16 @@ export const DocumentVerificationPage: React.FC = () => {
                               <h3 className="font-bold text-slate-900 text-base">
                                 {getPropertyLabel(prop)}
                               </h3>
-                              <StatusBadge status={propStatus} />
+                              <StatusBadge
+                                status={propStatus}
+                                label={getVerificationLabel(prop, user?.role, approvedCount, 4)}
+                              />
+                              {hasUnresolvedDuplicate && prop.allow_duplicate_override && (
+                                <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300 flex items-center gap-1 shadow-2xs">
+                                  <AlertTriangle className="h-3 w-3 text-amber-600" />
+                                  Duplicate warning (dev override active)
+                                </span>
+                              )}
                             </div>
                             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500 mt-1">
                               <span className="font-mono">Parcel ID: {prop.property_number || prop.propertyId}</span>
@@ -1471,29 +1612,22 @@ export const DocumentVerificationPage: React.FC = () => {
                             )}
 
                             {isPropVerified ? (
-                              prop.status === 'BLOCKCHAIN_FAILED' || (prop.status === 'BLOCKCHAIN_PENDING' && !prop.blockchain_tx_hash) ? (
-                                <div className="flex items-center gap-2">
-                                  <span className="text-xs font-semibold text-rose-700 bg-rose-50 border border-rose-200 px-2.5 py-1.5 rounded-lg flex items-center gap-1.5">
-                                    <AlertTriangle className="h-3.5 w-3.5 text-rose-600" /> Blockchain Failed
-                                  </span>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="h-8 text-xs border-rose-300 text-rose-700 hover:bg-rose-50"
-                                    leftIcon={<RotateCw className={`h-3 w-3 ${isRetryingBlockchain === prop.id ? 'animate-spin' : ''}`} />}
-                                    isLoading={isRetryingBlockchain === prop.id}
-                                    onClick={() => handleRetryBlockchain(prop.id)}
-                                  >
-                                    Retry Anchor
-                                  </Button>
-                                </div>
-                              ) : (
-                                <div className="flex items-center gap-2">
-                                  <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-lg flex items-center gap-1.5">
-                                    <ShieldCheck className="h-4 w-4" /> Registered On-Chain {prop.blockchain_block_number ? `(Block #${prop.blockchain_block_number})` : ''}
-                                  </span>
-                                </div>
-                              )
+                              <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-semibold shadow-2xs">
+                                  <CheckCircle className="h-4 w-4 text-emerald-600 shrink-0" />
+                                  Verified ✓
+                                </span>
+                                <span className="text-xs font-mono font-bold text-slate-800 bg-slate-100 px-2.5 py-1 rounded-md border border-slate-200">
+                                  {prop.blockchain_block_number ? `Block #${prop.blockchain_block_number}` : 'Block #1'}
+                                </span>
+                                {(prop.blockchain_tx_hash || prop.anchor_tx_hash) && (
+                                  <HashDisplay
+                                    value={prop.blockchain_tx_hash || prop.anchor_tx_hash}
+                                    explorerLink
+                                    className="bg-transparent border-0 px-0 py-0 text-xs"
+                                  />
+                                )}
+                              </div>
                             ) : (
                               <div className="flex items-center gap-2">
                                 <Button
@@ -1503,33 +1637,27 @@ export const DocumentVerificationPage: React.FC = () => {
                                   onClick={() => handleVerifyProperty(prop.id)}
                                   className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs h-8"
                                   title={
-                                    isPropVerified
-                                      ? 'Property is already verified'
-                                      : isPropRejected
-                                      ? 'Property has been rejected'
-                                      : uploadedCount < 4
+                                    uploadedCount < 4
                                       ? `Cannot verify: ${4 - uploadedCount} required document(s) missing`
-                                      : hasUnresolvedDuplicate
+                                      : hasUnresolvedDuplicate && !prop.allow_duplicate_override
                                       ? 'Cannot verify: Unresolved cross-property duplicate document detected'
                                       : approvedCount < 4
                                       ? `Cannot verify: Only ${approvedCount} of 4 documents approved`
                                       : 'All 4 documents approved: Click to verify property and anchor on blockchain'
                                   }
                                 >
-                                  Verify Property
+                                  {isVerifyingProperty === prop.id ? 'Verifying...' : 'Verify Property'}
                                 </Button>
-                                {!isPropVerified && !isPropRejected && (
-                                  <Button
-                                    size="sm"
-                                    variant="danger"
-                                    disabled={isVerifyingProperty === prop.id}
-                                    onClick={() => handleRejectProperty(prop.id, 'Statutory verification audit rejected.')}
-                                    className="text-xs h-8"
-                                    title="Reject property verification (will not anchor on blockchain)"
-                                  >
-                                    Reject Property
-                                  </Button>
-                                )}
+                                <Button
+                                  size="sm"
+                                  variant="danger"
+                                  disabled={isVerifyingProperty === prop.id}
+                                  onClick={() => handleRejectProperty(prop.id, 'Statutory verification audit rejected.')}
+                                  className="text-xs h-8"
+                                  title="Reject property verification (will not anchor on blockchain)"
+                                >
+                                  Reject Property
+                                </Button>
                               </div>
                             )}
                           </div>
@@ -1537,7 +1665,68 @@ export const DocumentVerificationPage: React.FC = () => {
                       </CardHeader>
 
                       <CardContent className="p-0">
-                        {/* Item 8: Table layout fits card with fallback horizontal scroll */}
+                        {/* Red Banner on Verification Failure (Requirement 1 & 2) */}
+                        {propertyErrors[prop.id] && (
+                          <div className="m-4 mb-3 rounded-lg border border-rose-300 bg-rose-50 p-4 text-xs text-rose-900 shadow-2xs">
+                            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                              <div className="flex items-start gap-2.5">
+                                <XCircle className="h-5 w-5 text-rose-600 shrink-0 mt-0.5" />
+                                <div className="space-y-1.5">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-bold text-rose-950 text-sm">Verification Failed</span>
+                                  </div>
+                                  <p className="font-medium text-rose-900 leading-relaxed">
+                                    {propertyErrors[prop.id].message}
+                                  </p>
+                                  {propertyErrors[prop.id].message.toLowerCase().includes('duplicate') && (
+                                    <div className="mt-2 pt-2 border-t border-rose-200/80 flex flex-wrap items-center gap-2">
+                                      <span className="text-rose-900 font-semibold">
+                                        Duplicate Document:
+                                      </span>
+                                      <span className="text-rose-800">
+                                        Duplicates property <strong className="text-rose-950 font-bold">{propertyErrors[prop.id].duplicatePropName || 'another property'}</strong>.
+                                      </span>
+                                      {propertyErrors[prop.id].duplicateDoc && (
+                                        <Button
+                                          size="sm"
+                                          variant="secondary"
+                                          className="h-6 px-2.5 text-xs bg-rose-100 hover:bg-rose-200 text-rose-900 border border-rose-300 font-semibold"
+                                          onClick={() => {
+                                            const d = propertyErrors[prop.id].duplicateDoc
+                                            if (d) {
+                                              setCorrectionDoc(d)
+                                              setCorrectionNote(
+                                                `This document is an unresolved cross-property duplicate of "${propertyErrors[prop.id].duplicatePropName}". Please upload a unique valid document.`
+                                              )
+                                            }
+                                          }}
+                                        >
+                                          Request correction on {propertyErrors[prop.id].duplicateDoc?.documentType || 'document'}
+                                        </Button>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2 shrink-0 self-end sm:self-start">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7 text-xs border-rose-300 text-rose-800 hover:bg-rose-100 bg-white"
+                                  onClick={() =>
+                                    setPropertyErrors((prev) => {
+                                      const next = { ...prev }
+                                      delete next[prop.id]
+                                      return next
+                                    })
+                                  }
+                                >
+                                  Dismiss
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
                         <div className="w-full overflow-x-auto">
                           <Table className="w-full border-0">
                             <TableHeader>
@@ -1560,7 +1749,6 @@ export const DocumentVerificationPage: React.FC = () => {
                               ) : (
                                 propDocs.map((doc) => {
                                   const isDocVerified = (doc.status || '').toUpperCase() === 'VERIFIED'
-                                  // Item 4: Disable Approve and Request Correction on Needs correction or Replaced
                                   const isDocActionDisabled =
                                     ['CORRECTION_REQUESTED', 'REQUIRES_CORRECTION', 'NEEDS CORRECTION'].includes((doc.status || '').toUpperCase()) ||
                                     (doc.status || '').toUpperCase() === 'REPLACED'
@@ -1577,27 +1765,41 @@ export const DocumentVerificationPage: React.FC = () => {
                                         <span className="text-[11px] text-slate-400 ml-5 block font-mono">
                                           {doc.fileSize}
                                         </span>
-                                        {/* Item 3: Red warning for cross-property duplicate */}
                                         {doc.is_cross_property_duplicate && (
                                           <div
-                                            className="text-[11px] font-semibold text-rose-600 flex items-center gap-1 mt-1 truncate"
-                                            title={`Duplicate of ${doc.duplicate_property_name || 'another property'}`}
+                                            className="text-[11px] font-semibold text-amber-800 bg-amber-50 border border-amber-300 rounded px-2 py-0.5 flex items-center gap-1.5 mt-1 max-w-fit"
+                                            title={`Duplicate of ${doc.duplicate_property_name || 'another property'}${prop.allow_duplicate_override ? ' (dev override active)' : ''}`}
                                           >
-                                            <AlertTriangle className="h-3 w-3 shrink-0 text-rose-600" />
+                                            <AlertTriangle className="h-3 w-3 shrink-0 text-amber-600" />
                                             <span className="truncate">
                                               Duplicate of {doc.duplicate_property_name || 'another property'}
+                                              {prop.allow_duplicate_override && (
+                                                <span className="ml-1 text-[10px] font-mono font-normal text-amber-900 bg-amber-200/80 px-1 py-0.2 rounded">
+                                                  (dev override active)
+                                                </span>
+                                              )}
                                             </span>
                                           </div>
                                         )}
                                       </TableCell>
                                       <TableCell className="text-xs text-slate-700 font-medium whitespace-nowrap">
-                                        {doc.documentType}
+                                        <div className="flex items-center gap-1.5 flex-wrap">
+                                          <span>{doc.documentType}</span>
+                                          {checkDocumentTypeMismatch(doc.documentName, doc.documentType) && (
+                                            <span
+                                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-800 border border-amber-300 shadow-2xs whitespace-nowrap"
+                                              title={`File name "${doc.documentName}" does not match classified document type "${doc.documentType}".`}
+                                            >
+                                              <AlertTriangle className="h-3 w-3 text-amber-600 shrink-0" />
+                                              Check document type
+                                            </span>
+                                          )}
+                                        </div>
                                       </TableCell>
                                       <TableCell className="whitespace-nowrap">
                                         <HashDisplay value={doc.documentHash} explorerLink />
                                       </TableCell>
                                       <TableCell className="whitespace-nowrap">
-                                        {/* Item 2: Real OCR or Not scanned */}
                                         {typeof doc.ocrConfidence === 'number' && doc.ocrConfidence > 0 ? (
                                           <div className="flex items-center gap-1.5">
                                             <div className="w-12 h-1.5 bg-slate-100 rounded-full overflow-hidden">
@@ -1624,7 +1826,6 @@ export const DocumentVerificationPage: React.FC = () => {
                                         <StatusBadge status={doc.status} />
                                       </TableCell>
                                       <TableCell className="text-right">
-                                        {/* Item 8: Compact action buttons that wrap into two rows cleanly */}
                                         <div className="flex flex-wrap items-center justify-end gap-1 max-w-[240px] ml-auto">
                                           <Button
                                             size="sm"
@@ -1654,12 +1855,12 @@ export const DocumentVerificationPage: React.FC = () => {
                                             <>
                                               <Button
                                                 size="sm"
-                                                disabled={isDocActionDisabled || doc.is_cross_property_duplicate}
+                                                disabled={isDocActionDisabled || (doc.is_cross_property_duplicate && !prop.allow_duplicate_override)}
                                                 onClick={() => handleApproveDocument(doc)}
                                                 className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs h-7 px-2"
                                                 leftIcon={<Check className="h-3 w-3" />}
                                                 title={
-                                                  doc.is_cross_property_duplicate
+                                                  doc.is_cross_property_duplicate && !prop.allow_duplicate_override
                                                     ? 'Cannot approve: Unresolved duplicate of another property. Request correction or reject.'
                                                     : isDocActionDisabled
                                                     ? 'Awaiting seller to upload replacement document'
@@ -1700,9 +1901,274 @@ export const DocumentVerificationPage: React.FC = () => {
                     </Card>
                   )
                 })
+              )
             )}
-          </div>
-        )}
+
+            {/* TAB 2: Verified */}
+            {verifierTab === 'verified' && (
+              verifiedProps.length === 0 ? (
+                <div className="py-12 text-center text-xs text-slate-400">
+                  <ShieldCheck className="h-8 w-8 mx-auto text-slate-300 mb-2" />
+                  <p className="font-semibold text-slate-700 text-sm">No verified properties yet</p>
+                  <p className="mt-1">Properties verified on the blockchain will appear here.</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="w-full overflow-x-auto bg-white rounded-xl border border-slate-200 shadow-xs">
+                    <Table className="min-w-[1000px]">
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Property</TableHead>
+                          <TableHead>Seller</TableHead>
+                          <TableHead>Verified Date</TableHead>
+                          <TableHead>Verifier</TableHead>
+                          <TableHead>Block Number</TableHead>
+                          <TableHead>Transaction Hash</TableHead>
+                          <TableHead className="text-right">Action</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {verifiedProps.map((prop) => {
+                          const propDocs = documents.filter(
+                            (d) =>
+                              (d.propertyId === prop.propertyId || d.property_id === prop.id) &&
+                              (d.status || '').toUpperCase() !== 'REPLACED'
+                          )
+
+                          return (
+                            <React.Fragment key={prop.id}>
+                              <TableRow className="hover:bg-slate-50/80">
+                                <TableCell className="font-medium text-slate-900 text-xs">
+                                  <div>
+                                    <span className="font-bold text-sm text-slate-900">{getPropertyLabel(prop)}</span>
+                                    <div className="text-[10px] text-slate-400 font-mono mt-0.5">
+                                      Parcel ID: {prop.property_number || prop.propertyId} • {prop.city}, {prop.state}
+                                    </div>
+                                  </div>
+                                </TableCell>
+                                <TableCell className="text-xs text-slate-700">
+                                  {prop.seller_name || prop.owner_name || prop.currentOwner || 'Seller'}
+                                </TableCell>
+                                <TableCell className="text-xs text-slate-500 whitespace-nowrap">
+                                  {formatDate(prop.verified_at || prop.blockchain_registration_timestamp || prop.registeredAt || prop.created_at)}
+                                </TableCell>
+                                <TableCell className="text-xs text-slate-700 whitespace-nowrap">
+                                  {prop.verified_by_name || 'Verifier'}
+                                </TableCell>
+                                <TableCell className="text-xs text-emerald-700 font-mono font-semibold whitespace-nowrap">
+                                  {prop.blockchain_block_number ? `Block #${prop.blockchain_block_number}` : 'Block #1'}
+                                </TableCell>
+                                <TableCell className="whitespace-nowrap">
+                                  <HashDisplay
+                                    value={prop.blockchain_tx_hash || prop.anchor_tx_hash}
+                                    explorerLink
+                                    className="bg-transparent border-0 px-0 py-0"
+                                  />
+                                </TableCell>
+                                <TableCell className="text-right whitespace-nowrap">
+                                  <Link to={`/properties/${prop.id}`}>
+                                    <Button size="sm" variant="outline" className="text-xs h-7 px-3">
+                                      Details
+                                    </Button>
+                                  </Link>
+                                </TableCell>
+                              </TableRow>
+                              {/* Read-Only Documents Row */}
+                              {propDocs.length > 0 && (
+                                <TableRow className="bg-slate-50/50 border-b border-slate-200">
+                                  <TableCell colSpan={7} className="py-2 px-4">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mr-1">
+                                        Documents (Read-Only):
+                                      </span>
+                                      {propDocs.map((doc) => (
+                                        <div
+                                          key={doc.id}
+                                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white border border-slate-200 text-xs text-slate-700 shadow-2xs"
+                                        >
+                                          <FileText className="h-3.5 w-3.5 text-blue-500" />
+                                          <span className="font-medium truncate max-w-[130px]" title={doc.documentName}>
+                                            {doc.documentName}
+                                          </span>
+                                          <span className="text-[10px] text-slate-400">({doc.documentType})</span>
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            className="h-5 px-1.5 text-[10px] ml-1 border-slate-200 hover:bg-slate-100"
+                                            onClick={() => setSelectedDoc(doc)}
+                                            title="View Document Details & OCR"
+                                          >
+                                            <Eye className="h-2.5 w-2.5 mr-0.5" /> View
+                                          </Button>
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            className="h-5 px-1.5 text-[10px] border-slate-200 hover:bg-slate-100"
+                                            onClick={() => handleDownload(doc)}
+                                            title="Download Decrypted File"
+                                          >
+                                            <Download className="h-2.5 w-2.5 mr-0.5" /> Download
+                                          </Button>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </TableCell>
+                                </TableRow>
+                              )}
+                            </React.Fragment>
+                          )
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              )
+            )}
+
+            {/* TAB 3: Needs correction / Rejected */}
+            {verifierTab === 'correction_rejected' && (
+              correctionOrRejectedProps.length === 0 ? (
+                <div className="py-12 text-center text-xs text-slate-400">
+                  <CheckCircle className="h-8 w-8 mx-auto text-slate-300 mb-2" />
+                  <p className="font-semibold text-slate-700 text-sm">No properties requiring correction or rejected</p>
+                  <p className="mt-1">Properties flagged with correction requests or rejected will appear here.</p>
+                </div>
+              ) : (
+                correctionOrRejectedProps.map((prop) => {
+                  const propDocs = documents.filter(
+                    (d) =>
+                      (d.propertyId === prop.propertyId || d.property_id === prop.id) &&
+                      (d.status || '').toUpperCase() !== 'REPLACED'
+                  )
+
+                  const propStatus = (prop.verification_status || prop.verificationStatus || 'NEEDS_CORRECTION').toString()
+
+                  return (
+                    <Card key={prop.id} className="overflow-hidden border border-slate-200">
+                      <CardHeader className="bg-slate-50/70 pb-3 border-b border-slate-200">
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h3 className="font-bold text-slate-900 text-base">
+                                {getPropertyLabel(prop)}
+                              </h3>
+                              <StatusBadge
+                                status={propStatus}
+                                label={getVerificationLabel(prop, user?.role)}
+                              />
+                            </div>
+                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500 mt-1">
+                              <span className="font-mono">Parcel ID: {prop.property_number || prop.propertyId}</span>
+                              <span>•</span>
+                              <span>Location: {prop.city}, {prop.state}</span>
+                              <span>•</span>
+                              <span>Seller: {prop.seller_name || prop.owner_name || prop.currentOwner || 'Property Owner'}</span>
+                              <span>•</span>
+                              <span>Submitted: {formatDate(prop.submitted_at || prop.created_at)}</span>
+                            </div>
+                          </div>
+                          <div>
+                            <Link to={`/properties/${prop.id}`}>
+                              <Button size="sm" variant="outline" className="text-xs">
+                                Details
+                              </Button>
+                            </Link>
+                          </div>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="p-0">
+                        <div className="w-full overflow-x-auto">
+                          <Table className="w-full border-0">
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead className="max-w-[170px]">Document Name</TableHead>
+                                <TableHead className="whitespace-nowrap">Type</TableHead>
+                                <TableHead className="whitespace-nowrap">Status</TableHead>
+                                <TableHead className="min-w-[200px]">Verifier Message / Review Note</TableHead>
+                                <TableHead className="whitespace-nowrap">Hash Proof</TableHead>
+                                <TableHead className="text-right whitespace-nowrap">Actions</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {propDocs.map((doc) => {
+                                const plainStatus = getPlainStatus(doc.status)
+                                const isFlagged = plainStatus === 'Needs correction' || plainStatus === 'Rejected'
+                                return (
+                                  <TableRow key={doc.id}>
+                                    <TableCell className="max-w-[170px]">
+                                      <div className="flex items-center gap-1.5 min-w-0" title={doc.documentName}>
+                                        <FileText className="h-4 w-4 text-slate-400 shrink-0" />
+                                        <span className="font-medium text-slate-900 truncate">
+                                          {doc.documentName}
+                                        </span>
+                                      </div>
+                                    </TableCell>
+                                    <TableCell className="text-xs text-slate-700 font-medium whitespace-nowrap">
+                                      <div className="flex items-center gap-1.5 flex-wrap">
+                                        <span>{doc.documentType}</span>
+                                        {checkDocumentTypeMismatch(doc.documentName, doc.documentType) && (
+                                          <span
+                                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-800 border border-amber-300 shadow-2xs whitespace-nowrap"
+                                            title={`File name "${doc.documentName}" does not match classified document type "${doc.documentType}".`}
+                                          >
+                                            <AlertTriangle className="h-3 w-3 text-amber-600 shrink-0" />
+                                            Check document type
+                                          </span>
+                                        )}
+                                      </div>
+                                    </TableCell>
+                                    <TableCell className="whitespace-nowrap">
+                                      <StatusBadge status={doc.status} />
+                                    </TableCell>
+                                    <TableCell className="min-w-[200px]">
+                                      {doc.reviewNotes ? (
+                                        <div className="text-xs text-amber-800 bg-amber-50 rounded px-2.5 py-1 border border-amber-200">
+                                          {doc.reviewNotes}
+                                        </div>
+                                      ) : isFlagged ? (
+                                        <div className="text-xs text-amber-800 bg-amber-50 rounded px-2.5 py-1 border border-amber-200">
+                                          Reviewer flagged this document for correction.
+                                        </div>
+                                      ) : (
+                                        <span className="text-xs text-slate-400">—</span>
+                                      )}
+                                    </TableCell>
+                                    <TableCell className="whitespace-nowrap">
+                                      <HashDisplay value={doc.documentHash} explorerLink />
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                      <div className="flex items-center justify-end gap-1">
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          className="h-7 px-2 text-xs"
+                                          onClick={() => setSelectedDoc(doc)}
+                                        >
+                                          View
+                                        </Button>
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          className="h-7 px-2 text-xs"
+                                          onClick={() => handleDownload(doc)}
+                                        >
+                                          Download
+                                        </Button>
+                                      </div>
+                                    </TableCell>
+                                  </TableRow>
+                                )
+                              })}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )
+                })
+              )
+            )}
+          </div>        )}
       </div>
 
       {/* Seller View Document Modal */}
@@ -1801,9 +2267,20 @@ export const DocumentVerificationPage: React.FC = () => {
                   </span>
                 </div>
               </div>
-              <div className="flex justify-between">
+              <div className="flex justify-between items-center">
                 <span className="text-slate-500">Classification</span>
-                <span className="font-medium text-slate-800">{selectedDoc.documentType}</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="font-medium text-slate-800">{selectedDoc.documentType}</span>
+                  {checkDocumentTypeMismatch(selectedDoc.documentName, selectedDoc.documentType) && (
+                    <span
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-800 border border-amber-300 shadow-2xs whitespace-nowrap"
+                      title={`File name "${selectedDoc.documentName}" does not match classified document type "${selectedDoc.documentType}".`}
+                    >
+                      <AlertTriangle className="h-3 w-3 text-amber-600 shrink-0" />
+                      Check document type
+                    </span>
+                  )}
+                </div>
               </div>
               {(isVerifier || isAdmin) && (
                 <div className="flex justify-between">

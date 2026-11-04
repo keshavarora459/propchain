@@ -83,6 +83,7 @@ class PropertyRepository:
         owner_id: Optional[uuid.UUID] = None,
         creator_id: Optional[uuid.UUID] = None,
         current_user: Optional[User] = None,
+        verified_by_me: Optional[bool] = False,
     ) -> Tuple[List[Property], int]:
         # Automatic safeguard: If cache is empty, hydrate all from MongoDB Atlas immediately
         if self.db.query(Property).count() == 0:
@@ -130,22 +131,11 @@ class PropertyRepository:
                     )
                 )
             elif user_role in {UserRole.VERIFIER.value, "VERIFIER"}:
-                # Item 7: Verifier property list must show ONLY properties with verification status
-                # SUBMITTED, CORRECTION_REQUESTED, or recently verified by this verifier.
-                from app.models.document import DocumentVerificationRecord, PropertyDocument
-                verified_by_me_subq = (
-                    select(PropertyDocument.property_id)
-                    .join(DocumentVerificationRecord, DocumentVerificationRecord.document_id == PropertyDocument.id)
-                    .where(DocumentVerificationRecord.verifier_user_id == current_user.id)
-                )
+                # Verifier can view properties across verification lifecycle
                 filters.append(
-                    or_(
-                        Property.verification_status.in_(["SUBMITTED", "CORRECTION_REQUESTED"]),
-                        and_(
-                            Property.verification_status == "VERIFIED",
-                            Property.id.in_(verified_by_me_subq),
-                        ),
-                    )
+                    Property.verification_status.in_([
+                        "SUBMITTED", "CORRECTION_REQUESTED", "REQUIRES_CORRECTION", "REJECTED", "VERIFIED"
+                    ])
                 )
             # ADMIN, LEGAL_AUTHORITY remain unrestricted
 
@@ -177,6 +167,20 @@ class PropertyRepository:
 
         if city and city.strip():
             filters.append(Property.city.ilike(city.strip()))
+
+        if verified_by_me and current_user is not None:
+            from app.models.document import DocumentVerificationRecord, PropertyDocument
+            verified_by_me_subq = (
+                select(PropertyDocument.property_id)
+                .join(DocumentVerificationRecord, DocumentVerificationRecord.document_id == PropertyDocument.id)
+                .where(DocumentVerificationRecord.verifier_user_id == current_user.id)
+            )
+            filters.append(
+                or_(
+                    Property.verified_by_id == current_user.id,
+                    Property.id.in_(verified_by_me_subq),
+                )
+            )
 
         if owner_id:
             filters.append(

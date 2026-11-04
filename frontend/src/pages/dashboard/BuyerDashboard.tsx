@@ -24,7 +24,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@
 import { Button } from '@/components/ui/Button'
 import { Tabs } from '@/components/ui/Tabs'
 import { Input } from '@/components/ui/Input'
-import { formatCurrency, formatDate, truncateHash, getPropertyLabel, getRoleLabel } from '@/lib/utils'
+import { formatCurrency, formatDate, truncateHash, getPropertyLabel, getRoleLabel, getVerificationLabel } from '@/lib/utils'
 import { useAuth } from '@/hooks/useAuth'
 import { useWallet } from '@/context/WalletContext'
 import apiClient from '@/lib/axios'
@@ -225,7 +225,7 @@ export const BuyerDashboard: React.FC = () => {
                           <p className="text-[10px] uppercase tracking-wider text-slate-400 font-medium">Valuation</p>
                           <p className="text-sm font-bold font-mono text-slate-900">{formatCurrency(prop.valuation)}</p>
                         </div>
-                        <StatusBadge status={prop.verificationStatus} />
+                        <StatusBadge status={prop.verificationStatus} label={getVerificationLabel(prop, user?.role)} />
                       </div>
 
                       <div className="pt-2 flex items-center gap-2">

@@ -265,6 +265,9 @@ class BlockchainService:
             op.error_message = None
 
             prop.blockchain_property_id = prop.property_number
+            prop.blockchain_tx_hash = onchain_tx_hash
+            prop.blockchain_block_number = onchain_block_num
+            prop.blockchain_anchored_at = block_timestamp
 
             # Check or create initial ownership event
             genesis_event = (

@@ -100,13 +100,28 @@ class PropertyResponse(PropertyBase):
     # Populated owner details
     owner_name: Optional[str] = None
     owner_email: Optional[str] = None
+    seller_name: Optional[str] = None
+    creator_name: Optional[str] = None
+
+    # Verification document progress
+    approved_documents_count: int = 0
+    required_documents_count: int = 4
+
+    # Verification details
+    verified_at: Optional[datetime] = None
+    verified_by_id: Optional[uuid.UUID] = None
+    verified_by_name: Optional[str] = None
 
     # Blockchain anchoring verification details
     blockchain_tx_hash: Optional[str] = None
+    anchor_tx_hash: Optional[str] = None
     blockchain_block_number: Optional[int] = None
     blockchain_contract_address: Optional[str] = None
     blockchain_registration_timestamp: Optional[datetime] = None
     blockchain_error: Optional[str] = None
+
+    # Dev override for cross-property duplicate documents
+    allow_duplicate_override: bool = False
 
     model_config = ConfigDict(from_attributes=True)
 

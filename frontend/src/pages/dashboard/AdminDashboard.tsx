@@ -16,7 +16,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import { Button } from '@/components/ui/Button'
 import { Tabs } from '@/components/ui/Tabs'
-import { formatCurrency, formatDate, truncateHash, getPropertyLabel, getRoleLabel } from '@/lib/utils'
+import { formatCurrency, formatDate, truncateHash, getPropertyLabel, getRoleLabel, getVerificationLabel } from '@/lib/utils'
 import { useAuth } from '@/hooks/useAuth'
 import apiClient from '@/lib/axios'
 import authService from '@/services/authService'
@@ -384,7 +384,7 @@ export const AdminDashboard: React.FC = () => {
                     <TableCell className="text-xs text-slate-600">{p.city}, {p.state}</TableCell>
                     <TableCell className="font-mono text-xs font-bold">{formatCurrency(p.valuation)}</TableCell>
                     <TableCell><StatusBadge status={p.status} /></TableCell>
-                    <TableCell><StatusBadge status={p.verificationStatus} /></TableCell>
+                    <TableCell><StatusBadge status={p.verificationStatus} label={getVerificationLabel(p, user?.role)} /></TableCell>
                   </TableRow>
                 ))}
               </TableBody>

@@ -386,8 +386,8 @@ class DocumentService:
     ) -> DocumentResponse:
         raw_role = current_user.role
         user_role = raw_role.value if hasattr(raw_role, "value") else str(raw_role)
-        if user_role not in {UserRole.ADMIN.value, UserRole.VERIFIER.value, UserRole.LEGAL_AUTHORITY.value}:
-            raise ForbiddenError("Only authorized verifiers or legal authorities can review documents.")
+        if user_role not in {UserRole.VERIFIER.value, "VERIFIER"}:
+            raise ForbiddenError("Only role VERIFIER can review or verify documents.")
 
         doc = self.doc_repo.get_by_id(document_id)
         if not doc:
@@ -424,10 +424,20 @@ class DocumentService:
             if other_doc:
                 other_p = self.prop_repo.get_by_id(other_doc.property_id)
                 p_name = other_p.title if other_p else "another property"
-                raise BadRequestError(
-                    f"Cannot approve document with unresolved cross-property duplicate. "
-                    f"This file is a duplicate of {p_name}. You must request correction or reject it."
-                )
+                # DEV ONLY: remove or set false before production.
+                from app.core.config import get_settings
+                settings = get_settings()
+                if settings.ALLOW_DUPLICATE_DOCS_ON_VERIFY and settings.APP_ENV == "development":
+                    logger.warning(
+                        "DEV OVERRIDE: Allowing document verification with duplicate document '%s' (duplicates property '%s').",
+                        doc.title or doc.document_type,
+                        p_name,
+                    )
+                else:
+                    raise BadRequestError(
+                        f"Cannot approve document with unresolved cross-property duplicate. "
+                        f"This file is a duplicate of {p_name}. You must request correction or reject it."
+                    )
         if norm_action in {"REQUIRES_CORRECTION", "CORRECTION_REQUESTED"}:
             doc.status = "CORRECTION_REQUESTED"
             prop.verification_status = "CORRECTION_REQUESTED"
@@ -481,5 +491,33 @@ class DocumentService:
             comments=comments,
         )
         self.doc_repo.save_verification_record(v_record)
+
+        # When the last (4th) document is approved, notify seller and verifier
+        if norm_action == "VERIFIED":
+            try:
+                approved_count = self.db.query(PropertyDocument).filter(
+                    PropertyDocument.property_id == prop.id,
+                    PropertyDocument.status == "VERIFIED",
+                ).count()
+                if approved_count >= 4:
+                    from app.models.user_activity import UserActivityLog
+                    seller_id = prop.creator_user_id or prop.current_owner_id
+                    if seller_id:
+                        seller_notif = UserActivityLog(
+                            user_id=seller_id,
+                            activity_type="NOTIFICATION",
+                            description=f"All documents approved, final verification pending for {prop.title} ({prop.property_number})",
+                        )
+                        self.db.add(seller_notif)
+
+                    verifier_notif = UserActivityLog(
+                        user_id=current_user.id,
+                        activity_type="NOTIFICATION",
+                        description=f"Property is ready to verify: {prop.title} ({prop.property_number})",
+                    )
+                    self.db.add(verifier_notif)
+                    self.db.commit()
+            except Exception as notif_err:
+                logger.warning("Notification on 4th doc approval notice: %s", notif_err)
 
         return DocumentResponse.model_validate(doc)

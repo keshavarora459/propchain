@@ -313,6 +313,7 @@ def get_blockchain_overview(
     )
 
     prop_tx_map = {}
+    prop_title_map = {p.property_number: p.title for p in registered_props_db}
     registered_properties_list = []
     for p in registered_props_db:
         # Find confirmed operation or ownership event
@@ -449,21 +450,22 @@ def get_blockchain_overview(
                 tx_count = len(tx_objs)
                 total_tx_count += tx_count
 
-                # Classify block type strictly according to PropChain specifications
+                # Classify block type dynamically based on actual contract transactions
                 if b_num == 0:
                     b_type = "Genesis Block"
-                elif b_num in {1, 2, 4}:
-                    b_type = "Contract Deployment"
-                elif b_num in {3, 5}:
-                    b_type = "Role Authorization"
                 else:
                     has_prop_reg = False
                     has_transfer = False
                     has_deployment = False
+                    has_role_auth = False
                     for tx in tx_objs:
                         tx_to_addr = (tx.get("to") or "").lower()
+                        tx_in = ensure_0x(tx.get("input", "")).lower()
+                        is_role = tx_in.startswith("0x2f2ff15d")
                         if not tx_to_addr:
                             has_deployment = True
+                        elif is_role:
+                            has_role_auth = True
                         elif tx_to_addr == prop_reg_addr.lower():
                             has_prop_reg = True
                         elif tx_to_addr == own_reg_addr.lower():
@@ -475,6 +477,8 @@ def get_blockchain_overview(
                         b_type = "Ownership Transfer"
                     elif has_deployment:
                         b_type = "Contract Deployment"
+                    elif has_role_auth:
+                        b_type = "Role Authorization"
                     else:
                         b_type = "Smart Contract Interaction"
 
@@ -508,11 +512,15 @@ def get_blockchain_overview(
                     # Identify event name and associated property
                     event_name = "Smart Contract Call"
                     prop_id = prop_tx_map.get(tx_h.lower()) or transfer_tx_map.get(tx_h.lower())
+                    prop_title = prop_title_map.get(prop_id, "")
                     details = ""
                     doc_hash = ""
 
+                    tx_in = ensure_0x(tx.get("input", "")).lower()
+                    is_role_grant = tx_in.startswith("0x2f2ff15d")
+
                     if not tx_to:
-                        event_name = "Contract Deployment"
+                        event_name = "Contract deployed"
                         if tx_receipt and tx_receipt.get("contractAddress"):
                             ca = tx_receipt["contractAddress"].lower()
                             if ca == prop_reg_addr.lower():
@@ -521,25 +529,33 @@ def get_blockchain_overview(
                                 details = "OwnershipRegistry Deployed"
                             elif ca == tx_mgr_addr.lower():
                                 details = "TransactionManager Deployed"
+                            else:
+                                details = "Smart Contract Deployed"
+                        else:
+                            details = "Smart Contract Deployed"
+                    elif is_role_grant:
+                        event_name = "Role granted"
+                        if tx_to.lower() == prop_reg_addr.lower():
+                            details = "PropertyRegistry Role Granted"
+                        elif tx_to.lower() == own_reg_addr.lower():
+                            details = "OwnershipRegistry Role Granted"
+                        else:
+                            details = "Role Authorization"
                     elif tx_to.lower() == prop_reg_addr.lower():
-                        if prop_id:
-                            event_name = "Property Registered"
-                            details = f"Property {prop_id} anchored on-chain"
-                            # Find document hash
-                            for rp in registered_properties_list:
-                                if rp["property_id"] == prop_id and rp["document_hashes"]:
-                                    doc_hash = rp["document_hashes"][0]
-                                    break
-                        else:
-                            event_name = "PropertyRegistry Call"
+                        event_name = "Property registered"
+                        details = f"Property {prop_id} anchored on-chain" if prop_id else "Property Registered"
+                        for rp in registered_properties_list:
+                            if rp["property_id"] == prop_id and rp["document_hashes"]:
+                                doc_hash = rp["document_hashes"][0]
+                                if not prop_title:
+                                    prop_title = rp.get("title", "")
+                                break
                     elif tx_to.lower() == own_reg_addr.lower():
-                        if prop_id:
-                            event_name = "Ownership Transfer"
-                            details = f"Conveyance recorded for {prop_id}"
-                        else:
-                            event_name = "OwnershipRegistry Call"
+                        event_name = "Ownership transferred"
+                        details = f"Conveyance recorded for {prop_id}" if prop_id else "Ownership Transferred"
                     elif tx_to.lower() == tx_mgr_addr.lower():
-                        event_name = "TransactionManager Call"
+                        event_name = "Transaction initiated"
+                        details = "Escrow Transaction Manager Call"
 
                     txs_list.append({
                         "hash": tx_h,
@@ -548,6 +564,7 @@ def get_blockchain_overview(
                         "to": tx_to or "Contract Deployment",
                         "event": event_name,
                         "propertyId": prop_id,
+                        "propertyTitle": prop_title,
                         "documentHash": doc_hash,
                         "details": details,
                         "value": f"{w3.from_wei(tx.get('value', 0), 'ether')} ETH",

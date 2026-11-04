@@ -23,6 +23,7 @@ import {
   ChevronRight,
   Box,
   Info,
+  X,
 } from 'lucide-react'
 import { PageHeader } from '@/components/common/PageHeader'
 import { StatusBadge } from '@/components/common/StatusBadge'
@@ -218,6 +219,8 @@ export const BlockchainExplorerPage: React.FC = () => {
 
   const [selectedBlock, setSelectedBlock] = useState<RealBlock | null>(null)
   const [selectedTx, setSelectedTx] = useState<RealTx | null>(null)
+  const [sidePanelOpen, setSidePanelOpen] = useState(false)
+  const [showSystemEvents, setShowSystemEvents] = useState(false)
 
   const [blocks, setBlocks] = useState<RealBlock[]>([])
   const [transactions, setTransactions] = useState<RealTx[]>([])
@@ -307,25 +310,6 @@ export const BlockchainExplorerPage: React.FC = () => {
             const block = await provider.getBlock(i, true)
             if (block) {
               const blockDate = new Date(Number(block.timestamp) * 1000).toISOString()
-              let blockType = 'Smart Contract Interaction'
-              if (block.number === 0) blockType = 'Genesis Block'
-              else if (block.number === 1 || block.number === 2 || block.number === 4) blockType = 'Contract Deployment'
-              else if (block.number === 3 || block.number === 5) blockType = 'Role Authorization'
-
-              fetchedBlocks.push({
-                blockNumber: block.number,
-                hash: block.hash || '',
-                parentHash: block.parentHash || '',
-                timestamp: blockDate,
-                transactionsCount: block.transactions.length,
-                gasUsed: `${Number(block.gasUsed).toLocaleString()} gas`,
-                gasLimit: `${Number(block.gasLimit).toLocaleString()} gas`,
-                baseFeePerGas: block.baseFeePerGas ? `${block.baseFeePerGas.toString()} wei` : undefined,
-                miner: block.miner,
-                blockType,
-                transactions: block.transactions.map((t: any) => (typeof t === 'string' ? t : t.hash)),
-              })
-
               const rawTxs: any[] = []
               if (block.prefetchedTransactions && block.prefetchedTransactions.length > 0) {
                 rawTxs.push(...block.prefetchedTransactions)
@@ -342,27 +326,104 @@ export const BlockchainExplorerPage: React.FC = () => {
                 }
               }
 
+              let hasDeployment = false
+              let hasPropReg = false
+              let hasTransfer = false
+              let hasRoleAuth = false
+
+              const blockTxs: RealTx[] = []
               for (const tx of rawTxs) {
-                let eventName = tx.to ? 'Smart Contract Call' : 'Contract Deployment'
+                let eventName = 'Smart Contract Call'
                 let details = ''
+                let gasUsedFmt = '0 gas'
+                let txStatus: 'Confirmed' | 'Reverted' = 'Confirmed'
+                let contractAddress: string | null = null
+
+                try {
+                  const receipt = await provider.getTransactionReceipt(tx.hash)
+                  if (receipt) {
+                    gasUsedFmt = `${Number(receipt.gasUsed).toLocaleString()} gas`
+                    txStatus = receipt.status === 1 ? 'Confirmed' : 'Reverted'
+                    contractAddress = receipt.contractAddress
+                  }
+                } catch {}
+
+                const txTo = (tx.to || '').toLowerCase()
+                const txData = (tx.data || '').toLowerCase()
+                const isRoleGrant = txData.startsWith('0x2f2ff15d')
+
                 if (!tx.to) {
-                  if (block.number === 1) details = 'PropertyRegistry Deployed'
-                  else if (block.number === 2) details = 'OwnershipRegistry Deployed'
-                  else if (block.number === 4) details = 'TransactionManager Deployed'
+                  hasDeployment = true
+                  eventName = 'Contract deployed'
+                  const ca = (contractAddress || '').toLowerCase()
+                  if (ca && ca === CONTRACT_ADDRESSES.PROPERTY_REGISTRY.toLowerCase()) {
+                    details = 'PropertyRegistry Deployed'
+                  } else if (ca && ca === CONTRACT_ADDRESSES.OWNERSHIP_REGISTRY.toLowerCase()) {
+                    details = 'OwnershipRegistry Deployed'
+                  } else if (ca && ca === CONTRACT_ADDRESSES.TRANSACTION_MANAGER.toLowerCase()) {
+                    details = 'TransactionManager Deployed'
+                  } else {
+                    details = 'Smart Contract Deployed'
+                  }
+                } else if (isRoleGrant) {
+                  hasRoleAuth = true
+                  eventName = 'Role granted'
+                  details = 'AccessControl Role Granted'
+                } else if (txTo === CONTRACT_ADDRESSES.PROPERTY_REGISTRY.toLowerCase()) {
+                  hasPropReg = true
+                  eventName = 'Property registered'
+                  details = 'Property Registered On-Chain'
+                } else if (txTo === CONTRACT_ADDRESSES.OWNERSHIP_REGISTRY.toLowerCase()) {
+                  hasTransfer = true
+                  eventName = 'Ownership transferred'
+                  details = 'Ownership Conveyance Recorded'
+                } else if (txTo === CONTRACT_ADDRESSES.TRANSACTION_MANAGER.toLowerCase()) {
+                  eventName = 'Transaction initiated'
+                  details = 'TransactionManager Call'
                 }
-                fetchedTxs.push({
+
+                blockTxs.push({
                   hash: tx.hash,
                   blockNumber: block.number,
                   from: tx.from,
                   to: tx.to || 'Contract Deployment',
                   event: eventName,
                   details,
-                  gasUsed: '120,000 gas',
-                  status: 'Confirmed',
+                  gasUsed: gasUsedFmt,
+                  status: txStatus,
                   value: ethers.formatEther(tx.value || 0) + ' ETH',
                   timestamp: blockDate,
                 })
               }
+
+              let blockType = 'Smart Contract Interaction'
+              if (block.number === 0) {
+                blockType = 'Genesis Block'
+              } else if (hasPropReg) {
+                blockType = 'Property Registration'
+              } else if (hasTransfer) {
+                blockType = 'Ownership Transfer'
+              } else if (hasDeployment) {
+                blockType = 'Contract Deployment'
+              } else if (hasRoleAuth) {
+                blockType = 'Role Authorization'
+              }
+
+              fetchedBlocks.push({
+                blockNumber: block.number,
+                hash: block.hash || '',
+                parentHash: block.parentHash || '',
+                timestamp: blockDate,
+                transactionsCount: block.transactions.length,
+                gasUsed: `${Number(block.gasUsed).toLocaleString()} gas`,
+                gasLimit: `${Number(block.gasLimit).toLocaleString()} gas`,
+                baseFeePerGas: block.baseFeePerGas ? `${block.baseFeePerGas.toString()} wei` : undefined,
+                miner: block.miner,
+                blockType,
+                transactions: block.transactions.map((t: any) => (typeof t === 'string' ? t : t.hash)),
+              })
+
+              fetchedTxs.push(...blockTxs)
             }
           } catch (bErr) {
             console.warn(`Could not load block #${i}:`, bErr)
@@ -570,9 +631,34 @@ export const BlockchainExplorerPage: React.FC = () => {
             >
               <ChevronRight className="h-4 w-4" />
             </button>
-            <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-2.5 py-1 rounded-md flex items-center gap-1 font-semibold">
-              <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" /> 100% Chain Integrity Verified
-            </span>
+            {(() => {
+              let brokenBlock: number | null = null
+              let checkedCount = 0
+              if (sortedBlocks.length > 1) {
+                for (let i = 1; i < sortedBlocks.length; i++) {
+                  const prev = sortedBlocks[i - 1]
+                  const curr = sortedBlocks[i]
+                  checkedCount++
+                  if (
+                    !curr.parentHash ||
+                    !prev.hash ||
+                    curr.parentHash.toLowerCase() !== prev.hash.toLowerCase()
+                  ) {
+                    brokenBlock = curr.blockNumber
+                    break
+                  }
+                }
+              }
+              return brokenBlock === null ? (
+                <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-2.5 py-1 rounded-md flex items-center gap-1 font-semibold">
+                  <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" /> Chain integrity OK ({checkedCount} of {checkedCount} links checked)
+                </span>
+              ) : (
+                <span className="text-[10px] font-mono text-rose-400 bg-rose-950/60 border border-rose-500/30 px-2.5 py-1 rounded-md flex items-center gap-1 font-semibold">
+                  <AlertTriangle className="h-3.5 w-3.5 text-rose-400" /> Broken link detected at Block #{brokenBlock}
+                </span>
+              )
+            })()}
           </div>
         </div>
 
@@ -644,6 +730,7 @@ export const BlockchainExplorerPage: React.FC = () => {
                     onClick={() => {
                       setSelectedBlock(blk)
                       setBlockDetailView('basic')
+                      setSidePanelOpen(true)
                     }}
                     className={`min-w-[260px] w-[260px] max-w-[260px] rounded-xl p-4 border transition-all duration-300 cursor-pointer shrink-0 select-none relative group hover:-translate-y-1.5 shadow-md hover:shadow-xl ${theme.containerClass}`}
                     title="Click to inspect block details"
@@ -1141,135 +1228,170 @@ export const BlockchainExplorerPage: React.FC = () => {
           {/* SECTION B: VISUAL BLOCKCHAIN STRUCTURE */}
           {renderVisualChain(false)}
 
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            {/* Quick Blocks List */}
-            <Card className="border-slate-200">
-              <CardHeader className="flex flex-row items-center justify-between pb-3">
-                <div className="flex items-center gap-2">
-                  <Blocks className="h-4 w-4 text-blue-600" />
-                  <CardTitle className="text-sm font-semibold">Latest Blocks Mined</CardTitle>
+          {/* SECTION C: LEDGER ACTIVITY */}
+          <Card className="border-slate-200">
+            <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
+                  <History className="h-4 w-4" />
                 </div>
-                <button
-                  onClick={() => setActiveTab('blocks')}
-                  className="text-xs text-blue-600 hover:underline font-medium"
-                >
-                  View All ({blocks.length}) →
-                </button>
-              </CardHeader>
-              <CardContent className="divide-y divide-slate-100 p-0 text-xs">
-                {isLoading ? (
-                  <div className="p-8 text-center text-slate-400">
-                    <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2 text-blue-600" />
-                    Querying blocks from node...
-                  </div>
-                ) : blocks.length === 0 ? (
-                  <div className="p-8 text-center text-slate-500">
-                    <p className="font-medium">No blocks mined yet on the local ledger.</p>
-                  </div>
-                ) : (
-                  blocks.slice(0, 6).map((blk) => (
-                    <div
-                      key={blk.hash || blk.blockNumber}
-                      onClick={() => {
-                        setSelectedBlock(blk)
-                        setBlockDetailView('basic')
-                      }}
-                      className="p-3.5 flex items-center justify-between hover:bg-blue-50/50 cursor-pointer transition-colors"
-                      title="Click to view full block details"
-                    >
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono font-bold text-blue-600">#{blk.blockNumber}</span>
-                          <span
-                            className={`text-[10px] font-semibold px-2 py-0.5 rounded border ${getBlockTypeBadgeClass(
-                              blk.blockType
-                            )}`}
-                          >
-                            {blk.blockType || 'Consensus Block'}
-                          </span>
-                        </div>
-                        <p className="font-mono text-[11px] text-slate-500 mt-1">
-                          Hash: <span className="font-semibold">{truncateHash(blk.hash, 8, 6)}</span>
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <span className="inline-block rounded bg-slate-100 px-2 py-0.5 font-mono text-[11px] text-slate-700 font-medium">
-                          {blk.transactionsCount} txs
-                        </span>
-                        <p className="text-[10px] text-slate-400 mt-1 font-mono">{formatDate(blk.timestamp)}</p>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Quick Transactions List */}
-            <Card className="border-slate-200">
-              <CardHeader className="flex flex-row items-center justify-between pb-3">
-                <div className="flex items-center gap-2">
-                  <Cpu className="h-4 w-4 text-slate-800" />
-                  <CardTitle className="text-sm font-semibold">Recent Transactions</CardTitle>
+                <div>
+                  <CardTitle className="text-sm font-semibold">Activity</CardTitle>
+                  <p className="text-[11px] text-slate-400">
+                    Chronological events and verified transactions recorded on the immutable ledger.
+                  </p>
                 </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-600 select-none bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-lg hover:bg-slate-100 transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={showSystemEvents}
+                    onChange={(e) => setShowSystemEvents(e.target.checked)}
+                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-3.5 w-3.5"
+                  />
+                  <span className="font-medium">Show system events</span>
+                </label>
                 <button
                   onClick={() => setActiveTab('transactions')}
                   className="text-xs text-blue-600 hover:underline font-medium"
                 >
                   View All ({transactions.length}) →
                 </button>
-              </CardHeader>
-              <CardContent className="divide-y divide-slate-100 p-0 text-xs">
-                {isLoading ? (
-                  <div className="p-8 text-center text-slate-400">
-                    <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2 text-slate-700" />
-                    Querying transactions...
-                  </div>
-                ) : transactions.length === 0 ? (
-                  <div className="p-8 text-center text-slate-500">
-                    <p className="font-medium text-slate-600">No on-chain transactions yet</p>
-                    <p className="text-[11px] text-slate-400 mt-1">
-                      Transactions will appear here when properties are verified and deeds are registered on-chain.
-                    </p>
-                  </div>
-                ) : (
-                  transactions.slice(0, 6).map((tx) => (
-                    <div
-                      key={tx.hash}
-                      onClick={() => setSelectedTx(tx)}
-                      className="p-3.5 space-y-1.5 hover:bg-blue-50/50 cursor-pointer transition-colors"
-                      title="Click to view full transaction details"
-                    >
-                      <div className="flex items-center justify-between">
-                        <HashDisplay value={tx.hash} explorerLink className="bg-transparent border-0 px-0" />
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] font-mono text-blue-600">Block #{tx.blockNumber}</span>
-                          <StatusBadge status={tx.status} />
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-between text-[11px] text-slate-500 font-mono">
-                        <span title={tx.from}>From: {getAddressLabel(tx.from)}</span>
-                        <ArrowRight className="h-3 w-3 text-slate-400" />
-                        <span title={tx.to}>To: {getAddressLabel(tx.to)}</span>
-                      </div>
-                      <div className="flex items-center justify-between text-[11px]">
-                        <div className="flex items-center gap-1.5 truncate">
-                          <span className="font-mono text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded font-medium truncate">
-                            {tx.event}
-                          </span>
-                          {tx.propertyId && (
-                            <span className="font-mono text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded text-[10px] font-semibold">
-                              {tx.propertyId}
-                            </span>
-                          )}
-                        </div>
-                        <span className="font-mono text-slate-400 text-[10px]">{tx.gasUsed}</span>
-                      </div>
+              </div>
+            </CardHeader>
+            <CardContent className="p-0 text-xs">
+              {isLoading ? (
+                <div className="p-10 text-center text-slate-400">
+                  <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2 text-blue-600" />
+                  Querying activity...
+                </div>
+              ) : (() => {
+                const isSystemEvent = (t: RealTx) => {
+                  const ev = (t.event || '').toLowerCase()
+                  const dt = (t.details || '').toLowerCase()
+                  return (
+                    ev.includes('deploy') ||
+                    ev.includes('role') ||
+                    ev.includes('contract creation') ||
+                    dt.includes('deploy') ||
+                    dt.includes('role') ||
+                    !t.to ||
+                    t.to === 'Contract Deployment'
+                  )
+                }
+                const filtered = transactions.filter((t) => showSystemEvents || !isSystemEvent(t))
+
+                if (filtered.length === 0) {
+                  return (
+                    <div className="p-10 text-center text-slate-500">
+                      <p className="font-semibold text-slate-700">No activity to display</p>
+                      <p className="text-[11px] text-slate-400 mt-1">
+                        {showSystemEvents
+                          ? 'No transactions found on the blockchain ledger.'
+                          : 'No property activities yet. Turn on "Show system events" to view contract deployments and role grants.'}
+                      </p>
                     </div>
-                  ))
-                )}
-              </CardContent>
-            </Card>
-          </div>
+                  )
+                }
+
+                return (
+                  <div className="overflow-x-auto">
+                    <Table className="w-full">
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Event</TableHead>
+                          <TableHead>Property</TableHead>
+                          <TableHead>Who</TableHead>
+                          <TableHead>Deed Hash</TableHead>
+                          <TableHead>Gas</TableHead>
+                          <TableHead>Time</TableHead>
+                          <TableHead className="text-right">Action</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {filtered.slice(0, 10).map((tx) => {
+                          const evLower = tx.event.toLowerCase()
+                          const isProp = evLower.includes('property')
+                          const isTrans = evLower.includes('ownership') || evLower.includes('transfer')
+                          const isRole = evLower.includes('role')
+                          const isDeploy = evLower.includes('deploy')
+                          const badgeClass = isProp
+                            ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                            : isTrans
+                            ? 'bg-indigo-50 text-indigo-800 border-indigo-200'
+                            : isRole
+                            ? 'bg-amber-50 text-amber-800 border-amber-200'
+                            : isDeploy
+                            ? 'bg-blue-50 text-blue-800 border-blue-200'
+                            : 'bg-slate-100 text-slate-800 border-slate-200'
+
+                          const propLabel = tx.propertyTitle || tx.propertyId
+                            ? getPropertyLabel({ title: tx.propertyTitle, property_number: tx.propertyId })
+                            : null
+
+                          return (
+                            <TableRow key={tx.hash} className="hover:bg-slate-50/60 transition-colors">
+                              <TableCell>
+                                <div className="flex flex-col gap-0.5">
+                                  <span className={`inline-flex items-center gap-1 font-semibold text-[11px] px-2 py-0.5 rounded border w-fit ${badgeClass}`}>
+                                    {tx.event}
+                                  </span>
+                                  {tx.details && (
+                                    <span className="text-[10px] text-slate-400 truncate max-w-[200px]" title={tx.details}>
+                                      {tx.details}
+                                    </span>
+                                  )}
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                {propLabel ? (
+                                  <div>
+                                    <p className="font-semibold text-slate-800">{propLabel}</p>
+                                    {tx.propertyId && (
+                                      <p className="font-mono text-[10px] text-blue-600">{tx.propertyId}</p>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <span className="text-slate-400 font-mono">—</span>
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                <span className="font-mono text-[11px] text-slate-700 font-medium">{getAddressLabel(tx.from)}</span>
+                              </TableCell>
+                              <TableCell>
+                                {tx.documentHash ? (
+                                  <HashDisplay value={tx.documentHash} explorerLink label="SHA-256" />
+                                ) : (
+                                  <span className="text-slate-400 font-mono">—</span>
+                                )}
+                              </TableCell>
+                              <TableCell className="font-mono text-slate-600 text-[11px]">
+                                {tx.gasUsed}
+                              </TableCell>
+                              <TableCell className="text-slate-500 whitespace-nowrap text-[11px]">
+                                {formatDate(tx.timestamp)}
+                              </TableCell>
+                              <TableCell className="text-right whitespace-nowrap">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => setSelectedTx(tx)}
+                                  className="h-7 text-xs px-2.5"
+                                >
+                                  Inspect
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          )
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )
+              })()}
+            </CardContent>
+          </Card>
         </div>
       )}
 
@@ -1690,8 +1812,173 @@ export const BlockchainExplorerPage: React.FC = () => {
         </div>
       )}
 
+      {/* SIDE PANEL: BLOCK DETAILS */}
+      {selectedBlock && sidePanelOpen && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div
+            className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs transition-opacity"
+            onClick={() => setSidePanelOpen(false)}
+          />
+          <div className="relative z-10 w-full sm:w-[480px] bg-slate-900 border-l border-slate-700 text-white shadow-2xl p-6 overflow-y-auto flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between pb-4 border-b border-slate-800">
+                <div className="flex items-center gap-2.5">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-500/20 text-blue-400 border border-blue-500/30">
+                    <Blocks className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-base text-white">Block #{selectedBlock.blockNumber}</h3>
+                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded border inline-block mt-0.5 ${getBlockTypeBadgeClass(selectedBlock.blockType)}`}>
+                      {selectedBlock.blockType || 'Consensus Block'}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setSidePanelOpen(false)}
+                  className="rounded-lg p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              {user?.role === 'ADMIN' && (
+                <div className="flex items-center gap-2 border-b border-slate-800 py-3">
+                  <button
+                    onClick={() => setBlockDetailView('basic')}
+                    className={`px-3 py-1 rounded-md text-xs font-semibold transition-colors ${
+                      blockDetailView === 'basic' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    Block Overview
+                  </button>
+                  <button
+                    onClick={() => setBlockDetailView('advanced')}
+                    className={`px-3 py-1 rounded-md text-xs font-semibold transition-colors ${
+                      blockDetailView === 'advanced' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    Cryptographic Roots (Admin)
+                  </button>
+                </div>
+              )}
+
+              <div className="mt-4 space-y-3 text-xs">
+                <div>
+                  <span className="text-[11px] text-slate-400 block mb-1">Block Hash</span>
+                  <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800 font-mono text-[11px] text-blue-300 break-all select-all">
+                    {selectedBlock.hash}
+                  </div>
+                </div>
+
+                <div>
+                  <span className="text-[11px] text-slate-400 block mb-1">Parent Hash</span>
+                  <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800 font-mono text-[11px] text-slate-300 break-all select-all">
+                    {selectedBlock.parentHash}
+                  </div>
+                  {selectedBlock.blockNumber > 0 && (
+                    <p className="text-[10px] text-slate-500 mt-1">
+                      Cryptographically links to Block #{selectedBlock.blockNumber - 1}
+                    </p>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 pt-2">
+                  <div className="p-3 rounded-lg bg-slate-950/60 border border-slate-800">
+                    <span className="text-[10px] text-slate-400 block">Transactions</span>
+                    <span className="font-mono font-bold text-sm text-blue-400 mt-0.5 block">
+                      {selectedBlock.transactionsCount} txs
+                    </span>
+                  </div>
+                  <div className="p-3 rounded-lg bg-slate-950/60 border border-slate-800">
+                    <span className="text-[10px] text-slate-400 block">Gas Used</span>
+                    <span className="font-mono font-bold text-sm text-slate-200 mt-0.5 block">
+                      {selectedBlock.gasUsed}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="p-3 rounded-lg bg-slate-950/60 border border-slate-800">
+                    <span className="text-[10px] text-slate-400 block">Timestamp</span>
+                    <span className="font-medium text-xs text-slate-200 mt-0.5 block">
+                      {formatDate(selectedBlock.timestamp)}
+                    </span>
+                  </div>
+                  <div className="p-3 rounded-lg bg-slate-950/60 border border-slate-800">
+                    <span className="text-[10px] text-slate-400 block">Gas Limit</span>
+                    <span className="font-mono text-xs text-slate-300 mt-0.5 block">
+                      {selectedBlock.gasLimit || 'N/A'}
+                    </span>
+                  </div>
+                </div>
+
+                {selectedBlock.miner && (
+                  <div className="pt-1">
+                    <span className="text-[10px] text-slate-400 block mb-1">Mined By</span>
+                    <span className="font-mono text-[11px] text-slate-300 break-all block">
+                      {selectedBlock.miner}
+                    </span>
+                  </div>
+                )}
+
+                {user?.role === 'ADMIN' && blockDetailView === 'advanced' && (
+                  <div className="mt-4 pt-3 border-t border-slate-800 bg-slate-950/80 p-3.5 rounded-lg space-y-2.5 font-mono text-[11px]">
+                    <div className="flex items-center gap-1.5 text-blue-400 font-bold font-sans text-xs mb-2">
+                      <ShieldCheck className="h-4 w-4" />
+                      Merkle-Patricia State Roots
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[10px]">Transactions Root:</span>
+                      <span className="text-slate-200 break-all select-all">{selectedBlock.transactionsRoot || 'N/A'}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[10px]">State Root:</span>
+                      <span className="text-slate-200 break-all select-all">{selectedBlock.stateRoot || 'N/A'}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[10px]">Receipts Root:</span>
+                      <span className="text-slate-200 break-all select-all">{selectedBlock.receiptsRoot || 'N/A'}</span>
+                    </div>
+                    {selectedBlock.baseFeePerGas && (
+                      <div>
+                        <span className="text-slate-400 block text-[10px]">Base Fee Per Gas:</span>
+                        <span className="text-slate-200">{selectedBlock.baseFeePerGas}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {selectedBlock.transactions && selectedBlock.transactions.length > 0 && (
+                  <div className="pt-3 border-t border-slate-800">
+                    <span className="text-[11px] text-slate-400 block mb-2 font-semibold">
+                      Included Transactions ({selectedBlock.transactions.length}):
+                    </span>
+                    <div className="space-y-1.5 max-h-48 overflow-y-auto font-mono text-[11px]">
+                      {selectedBlock.transactions.map((txh, i) => (
+                        <div
+                          key={i}
+                          className="p-2 rounded bg-slate-950 border border-slate-800 text-blue-400 hover:text-blue-300 break-all flex items-center justify-between"
+                        >
+                          <span className="truncate max-w-[340px]">{txh}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="mt-6 pt-4 border-t border-slate-800 flex justify-end">
+              <Button variant="outline" size="sm" onClick={() => setSidePanelOpen(false)}>
+                Close Panel
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* MODAL: Full Block Details (Basic View vs. Advanced View) */}
-      {selectedBlock && (
+      {selectedBlock && !sidePanelOpen && (
         <Modal
           isOpen={Boolean(selectedBlock)}
           onClose={() => {

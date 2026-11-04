@@ -91,24 +91,31 @@ export const PropertyDetailPage: React.FC = () => {
       })
   }, [id])
 
+  const [verifyNotice, setVerifyNotice] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+
   const handleVerifyProperty = async () => {
     if (!property?.id) return
     setIsVerifying(true)
+    setVerifyNotice(null)
     try {
-      const updated = await propertyService.updatePropertyStatus(property.id, {
-        verification_status: 'VERIFIED',
-      })
+      const updated = await propertyService.verifyProperty(property.id)
       setProperty(updated)
-      try {
-        const anchorRes = await ownershipService.anchorProperty(property.id)
-        if (anchorRes?.property_number) {
-          setProperty((prev) => prev ? { ...prev, blockchainPropertyId: anchorRes.property_number } : prev)
-        }
-      } catch (anchorErr) {
-        console.warn('Blockchain anchor call notice:', anchorErr)
-      }
-    } catch (err) {
+      const blkStr = updated.blockchain_block_number ? `Block #${updated.blockchain_block_number}` : ''
+      const txHash = updated.blockchain_tx_hash || updated.anchor_tx_hash
+      const txStr = txHash ? ` (Tx: ${truncateHash(txHash, 8, 6)})` : ''
+      setVerifyNotice({
+        type: 'success',
+        message: `✓ Property verified and recorded on blockchain ${blkStr}${txStr}!`,
+      })
+      setTimeout(() => setVerifyNotice(null), 8000)
+    } catch (err: any) {
       console.error('Failed to verify property:', err)
+      const errorMsg = err.response?.data?.message || err.message || 'Failed to verify property'
+      setVerifyNotice({
+        type: 'error',
+        message: `Error verifying property: ${errorMsg}`,
+      })
+      setTimeout(() => setVerifyNotice(null), 8000)
     } finally {
       setIsVerifying(false)
     }
@@ -219,12 +226,13 @@ export const PropertyDetailPage: React.FC = () => {
         actions={
           <div className="flex items-center gap-2">
             <StatusBadge status={property.verificationStatus} />
-            {(user?.role === 'VERIFIER' || user?.role === 'ADMIN') &&
-              property.verificationStatus?.toLowerCase() === 'pending' && (
+            {user?.role === 'VERIFIER' &&
+              (property.verificationStatus?.toLowerCase() === 'pending' || (property.verification_status || '').toUpperCase() === 'SUBMITTED') && (
                 <Button
                   size="sm"
                   variant="outline"
                   isLoading={isVerifying}
+                  disabled={isVerifying}
                   onClick={handleVerifyProperty}
                   leftIcon={<ShieldCheck className="h-4 w-4 text-emerald-600" />}
                 >
@@ -261,6 +269,33 @@ export const PropertyDetailPage: React.FC = () => {
           </div>
         }
       />
+
+      {verifyNotice && (
+        <div
+          className={`p-3 rounded-xl border text-xs font-semibold flex items-center justify-between ${
+            verifyNotice.type === 'success'
+              ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+              : 'bg-rose-50 border-rose-200 text-rose-800'
+          }`}
+        >
+          <span>{verifyNotice.message}</span>
+          <button onClick={() => setVerifyNotice(null)} className="ml-2 font-bold hover:opacity-75">×</button>
+        </div>
+      )}
+
+      {isVerified && (
+        <div className="flex flex-wrap items-center gap-2 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 px-3.5 py-2 rounded-xl">
+          <ShieldCheck className="h-4 w-4 text-emerald-600 shrink-0" />
+          <span className="font-semibold">Recorded on blockchain {property.blockchain_block_number ? `(Block #${property.blockchain_block_number})` : ''}</span>
+          {(property.blockchain_tx_hash || property.anchor_tx_hash) && (
+            <HashDisplay
+              value={property.blockchain_tx_hash || property.anchor_tx_hash}
+              explorerLink
+              className="bg-transparent border-0 px-0 py-0 text-emerald-900"
+            />
+          )}
+        </div>
+      )}
 
       {/* Top Details Grid */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">

@@ -7,7 +7,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional
 
-from sqlalchemy import Date, DateTime, ForeignKey, Index, Numeric, String, Text, Uuid
+from sqlalchemy import Date, DateTime, ForeignKey, Index, Integer, Numeric, String, Text, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import BaseModel
@@ -83,16 +83,39 @@ class Property(BaseModel):
         index=True,
     )
 
+    # Verification details
+    verified_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    verified_by_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
     # Blockchain anchoring reference
     blockchain_property_id: Mapped[Optional[str]] = mapped_column(
         String(128),
         nullable=True,
         index=True,
     )
+    blockchain_tx_hash: Mapped[Optional[str]] = mapped_column(
+        String(66),
+        nullable=True,
+        index=True,
+    )
+    blockchain_block_number: Mapped[Optional[int]] = mapped_column(
+        Integer,
+        nullable=True,
+    )
+    blockchain_anchored_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
 
     # Relationships
     creator = relationship("User", foreign_keys=[creator_user_id], backref="created_properties")
     current_owner = relationship("User", foreign_keys=[current_owner_id], backref="owned_properties")
+    verified_by = relationship("User", foreign_keys=[verified_by_id], backref="verified_properties")
 
     __table_args__ = (
         Index("ix_properties_state_city_type", "state", "city", "property_type"),

@@ -44,7 +44,6 @@ ROLE_PERMISSIONS: Dict[UserRole, FrozenSet[Permission]] = {
         Permission.MANAGE_USERS,
         Permission.REGISTER_PROPERTY,
         Permission.VIEW_PROPERTIES,
-        Permission.VERIFY_DOCUMENTS,
         Permission.REVIEW_APPROVALS,
         Permission.VIEW_FRAUD_ALERTS,
         Permission.VIEW_BLOCKCHAIN_HISTORY,

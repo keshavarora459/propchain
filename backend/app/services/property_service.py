@@ -6,6 +6,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import (
@@ -17,6 +18,7 @@ from app.core.exceptions import (
 )
 from app.core.logging import get_logger
 from app.core.permissions import UserRole, Permission, has_permission, assert_property_access
+from app.models.document import PropertyDocument
 from app.models.property import Property
 from app.models.user import User
 from app.repositories.document_repository import DocumentRepository
@@ -76,9 +78,35 @@ class PropertyService:
             prop.creator.email if prop.creator else None
         )
 
+        seller_id = prop.creator_user_id or prop.current_owner_id
+        seller_has_wallet = False
+        if seller_id:
+            try:
+                from app.models.wallet import UserWallet
+                wallet_rec = self.db.query(UserWallet).filter(UserWallet.user_id == seller_id).first()
+                if wallet_rec and wallet_rec.wallet_address:
+                    seller_has_wallet = True
+            except Exception:
+                pass
+
+        if not seller_has_wallet and (prop.verification_status == "VERIFIED" or prop.status == "BLOCKCHAIN_REGISTERED"):
+            owner_name = "Held by platform until the seller links a wallet"
+
         resp = PropertyResponse.model_validate(prop)
         resp.owner_name = owner_name
         resp.owner_email = owner_email
+
+        # Attach document progress counts
+        try:
+            from app.models.document import PropertyDocument
+            approved_count = self.db.query(PropertyDocument).filter(
+                PropertyDocument.property_id == prop.id,
+                PropertyDocument.status == "VERIFIED"
+            ).count()
+        except Exception:
+            approved_count = 0
+        resp.approved_documents_count = approved_count
+        resp.required_documents_count = 4
 
         # Attach blockchain details
         try:
@@ -105,13 +133,27 @@ class PropertyService:
                 .first()
             )
 
-            if own_event and own_event.blockchain_tx_hash:
+            if prop.blockchain_tx_hash:
+                resp.blockchain_tx_hash = prop.blockchain_tx_hash
+            elif own_event and own_event.blockchain_tx_hash:
                 resp.blockchain_tx_hash = own_event.blockchain_tx_hash
-                resp.blockchain_block_number = own_event.block_number
-                resp.blockchain_registration_timestamp = own_event.confirmed_at
             elif bc_op and bc_op.tx_hash:
                 resp.blockchain_tx_hash = bc_op.tx_hash
+
+            resp.anchor_tx_hash = resp.blockchain_tx_hash
+
+            if prop.blockchain_block_number is not None:
+                resp.blockchain_block_number = prop.blockchain_block_number
+            elif own_event and own_event.block_number:
+                resp.blockchain_block_number = own_event.block_number
+            elif bc_op and bc_op.block_number:
                 resp.blockchain_block_number = bc_op.block_number
+
+            if prop.blockchain_anchored_at:
+                resp.blockchain_registration_timestamp = prop.blockchain_anchored_at
+            elif own_event and own_event.confirmed_at:
+                resp.blockchain_registration_timestamp = own_event.confirmed_at
+            elif bc_op:
                 resp.blockchain_registration_timestamp = bc_op.updated_at or bc_op.created_at
 
             if bc_op and bc_op.error_message and bc_op.status in ("FAILED", "REVERTED"):
@@ -120,6 +162,33 @@ class PropertyService:
             resp.blockchain_contract_address = BlockchainService.get_contract_address()
         except Exception as bc_meta_err:
             logger.warning("Could not populate blockchain metadata for property %s: %s", prop.id, bc_meta_err)
+
+        # Verification metadata
+        resp.verified_at = prop.verified_at
+        resp.verified_by_id = prop.verified_by_id
+        if prop.verified_by:
+            resp.verified_by_name = prop.verified_by.full_name or prop.verified_by.email
+        elif prop.verified_by_id:
+            try:
+                from app.models.user import User
+                v_user = self.db.query(User).filter(User.id == prop.verified_by_id).first()
+                if v_user:
+                    resp.verified_by_name = v_user.full_name or v_user.email
+            except Exception:
+                pass
+
+        # Seller name
+        seller_user = prop.current_owner or prop.creator
+        if seller_user:
+            resp.seller_name = seller_user.full_name or seller_user.email
+            resp.creator_name = resp.seller_name
+
+        # Dev override flag state
+        from app.core.config import get_settings
+        _settings = get_settings()
+        resp.allow_duplicate_override = bool(
+            _settings.ALLOW_DUPLICATE_DOCS_ON_VERIFY and _settings.APP_ENV == "development"
+        )
 
         return resp
 
@@ -205,6 +274,7 @@ class PropertyService:
         city: Optional[str] = None,
         mine: Optional[bool] = False,
         current_user: Optional[User] = None,
+        verified_by_me: Optional[bool] = False,
     ) -> PropertyListResponse:
         skip = (page - 1) * page_size
         owner_id = current_user.id if (mine and current_user) else None
@@ -219,6 +289,7 @@ class PropertyService:
             city=city,
             owner_id=owner_id,
             current_user=current_user,
+            verified_by_me=verified_by_me,
         )
 
         total_pages = (total + page_size - 1) // page_size if total > 0 else 0
@@ -411,8 +482,8 @@ class PropertyService:
 
         raw_role = current_user.role
         user_role = raw_role.value if hasattr(raw_role, "value") else str(raw_role)
-        if user_role not in {UserRole.ADMIN.value, UserRole.VERIFIER.value, UserRole.LEGAL_AUTHORITY.value}:
-            raise ForbiddenError("Only authorized verifiers or administrators can verify properties.")
+        if user_role not in {UserRole.VERIFIER.value, "VERIFIER"}:
+            raise ForbiddenError("Only role VERIFIER can verify a property.")
 
         if prop.verification_status == "PENDING":
             raise BadRequestError("Cannot verify a draft property that has not been submitted for verification.")
@@ -445,10 +516,21 @@ class PropertyService:
             if other_doc:
                 other_p = self.repo.get_by_id(other_doc.property_id)
                 p_name = other_p.title if other_p else "another property"
-                raise BadRequestError(
-                    f"Cannot verify property while unresolved cross-property duplicate document exists: "
-                    f"'{d.title or d.document_type}' is a duplicate of {p_name}. You must request correction or reject it."
-                )
+                # DEV ONLY: remove or set false before production.
+                from app.core.config import get_settings
+                settings = get_settings()
+                if settings.ALLOW_DUPLICATE_DOCS_ON_VERIFY and settings.APP_ENV == "development":
+                    logger.warning(
+                        "DEV OVERRIDE: Allowing verification with duplicate document '%s' (duplicates property '%s', ID: %s).",
+                        d.title or d.document_type,
+                        p_name,
+                        other_doc.property_id,
+                    )
+                else:
+                    raise BadRequestError(
+                        f"Cannot verify property while unresolved cross-property duplicate document exists: "
+                        f"'{d.title or d.document_type}' is a duplicate of {p_name}. You must request correction or reject it."
+                    )
 
         # Verify all 4 documents are VERIFIED
         unverified_docs = [
@@ -461,70 +543,89 @@ class PropertyService:
                 f"All 4 documents must be approved before verifying the property. Unverified documents: {unverified_types}"
             )
 
-        prop.verification_status = "VERIFIED"
-        prop.status = "BLOCKCHAIN_PENDING"
-        updated = self.repo.update(prop)
+        # Resolve seller wallet: use linked wallet or PLATFORM_CUSTODY_WALLET setting from config
+        from app.core.config import get_settings
+        from app.models.wallet import UserWallet
+        from app.services.blockchain_service import BlockchainService
 
-        # Automatic Blockchain anchoring
-        bc_success = False
-        bc_tx = None
-        bc_error = None
+        settings = get_settings()
+        seller_wallet = None
+        seller_id = prop.creator_user_id or prop.current_owner_id
+        if seller_id:
+            wallet_rec = self.db.query(UserWallet).filter(UserWallet.user_id == seller_id).first()
+            if wallet_rec and wallet_rec.wallet_address:
+                seller_wallet = wallet_rec.wallet_address
+
+        if not seller_wallet:
+            seller_wallet = settings.PLATFORM_CUSTODY_WALLET
+
+        # Resolve primary document hash (reject fake hashes)
+        primary_hash = None
+        title_deed = next((d for d in valid_docs if d.document_type.upper() in {"TITLE_DEED", "SALE_DEED", "DEED"}), None)
+        if title_deed and title_deed.document_hash:
+            primary_hash = title_deed.document_hash
+        else:
+            for d in valid_docs:
+                if d.document_hash:
+                    primary_hash = d.document_hash
+                    break
+
+        if not primary_hash or primary_hash == "0x" + "00" * 32:
+            raise BadRequestError("Cannot verify property: No verified document hash found for on-chain anchoring.")
+
+        # Blockchain anchoring: do not set verification_status = VERIFIED until anchoring succeeds.
+        bc_service = BlockchainService(self.db)
         try:
-            from app.services.blockchain_service import BlockchainService
-            from app.models.wallet import UserWallet
-
-            seller_wallet = None
-            seller_id = prop.creator_user_id or prop.current_owner_id
-            if seller_id:
-                wallet_rec = self.db.query(UserWallet).filter(UserWallet.user_id == seller_id).first()
-                if wallet_rec and wallet_rec.wallet_address:
-                    seller_wallet = wallet_rec.wallet_address
-
-            if not seller_wallet:
-                seller_wallet = "0x808E85eaF09C94EbE2c943b0A0137dC8DF287d88"
-
-            primary_hash = "0x" + "00" * 32
-            title_deed = next((d for d in valid_docs if d.document_type.upper() in {"TITLE_DEED", "SALE_DEED", "DEED"}), None)
-            if title_deed and title_deed.document_hash:
-                primary_hash = title_deed.document_hash
-            else:
-                for d in valid_docs:
-                    if d.document_hash:
-                        primary_hash = d.document_hash
-                        break
-
-            bc_service = BlockchainService(self.db)
             bc_success, bc_tx, bc_error = bc_service.anchor_property(prop, seller_wallet, primary_hash)
         except Exception as bc_err:
-            logger.warning("Blockchain anchor execution notice: %s", bc_err)
+            logger.warning("Blockchain anchor execution error: %s", bc_err)
+            bc_success = False
             bc_error = str(bc_err)
 
-        if bc_success:
-            prop.status = "BLOCKCHAIN_REGISTERED"
-            prop.blockchain_property_id = prop.property_number
-        else:
-            prop.status = "BLOCKCHAIN_FAILED"
+        if not bc_success:
+            # Keep property SUBMITTED and do NOT change anything else
+            prop.verification_status = "SUBMITTED"
+            self.repo.update(prop)
+            logger.error("Blockchain anchoring failed for property %s: %s", prop.property_number, bc_error)
+            raise BadRequestError("Blockchain not reachable. Start the node and try again.")
+
+        # Anchoring succeeded: update status to VERIFIED and ACTIVE (NOT BLOCKCHAIN_REGISTERED)
+        now_utc = datetime.now(timezone.utc)
+        prop.verification_status = "VERIFIED"
+        prop.status = "ACTIVE"
+        prop.blockchain_property_id = prop.property_number
+        if bc_tx:
+            prop.blockchain_tx_hash = bc_tx
+        prop.verified_at = now_utc
+        prop.verified_by_id = current_user.id
+        if not prop.blockchain_anchored_at:
+            prop.blockchain_anchored_at = now_utc
         updated = self.repo.update(prop)
 
-        # Notify seller
+        # Notify seller and log verifier audit entry
         try:
             from app.models.user_activity import UserActivityLog
             seller_id = prop.creator_user_id or prop.current_owner_id
             if seller_id:
-                desc = (
-                    f"Your property {prop.title} ({prop.property_number}) has been verified and registered on the blockchain."
-                    if bc_success
-                    else f"Your property {prop.title} ({prop.property_number}) has been verified, but blockchain registration encountered an issue. You can retry from your console."
-                )
+                desc = f"Your property {prop.title} is verified and recorded on the blockchain. Buyers can now see it."
                 notif = UserActivityLog(
                     user_id=seller_id,
                     activity_type="NOTIFICATION",
                     description=desc,
                 )
                 self.db.add(notif)
-                self.db.commit()
+
+            # Verifier audit record
+            verifier_display = current_user.full_name or current_user.email
+            audit_entry = UserActivityLog(
+                user_id=current_user.id,
+                activity_type="PROPERTY_VERIFIED_AUDIT",
+                description=f"Verifier {verifier_display} ({current_user.id}) verified property {prop.property_number} ({prop.title}) on-chain (Tx: {prop.blockchain_tx_hash or bc_tx}, Block: #{prop.blockchain_block_number}).",
+            )
+            self.db.add(audit_entry)
+            self.db.commit()
         except Exception as notif_err:
-            logger.warning("Notification log notice: %s", notif_err)
+            logger.warning("Notification/audit log notice: %s", notif_err)
 
         return self._to_response(updated)
 
@@ -541,8 +642,8 @@ class PropertyService:
 
         raw_role = current_user.role
         user_role = raw_role.value if hasattr(raw_role, "value") else str(raw_role)
-        if user_role not in {UserRole.ADMIN.value, UserRole.VERIFIER.value, UserRole.LEGAL_AUTHORITY.value}:
-            raise ForbiddenError("Only authorized verifiers or administrators can reject properties.")
+        if user_role not in {UserRole.VERIFIER.value, "VERIFIER"}:
+            raise ForbiddenError("Only role VERIFIER can reject a property.")
 
         prop.verification_status = "REJECTED"
         prop.status = "REJECTED"
@@ -591,7 +692,7 @@ class PropertyService:
         if (prop.verification_status or "").upper() != "VERIFIED":
             raise BadRequestError("Cannot anchor on blockchain: Property has not been verified by a title verifier.")
 
-        if prop.status == "BLOCKCHAIN_REGISTERED":
+        if prop.status == "ACTIVE" and prop.verification_status == "VERIFIED" and (prop.blockchain_property_id or prop.blockchain_tx_hash):
             return self._to_response(prop)
 
         prop.status = "BLOCKCHAIN_PENDING"
@@ -608,14 +709,16 @@ class PropertyService:
                 seller_wallet = wallet_rec.wallet_address
 
         if not seller_wallet:
-            seller_wallet = "0x808E85eaF09C94EbE2c943b0A0137dC8DF287d88"
+            from app.core.config import get_settings
+            settings = get_settings()
+            seller_wallet = settings.PLATFORM_CUSTODY_WALLET
 
         docs = self.doc_repo.list_by_property(property_id)
         valid_docs = [
             d for d in docs
             if (d.status or "").upper() not in {"REJECTED", "REPLACED", "CORRECTION_REQUESTED", "REQUIRES_CORRECTION"}
         ]
-        primary_hash = "0x" + "00" * 32
+        primary_hash = None
         title_deed = next((d for d in valid_docs if d.document_type.upper() in {"TITLE_DEED", "SALE_DEED", "DEED"}), None)
         if title_deed and title_deed.document_hash:
             primary_hash = title_deed.document_hash
@@ -625,12 +728,22 @@ class PropertyService:
                     primary_hash = d.document_hash
                     break
 
+        if not primary_hash or primary_hash == "0x" + "00" * 32:
+            raise BadRequestError("Cannot retry blockchain registration: No verified document hash found.")
+
         bc_service = BlockchainService(self.db)
         bc_success, bc_tx, bc_error = bc_service.anchor_property(prop, seller_wallet, primary_hash)
 
         if bc_success:
-            prop.status = "BLOCKCHAIN_REGISTERED"
+            prop.status = "ACTIVE"
+            prop.verification_status = "VERIFIED"
             prop.blockchain_property_id = prop.property_number
+            if bc_tx:
+                prop.blockchain_tx_hash = bc_tx
+            if not prop.verified_at:
+                prop.verified_at = datetime.now(timezone.utc)
+            if not prop.verified_by_id and user_role == UserRole.VERIFIER.value:
+                prop.verified_by_id = current_user.id
             updated = self.repo.update(prop)
         else:
             prop.status = "BLOCKCHAIN_FAILED"
