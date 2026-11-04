@@ -25,6 +25,7 @@ export const DashboardPage: React.FC = () => {
       return <BuyerDashboard />
     case 'PROPERTY_OWNER':
       return <SellerDashboard />
+    case 'REGISTRAR':
     case 'VERIFIER':
       return <AgentDashboard />
     case 'LEGAL_AUTHORITY':

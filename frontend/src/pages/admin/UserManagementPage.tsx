@@ -121,7 +121,8 @@ export const UserManagementPage: React.FC = () => {
                 <option value="ADMIN">Admin</option>
                 <option value="PROPERTY_OWNER">Seller</option>
                 <option value="BUYER">Buyer</option>
-                <option value="VERIFIER">Verifier</option>
+                <option value="REGISTRAR">Registrar</option>
+                <option value="VERIFIER">Registrar (Legacy)</option>
                 <option value="LEGAL_AUTHORITY">Legal Authority</option>
               </select>
 

@@ -83,7 +83,7 @@ def get_pending_approvals(
         )
     elif user_role == UserRole.BUYER:
         stmt = stmt.where(PropertyTransaction.buyer_id == current_user.id)
-    elif user_role == UserRole.VERIFIER:
+    elif user_role in {UserRole.REGISTRAR, UserRole.VERIFIER, "REGISTRAR", "VERIFIER"}:
         stmt = stmt.where(TransactionApproval.approval_type == "DOCUMENT_VERIFICATION")
     elif user_role == UserRole.LEGAL_AUTHORITY:
         stmt = stmt.where(TransactionApproval.approval_type == "LEGAL_REGISTRATION")
@@ -131,7 +131,7 @@ def list_approvals(
         )
     elif user_role == UserRole.BUYER:
         stmt = stmt.where(PropertyTransaction.buyer_id == current_user.id)
-    elif user_role == UserRole.VERIFIER:
+    elif user_role in {UserRole.REGISTRAR, UserRole.VERIFIER, "REGISTRAR", "VERIFIER"}:
         stmt = stmt.where(TransactionApproval.approval_type == "DOCUMENT_VERIFICATION")
     elif user_role == UserRole.LEGAL_AUTHORITY:
         stmt = stmt.where(TransactionApproval.approval_type == "LEGAL_REGISTRATION")

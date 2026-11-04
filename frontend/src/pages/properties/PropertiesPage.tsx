@@ -363,7 +363,7 @@ export const PropertiesPage: React.FC = () => {
         </div>
       )}
 
-      {/* Seller Summary Chips (Total / Pending / Waiting for verifier / Verified / Needs correction) */}
+      {/* Seller Summary Chips (Total / Pending / Waiting for registrar / Verified / Needs correction) */}
       {isSeller && activeTab === 'my' && (
         <div className="flex flex-wrap items-center gap-2 pt-1">
           <button
@@ -426,7 +426,7 @@ export const PropertiesPage: React.FC = () => {
                 : 'bg-blue-50/70 text-blue-800 border-blue-200 hover:border-blue-300'
             )}
           >
-            <span>Waiting for verifier</span>
+            <span>Waiting for registrar</span>
             <span
               className={cn(
                 'px-1.5 py-0.2 rounded-full text-[10px] font-mono',

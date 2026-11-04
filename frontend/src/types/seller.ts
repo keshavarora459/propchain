@@ -9,6 +9,8 @@ export interface SellerProperty {
   status: string
   verification_status: string
   blockchain_property_id?: string | null
+  blockchain_block_number?: number | null
+  blockchain_tx_hash?: string | null
 }
 
 export interface SellerOffer {

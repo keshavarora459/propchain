@@ -11,6 +11,7 @@ class UserRole(str, Enum):
     ADMIN = "ADMIN"
     PROPERTY_OWNER = "PROPERTY_OWNER"
     BUYER = "BUYER"
+    REGISTRAR = "REGISTRAR"
     VERIFIER = "VERIFIER"
     LEGAL_AUTHORITY = "LEGAL_AUTHORITY"
 
@@ -58,6 +59,14 @@ ROLE_PERMISSIONS: Dict[UserRole, FrozenSet[Permission]] = {
         Permission.VIEW_DASHBOARD,
         Permission.VIEW_PROPERTIES,
         Permission.INITIATE_TRANSACTION,
+        Permission.VIEW_BLOCKCHAIN_HISTORY,
+    }),
+    UserRole.REGISTRAR: frozenset({
+        Permission.VIEW_DASHBOARD,
+        Permission.VIEW_PROPERTIES,
+        Permission.VERIFY_DOCUMENTS,
+        Permission.REVIEW_APPROVALS,
+        Permission.VIEW_FRAUD_ALERTS,
         Permission.VIEW_BLOCKCHAIN_HISTORY,
     }),
     UserRole.VERIFIER: frozenset({
@@ -114,10 +123,10 @@ def assert_property_access(current_user: Any, prop: Any, allow_marketplace: bool
     if user_role in {UserRole.ADMIN.value, UserRole.LEGAL_AUTHORITY.value}:
         return
 
-    # Verifiers can view submitted or verified properties, but draft (PENDING) properties are forbidden
-    if user_role in {UserRole.VERIFIER.value, "VERIFIER"}:
+    # Registrars can view submitted or verified properties, but draft (PENDING) properties are forbidden
+    if user_role in {UserRole.REGISTRAR.value, UserRole.VERIFIER.value, "REGISTRAR", "VERIFIER"}:
         if getattr(prop, "verification_status", None) == "PENDING":
-            raise ForbiddenError("Access denied: Draft properties cannot be viewed by verifiers until submitted.")
+            raise ForbiddenError("Access denied: Draft properties cannot be viewed by registrars until submitted.")
         return
 
     # Check direct ownership or creation

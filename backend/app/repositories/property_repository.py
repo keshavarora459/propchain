@@ -140,7 +140,7 @@ class PropertyRepository:
                         Property.creator_user_id == current_user.id,
                     )
                 )
-            elif user_role in {UserRole.VERIFIER.value, "VERIFIER"}:
+            elif user_role in {UserRole.REGISTRAR.value, UserRole.VERIFIER.value, "REGISTRAR", "VERIFIER"}:
                 # Verifier can view properties across verification lifecycle
                 filters.append(
                     Property.verification_status.in_([

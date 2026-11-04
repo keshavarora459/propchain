@@ -1,5 +1,5 @@
 import React from 'react'
-import { Check, Clock, AlertTriangle, CheckCircle2, ShieldAlert } from 'lucide-react'
+import { Check, AlertTriangle, CheckCircle2, ShieldAlert } from 'lucide-react'
 import { getTransactionLifecycleProgress, type LifecycleStepState } from '@/lib/utils'
 import { HashDisplay } from '@/components/common/HashDisplay'
 

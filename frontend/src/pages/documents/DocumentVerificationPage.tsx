@@ -42,7 +42,7 @@ export const REQUIRED_DOCUMENT_TYPES = [
 export const DocumentVerificationPage: React.FC = () => {
   const { user } = useAuth()
   const isSeller = user?.role === 'PROPERTY_OWNER'
-  const isVerifier = user?.role === 'VERIFIER'
+  const isVerifier = user?.role === 'REGISTRAR' || user?.role === 'VERIFIER'
   const isAdmin = user?.role === 'ADMIN'
 
   const [searchParams] = useSearchParams()
@@ -1073,7 +1073,7 @@ export const DocumentVerificationPage: React.FC = () => {
                     Required Documents Checklist
                   </h4>
                   <p className="text-[11px] text-slate-500 mt-0.5">
-                    {user?.role === 'VERIFIER' || user?.role === 'ADMIN'
+                    {user?.role === 'REGISTRAR' || user?.role === 'VERIFIER' || user?.role === 'ADMIN'
                       ? 'Inspection Checklist: All 4 mandatory documents must be verified before on-chain conveyance.'
                       : 'Upload all 4 mandatory document types to submit your property for verifier review.'}
                   </p>
@@ -1167,7 +1167,7 @@ export const DocumentVerificationPage: React.FC = () => {
                     {isPropertyVerified
                       ? 'This property has been officially verified by a title verifier and anchored on the blockchain.'
                       : isPropertySubmitted && !isPropertyNeedsCorrection
-                      ? 'Submitted for verification. A verifier will review your documents.'
+                      ? 'Submitted for verification. A registrar will review your documents.'
                       : isPropertyNeedsCorrection
                       ? allRequiredUploaded
                         ? 'Corrected document uploaded. Click below to re-submit for verifier review.'
@@ -1229,7 +1229,7 @@ export const DocumentVerificationPage: React.FC = () => {
                 {getVerificationLabel(selectedProperty, user?.role)}
               </p>
               <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
-                Submitted for verification. A verifier will review your documents. Uploading is locked until review is complete or a correction is requested.
+                Submitted for verification. A registrar will review your documents. Uploading is locked until review is complete or a correction is requested.
               </p>
               <div className="mt-4">
                 <Button size="sm" disabled>
@@ -1430,7 +1430,7 @@ export const DocumentVerificationPage: React.FC = () => {
                   <TableHead className="whitespace-nowrap">Uploaded At</TableHead>
                   <TableHead className="whitespace-nowrap">File Size</TableHead>
                   <TableHead className="whitespace-nowrap">Status</TableHead>
-                  <TableHead className="min-w-[160px] max-w-[220px]">Verifier Message</TableHead>
+                  <TableHead className="min-w-[160px] max-w-[220px]">Registrar Message</TableHead>
                   <TableHead className="min-w-[180px] whitespace-nowrap">Hash Proof</TableHead>
                   <TableHead className="whitespace-nowrap">On-Chain Status</TableHead>
                   <TableHead className="text-right whitespace-nowrap">Action</TableHead>
@@ -1921,7 +1921,7 @@ export const DocumentVerificationPage: React.FC = () => {
                           <TableHead>Property</TableHead>
                           <TableHead>Seller</TableHead>
                           <TableHead>Verified Date</TableHead>
-                          <TableHead>Verifier</TableHead>
+                          <TableHead>Registrar</TableHead>
                           <TableHead>Block Number</TableHead>
                           <TableHead>Transaction Hash</TableHead>
                           <TableHead className="text-right">Action</TableHead>
@@ -1950,10 +1950,10 @@ export const DocumentVerificationPage: React.FC = () => {
                                   {prop.seller_name || prop.owner_name || prop.currentOwner || 'Seller'}
                                 </TableCell>
                                 <TableCell className="text-xs text-slate-500 whitespace-nowrap">
-                                  {formatDate(prop.verified_at || prop.blockchain_registration_timestamp || prop.registeredAt || prop.created_at)}
+                                  {formatDate(prop.verified_at || prop.blockchain_registration_timestamp || prop.registeredAt || prop.created_at || '')}
                                 </TableCell>
                                 <TableCell className="text-xs text-slate-700 whitespace-nowrap">
-                                  {prop.verified_by_name || 'Verifier'}
+                                  {prop.verified_by_name || 'Registrar'}
                                 </TableCell>
                                 <TableCell className="text-xs text-emerald-700 font-mono font-semibold whitespace-nowrap">
                                   {prop.blockchain_block_number ? `Block #${prop.blockchain_block_number}` : 'Block #1'}
@@ -2064,7 +2064,7 @@ export const DocumentVerificationPage: React.FC = () => {
                               <span>•</span>
                               <span>Seller: {prop.seller_name || prop.owner_name || prop.currentOwner || 'Property Owner'}</span>
                               <span>•</span>
-                              <span>Submitted: {formatDate(prop.submitted_at || prop.created_at)}</span>
+                              <span>Submitted: {formatDate(prop.submitted_at || prop.created_at || '')}</span>
                             </div>
                           </div>
                           <div>
@@ -2084,7 +2084,7 @@ export const DocumentVerificationPage: React.FC = () => {
                                 <TableHead className="max-w-[170px]">Document Name</TableHead>
                                 <TableHead className="whitespace-nowrap">Type</TableHead>
                                 <TableHead className="whitespace-nowrap">Status</TableHead>
-                                <TableHead className="min-w-[200px]">Verifier Message / Review Note</TableHead>
+                                <TableHead className="min-w-[200px]">Registrar Message / Review Note</TableHead>
                                 <TableHead className="whitespace-nowrap">Hash Proof</TableHead>
                                 <TableHead className="text-right whitespace-nowrap">Actions</TableHead>
                               </TableRow>

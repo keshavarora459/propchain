@@ -403,7 +403,7 @@ def get_dashboard_metrics(
 
         }
 
-    elif user_role == UserRole.VERIFIER.value:
+    elif user_role in {UserRole.REGISTRAR.value, UserRole.VERIFIER.value, "REGISTRAR", "VERIFIER"}:
         from app.models.document import DocumentVerificationRecord
         verified_subq = (
             select(PropertyDocument.property_id)
@@ -489,7 +489,7 @@ def get_dashboard_metrics(
             )
         ) or 0
 
-        payload["verifier_metrics"] = {
+        payload["registrar_metrics"] = payload["verifier_metrics"] = {
             "properties_to_verify_count": awaiting_props_count,
             "verified_properties_count": all_verified_count,
             "documents_to_verify_count": pending_docs_count,

@@ -26,8 +26,17 @@ export const ROLE_NAVIGATION: Record<UserRole, NavItem[]> = {
     { title: 'Blockchain Records', href: '/blockchain-explorer', iconName: 'Cpu' },
     { title: 'Settings', href: '/settings', iconName: 'Settings' },
   ],
+  REGISTRAR: [
+    { title: 'Registrar Dashboard', href: '/dashboard', iconName: 'LayoutDashboard' },
+    { title: 'Assigned Properties', href: '/properties', iconName: 'Building2' },
+    { title: 'Document Verification', href: '/documents', iconName: 'FileCheck2' },
+    { title: 'Verification Approvals', href: '/approvals', iconName: 'CheckSquare' },
+    { title: 'Deals & Tracking', href: '/transactions', iconName: 'ArrowLeftRight' },
+    { title: 'Blockchain Ledger', href: '/blockchain-explorer', iconName: 'Cpu' },
+    { title: 'Settings', href: '/settings', iconName: 'Settings' },
+  ],
   VERIFIER: [
-    { title: 'Agent Dashboard', href: '/dashboard', iconName: 'LayoutDashboard' },
+    { title: 'Registrar Dashboard', href: '/dashboard', iconName: 'LayoutDashboard' },
     { title: 'Assigned Properties', href: '/properties', iconName: 'Building2' },
     { title: 'Document Verification', href: '/documents', iconName: 'FileCheck2' },
     { title: 'Verification Approvals', href: '/approvals', iconName: 'CheckSquare' },

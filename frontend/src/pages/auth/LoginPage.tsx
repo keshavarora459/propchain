@@ -206,7 +206,7 @@ export const LoginPage: React.FC = () => {
                   onClick={() => handleQuickLogin('verifier@propchain.network')}
                   className="flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg bg-cyan-900/30 border border-cyan-500/30 hover:bg-cyan-800/40 text-cyan-300 text-[11px] font-medium transition-all"
                 >
-                  <span>Agent / Verifier</span>
+                  <span>Registrar</span>
                 </button>
                 <button
                   type="button"

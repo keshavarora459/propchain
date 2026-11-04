@@ -715,7 +715,7 @@ def get_blockchain_overview(
             or (tx["from"].lower() in user_wallet_addrs or tx["to"].lower() in user_wallet_addrs)
             or tx["event"] in {"Property Registered", "Contract Deployment"}
         ]
-    elif user_role == "VERIFIER":
+    elif user_role in {"REGISTRAR", "VERIFIER"}:
         # Verifier: verified property registrations, verification-related txs
         scoped_properties = registered_properties_list
         scoped_transfers = transfer_list

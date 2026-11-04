@@ -31,7 +31,7 @@ import { Button } from '@/components/ui/Button'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card'
 import { Modal } from '@/components/ui/Modal'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
-import { truncateHash, formatDate, getRoleLabel } from '@/lib/utils'
+import { truncateHash, formatDate, getRoleLabel, getPropertyLabel } from '@/lib/utils'
 import { ethers } from 'ethers'
 import {
   CONTRACT_ADDRESSES,
@@ -846,7 +846,7 @@ export const BlockchainExplorerPage: React.FC = () => {
                 'Showing your registered properties, verified document hashes, and personal transactions on the immutable ledger.'}
               {user?.role === 'BUYER' &&
                 'Displaying publicly verified property titles, purchase transactions, and transparent blockchain records.'}
-              {user?.role === 'VERIFIER' &&
+              {(user?.role === 'REGISTRAR' || user?.role === 'VERIFIER') &&
                 'Displaying verified property titles, deed authentication transactions, and cryptographic proofs.'}
               {user?.role === 'LEGAL_AUTHORITY' &&
                 'Displaying verified cadastral records, statutory conveyance transfers, and deed confirmation events.'}

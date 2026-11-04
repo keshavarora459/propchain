@@ -87,8 +87,8 @@ class DocumentService:
         # 2. Authorization: only Admin or the property owner/creator can upload
         raw_role = current_user.role
         user_role = raw_role.value if hasattr(raw_role, "value") else str(raw_role)
-        if user_role in {UserRole.VERIFIER.value, "VERIFIER"}:
-            raise ForbiddenError("Verifiers are not authorized to upload documents.")
+        if user_role in {UserRole.REGISTRAR.value, UserRole.VERIFIER.value, "REGISTRAR", "VERIFIER"}:
+            raise ForbiddenError("Registrars are not authorized to upload documents.")
 
         is_owner = (
             (prop.current_owner_id is not None and str(prop.current_owner_id) == str(current_user.id))
@@ -232,7 +232,7 @@ class DocumentService:
     ) -> None:
         raw_role = current_user.role
         user_role = raw_role.value if hasattr(raw_role, "value") else str(raw_role)
-        is_verifier_or_admin = user_role in {UserRole.VERIFIER.value, UserRole.ADMIN.value, "VERIFIER", "ADMIN"}
+        is_verifier_or_admin = user_role in {UserRole.REGISTRAR.value, UserRole.VERIFIER.value, UserRole.ADMIN.value, "REGISTRAR", "VERIFIER", "ADMIN"}
 
         # Item 3: Cross-property duplicate check
         if is_verifier_or_admin:
@@ -251,7 +251,7 @@ class DocumentService:
                 resp.duplicate_property_name = p_name
                 resp.duplicate_warning = f"Duplicate of another property ({p_name})"
 
-        # Item 2: OCR confidence only to VERIFIER and ADMIN
+        # Item 2: OCR confidence only to REGISTRAR and ADMIN
         if is_verifier_or_admin and doc.processing_records:
             rec = doc.processing_records[0]
             if rec.status == "SUCCESS" and rec.extracted_text and len(rec.extracted_text.strip()) > 10:
