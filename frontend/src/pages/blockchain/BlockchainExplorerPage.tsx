@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import apiClient from '@/lib/axios'
@@ -18,6 +18,11 @@ import {
   History,
   FileCode,
   Check,
+  Link2,
+  ChevronLeft,
+  ChevronRight,
+  Box,
+  Info,
 } from 'lucide-react'
 import { PageHeader } from '@/components/common/PageHeader'
 import { StatusBadge } from '@/components/common/StatusBadge'
@@ -25,7 +30,7 @@ import { Button } from '@/components/ui/Button'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card'
 import { Modal } from '@/components/ui/Modal'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
-import { truncateHash, formatDate } from '@/lib/utils'
+import { truncateHash, formatDate, getRoleLabel } from '@/lib/utils'
 import { ethers } from 'ethers'
 import {
   CONTRACT_ADDRESSES,
@@ -42,6 +47,9 @@ export interface RealBlock {
   gasLimit?: string
   baseFeePerGas?: string
   miner?: string
+  transactionsRoot?: string
+  stateRoot?: string
+  receiptsRoot?: string
   blockType?: string
   transactions?: string[]
 }
@@ -129,7 +137,69 @@ function getBlockTypeBadgeClass(blockType?: string): string {
   if (bt.includes('property')) return 'bg-emerald-100 text-emerald-800 border-emerald-200'
   if (bt.includes('ownership')) return 'bg-indigo-100 text-indigo-800 border-indigo-200'
   if (bt.includes('role')) return 'bg-amber-100 text-amber-800 border-amber-200'
-  return 'bg-slate-100 text-slate-700 border-slate-200'
+  return 'bg-cyan-100 text-cyan-800 border-cyan-200'
+}
+
+function getBlockVisualTheme(blockType?: string, isGenesis?: boolean) {
+  if (isGenesis || (blockType && blockType.toLowerCase().includes('genesis'))) {
+    return {
+      containerClass:
+        'bg-gradient-to-br from-purple-950/50 via-slate-900 to-slate-950 border-purple-500/30 hover:border-purple-400 hover:shadow-purple-500/10',
+      topAccentClass: 'bg-gradient-to-r from-purple-500 to-indigo-500',
+      iconClass: 'text-purple-400',
+      badgeClass: 'bg-purple-950/80 text-purple-300 border-purple-500/40',
+      label: 'Genesis Block',
+    }
+  }
+  const bt = (blockType || '').toLowerCase()
+  if (bt.includes('deployment')) {
+    return {
+      containerClass:
+        'bg-gradient-to-br from-blue-950/50 via-slate-900 to-slate-950 border-blue-500/30 hover:border-blue-400 hover:shadow-blue-500/10',
+      topAccentClass: 'bg-gradient-to-r from-blue-500 to-cyan-500',
+      iconClass: 'text-blue-400',
+      badgeClass: 'bg-blue-950/80 text-blue-300 border-blue-500/40',
+      label: 'Contract Deployment',
+    }
+  }
+  if (bt.includes('role')) {
+    return {
+      containerClass:
+        'bg-gradient-to-br from-amber-950/50 via-slate-900 to-slate-950 border-amber-500/30 hover:border-amber-400 hover:shadow-amber-500/10',
+      topAccentClass: 'bg-gradient-to-r from-amber-500 to-yellow-500',
+      iconClass: 'text-amber-400',
+      badgeClass: 'bg-amber-950/80 text-amber-300 border-amber-500/40',
+      label: 'Role Authorization',
+    }
+  }
+  if (bt.includes('property')) {
+    return {
+      containerClass:
+        'bg-gradient-to-br from-emerald-950/50 via-slate-900 to-slate-950 border-emerald-500/30 hover:border-emerald-400 hover:shadow-emerald-500/10',
+      topAccentClass: 'bg-gradient-to-r from-emerald-500 to-teal-500',
+      iconClass: 'text-emerald-400',
+      badgeClass: 'bg-emerald-950/80 text-emerald-300 border-emerald-500/40',
+      label: 'Property Registration',
+    }
+  }
+  if (bt.includes('ownership')) {
+    return {
+      containerClass:
+        'bg-gradient-to-br from-indigo-950/50 via-slate-900 to-slate-950 border-indigo-500/30 hover:border-indigo-400 hover:shadow-indigo-500/10',
+      topAccentClass: 'bg-gradient-to-r from-indigo-500 to-purple-500',
+      iconClass: 'text-indigo-400',
+      badgeClass: 'bg-indigo-950/80 text-indigo-300 border-indigo-500/40',
+      label: 'Ownership Transfer',
+    }
+  }
+  return {
+    containerClass:
+      'bg-gradient-to-br from-cyan-950/40 via-slate-900 to-slate-950 border-slate-700/60 hover:border-cyan-500/60 hover:shadow-cyan-500/10',
+    topAccentClass: 'bg-gradient-to-r from-cyan-500 to-blue-500',
+    iconClass: 'text-cyan-400',
+    badgeClass: 'bg-slate-800 text-slate-300 border-slate-700',
+    label: 'Smart Contract Interaction',
+  }
 }
 
 export const BlockchainExplorerPage: React.FC = () => {
@@ -137,9 +207,10 @@ export const BlockchainExplorerPage: React.FC = () => {
   const [searchParams] = useSearchParams()
 
   const [activeTab, setActiveTab] = useState<
-    'overview' | 'blocks' | 'transactions' | 'registrations' | 'transfers' | 'contracts'
+    'overview' | 'chain' | 'blocks' | 'transactions' | 'registrations' | 'transfers' | 'contracts'
   >('overview')
 
+  const [blockDetailView, setBlockDetailView] = useState<'basic' | 'advanced'>('basic')
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResult, setSearchResult] = useState<any | null>(null)
   const [isSearching, setIsSearching] = useState(false)
@@ -152,6 +223,7 @@ export const BlockchainExplorerPage: React.FC = () => {
   const [transactions, setTransactions] = useState<RealTx[]>([])
   const [registeredProperties, setRegisteredProperties] = useState<RegisteredPropertyTx[]>([])
   const [ownershipTransfers, setOwnershipTransfers] = useState<OwnershipTransferTx[]>([])
+  const [failedOperations, setFailedOperations] = useState<any[]>([])
   const [contractsList, setContractsList] = useState<ContractActivity[]>([
     CONTRACT_DEPLOYMENT_INFO.PROPERTY_REGISTRY,
     CONTRACT_DEPLOYMENT_INFO.OWNERSHIP_REGISTRY,
@@ -170,6 +242,18 @@ export const BlockchainExplorerPage: React.FC = () => {
     status: 'Connecting...',
     rpcUrl: RPC_URL,
   })
+
+  const visualChainRef = useRef<HTMLDivElement>(null)
+
+  const scrollChain = (direction: 'left' | 'right') => {
+    if (visualChainRef.current) {
+      const scrollAmount = 300
+      visualChainRef.current.scrollBy({
+        left: direction === 'left' ? -scrollAmount : scrollAmount,
+        behavior: 'smooth',
+      })
+    }
+  }
 
   const loadBlockchainData = useCallback(async () => {
     setIsLoading(true)
@@ -207,6 +291,9 @@ export const BlockchainExplorerPage: React.FC = () => {
         if (Array.isArray(backendOverview.contracts)) {
           setContractsList(backendOverview.contracts)
         }
+        if (Array.isArray(backendOverview.failedOperations)) {
+          setFailedOperations(backendOverview.failedOperations)
+        }
       } else {
         const provider = new ethers.JsonRpcProvider(RPC_URL)
         const currentBlockNum = await provider.getBlockNumber()
@@ -222,11 +309,8 @@ export const BlockchainExplorerPage: React.FC = () => {
               const blockDate = new Date(Number(block.timestamp) * 1000).toISOString()
               let blockType = 'Smart Contract Interaction'
               if (block.number === 0) blockType = 'Genesis Block'
-              else if (block.number === 1) blockType = 'Contract Deployment (PropertyRegistry)'
-              else if (block.number === 2) blockType = 'Contract Deployment (OwnershipRegistry)'
-              else if (block.number === 3) blockType = 'Role Authorization (Registrar Role)'
-              else if (block.number === 4) blockType = 'Contract Deployment (TransactionManager)'
-              else if (block.number === 5) blockType = 'Role Authorization (Transfer Role)'
+              else if (block.number === 1 || block.number === 2 || block.number === 4) blockType = 'Contract Deployment'
+              else if (block.number === 3 || block.number === 5) blockType = 'Role Authorization'
 
               fetchedBlocks.push({
                 blockNumber: block.number,
@@ -440,6 +524,183 @@ export const BlockchainExplorerPage: React.FC = () => {
 
   const isConnected = networkInfo.status === 'Connected'
 
+  // Render Section B: Visual Blockchain Structure
+  const renderVisualChain = (isExpandedView: boolean = false) => {
+    // Sort blocks in ascending chronological order: Block #0 -> Block #1 -> ...
+    const sortedBlocks = [...blocks].sort((a, b) => a.blockNumber - b.blockNumber)
+
+    return (
+      <div
+        className={`relative bg-slate-950 border border-slate-800 rounded-2xl p-5 shadow-lg overflow-hidden ${
+          isExpandedView ? 'min-h-[480px]' : ''
+        }`}
+      >
+        {/* Subtle Background EVM Grid Pattern */}
+        <div className="absolute inset-0 bg-[radial-gradient(#1e293b_1px,transparent_1px)] [background-size:16px_16px] opacity-40 pointer-events-none" />
+
+        {/* Header bar */}
+        <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-800/80 mb-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="flex h-2.5 w-2.5 rounded-full bg-emerald-400 animate-pulse" />
+              <h3 className="text-sm font-bold text-white tracking-wide flex items-center gap-2">
+                Visual Blockchain Structure
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-blue-900/60 text-blue-300 border border-blue-500/30">
+                  {sortedBlocks.length} Blocks Linked
+                </span>
+              </h3>
+            </div>
+            <p className="text-[11px] text-slate-400 mt-0.5">
+              Horizontally connected block sequence sealed by local Hardhat EVM consensus. Each block cryptographically verifies its parent hash.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2 self-start sm:self-center">
+            <button
+              onClick={() => scrollChain('left')}
+              className="h-7 w-7 rounded-md bg-slate-900 border border-slate-700 text-slate-300 hover:text-white hover:bg-slate-800 flex items-center justify-center transition-colors"
+              title="Scroll left"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => scrollChain('right')}
+              className="h-7 w-7 rounded-md bg-slate-900 border border-slate-700 text-slate-300 hover:text-white hover:bg-slate-800 flex items-center justify-center transition-colors"
+              title="Scroll right"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+            <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-2.5 py-1 rounded-md flex items-center gap-1 font-semibold">
+              <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" /> 100% Chain Integrity Verified
+            </span>
+          </div>
+        </div>
+
+        {/* Legend */}
+        <div className="relative z-10 flex flex-wrap items-center gap-2 pb-3 text-[10px] font-mono">
+          <span className="text-slate-400 font-sans">Block Types:</span>
+          <span className="px-2 py-0.5 rounded border bg-purple-950/70 text-purple-300 border-purple-500/40">
+            Genesis Block
+          </span>
+          <span className="px-2 py-0.5 rounded border bg-blue-950/70 text-blue-300 border-blue-500/40">
+            Contract Deployment
+          </span>
+          <span className="px-2 py-0.5 rounded border bg-amber-950/70 text-amber-300 border-amber-500/40">
+            Role Authorization
+          </span>
+          <span className="px-2 py-0.5 rounded border bg-emerald-950/70 text-emerald-300 border-emerald-500/40">
+            Property Registration
+          </span>
+          <span className="px-2 py-0.5 rounded border bg-indigo-950/70 text-indigo-300 border-indigo-500/40">
+            Ownership Transfer
+          </span>
+          <span className="px-2 py-0.5 rounded border bg-cyan-950/70 text-cyan-300 border-cyan-500/40">
+            Smart Contract Interaction
+          </span>
+        </div>
+
+        {/* Horizontally scrolling sequence */}
+        <div
+          ref={visualChainRef}
+          className="relative z-10 flex items-center gap-2 overflow-x-auto pb-4 pt-1 scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-slate-900"
+        >
+          {sortedBlocks.length === 0 ? (
+            <div className="w-full py-12 text-center text-slate-500">
+              <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2 text-blue-500" />
+              Loading blockchain structure from RPC...
+            </div>
+          ) : (
+            sortedBlocks.map((blk, idx) => {
+              const prevBlock = idx > 0 ? sortedBlocks[idx - 1] : null
+              const isGenesis = blk.blockNumber === 0
+              const theme = getBlockVisualTheme(blk.blockType, isGenesis)
+
+              return (
+                <React.Fragment key={blk.hash || blk.blockNumber}>
+                  {/* Consecutive Chain Link Connector */}
+                  {idx > 0 && prevBlock && (
+                    <div className="flex flex-col items-center justify-center px-1 shrink-0 select-none group/link">
+                      <div className="flex items-center">
+                        <div className="h-0.5 w-4 bg-gradient-to-r from-blue-500/60 to-indigo-500/80 relative">
+                          <span className="absolute -top-1 left-1/2 -translate-x-1/2 h-2.5 w-2.5 rounded-full bg-blue-400 animate-ping opacity-25" />
+                        </div>
+                        <div
+                          className="flex items-center justify-center h-7 w-7 rounded-full bg-slate-900 border border-blue-500/40 text-blue-400 shadow-md transition-transform group-hover/link:scale-110"
+                          title={`Parent Link: Block #${blk.blockNumber} references parent ${truncateHash(blk.parentHash, 6, 4)}`}
+                        >
+                          <Link2 className="h-3.5 w-3.5" />
+                        </div>
+                        <div className="h-0.5 w-4 bg-gradient-to-r from-indigo-500/80 to-blue-500/60" />
+                        <ArrowRight className="h-3.5 w-3.5 text-blue-400 -ml-1" />
+                      </div>
+                      <span className="text-[9px] font-mono text-slate-500 mt-1">
+                        #{prevBlock.blockNumber} → #{blk.blockNumber}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* 3D-styled Block Card */}
+                  <div
+                    onClick={() => {
+                      setSelectedBlock(blk)
+                      setBlockDetailView('basic')
+                    }}
+                    className={`min-w-[260px] w-[260px] max-w-[260px] rounded-xl p-4 border transition-all duration-300 cursor-pointer shrink-0 select-none relative group hover:-translate-y-1.5 shadow-md hover:shadow-xl ${theme.containerClass}`}
+                    title="Click to inspect block details"
+                  >
+                    {/* Glowing accent top line */}
+                    <div className={`absolute top-0 left-0 right-0 h-1 ${theme.topAccentClass}`} />
+
+                    {/* Header: Block Number & Type */}
+                    <div className="flex items-center justify-between gap-1.5 mb-2.5">
+                      <div className="flex items-center gap-1.5">
+                        <Box className={`h-4 w-4 ${theme.iconClass}`} />
+                        <span className="font-mono font-bold text-sm text-white">Block #{blk.blockNumber}</span>
+                      </div>
+                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded border ${theme.badgeClass}`}>
+                        {theme.label}
+                      </span>
+                    </div>
+
+                    {/* Body: Hashes and Tx Count */}
+                    <div className="space-y-1.5 text-[11px] font-mono">
+                      <div className="flex items-center justify-between py-1 border-b border-slate-800/80">
+                        <span className="text-slate-400">Block Hash:</span>
+                        <span className="font-semibold text-slate-200" title={blk.hash}>
+                          {truncateHash(blk.hash, 6, 4)}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between py-1 border-b border-slate-800/80">
+                        <span className="text-slate-400">Parent Hash:</span>
+                        <span className="text-slate-400" title={blk.parentHash}>
+                          {isGenesis ? 'Genesis (0x00...00)' : truncateHash(blk.parentHash, 6, 4)}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between py-1">
+                        <span className="text-slate-400">Txs Included:</span>
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-200">
+                          {blk.transactionsCount} {blk.transactionsCount === 1 ? 'tx' : 'txs'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Footer Cue */}
+                    <div className="mt-3 pt-2 border-t border-slate-800/60 flex items-center justify-between text-[10px]">
+                      <span className="text-slate-500 font-mono">{formatDate(blk.timestamp)}</span>
+                      <span className="text-blue-400 group-hover:underline flex items-center gap-0.5 font-sans font-medium">
+                        Inspect →
+                      </span>
+                    </div>
+                  </div>
+                </React.Fragment>
+              )
+            })
+          )}
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -457,6 +718,63 @@ export const BlockchainExplorerPage: React.FC = () => {
           </Button>
         }
       />
+
+      {/* Role-Based Visibility Banner */}
+      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="h-9 w-9 rounded-lg bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-600 font-bold text-sm">
+            {getRoleLabel(user?.role).charAt(0) || 'U'}
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-slate-900">
+                Active Role: {getRoleLabel(user?.role) || 'Platform User'}
+              </span>
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
+                Role-Scoped Ledger View
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-500 mt-0.5">
+              {user?.role === 'PROPERTY_OWNER' &&
+                'Showing your registered properties, verified document hashes, and personal transactions on the immutable ledger.'}
+              {user?.role === 'BUYER' &&
+                'Displaying publicly verified property titles, purchase transactions, and transparent blockchain records.'}
+              {user?.role === 'VERIFIER' &&
+                'Displaying verified property titles, deed authentication transactions, and cryptographic proofs.'}
+              {user?.role === 'LEGAL_AUTHORITY' &&
+                'Displaying verified cadastral records, statutory conveyance transfers, and deed confirmation events.'}
+              {user?.role === 'ADMIN' &&
+                'Full administrative ledger access: raw EVM state roots, gas metrics, and failed/pending operations.'}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 self-start sm:self-center font-mono text-[11px] text-slate-500">
+          <span className="h-2 w-2 rounded-full bg-emerald-500" />
+          <span>EVM Chain: 31337</span>
+        </div>
+      </div>
+
+      {/* Admin Notice for Failed or Pending Operations if any */}
+      {user?.role === 'ADMIN' && failedOperations.length > 0 && (
+        <div className="rounded-lg border border-amber-500/40 bg-amber-50 p-4 text-xs text-amber-900 flex items-start gap-3">
+          <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <p className="font-semibold text-amber-900">
+              Admin Alert: {failedOperations.length} Pending / Failed Blockchain Operations
+            </p>
+            <p className="text-amber-800 text-[11px]">
+              The following backend blockchain queuing operations require attention:
+            </p>
+            <ul className="list-disc pl-4 text-[11px] space-y-0.5 font-mono text-amber-950">
+              {failedOperations.map((op, idx) => (
+                <li key={idx}>
+                  {op.operationType} ({op.status}) - Retries: {op.retryCount} - {op.errorMessage || 'Queued'}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
 
       {/* Connection Warning Banner if Offline */}
       {!isConnected && !isLoading && (
@@ -599,7 +917,9 @@ export const BlockchainExplorerPage: React.FC = () => {
                 </div>
                 <div className="flex justify-between py-1 border-b border-blue-100">
                   <span className="text-slate-500">Registered Owner:</span>
-                  <span className="font-sans text-slate-800">{searchResult.data.owner_name} ({truncateHash(searchResult.data.owner_wallet, 6, 4)})</span>
+                  <span className="font-sans text-slate-800">
+                    {searchResult.data.owner_name} ({truncateHash(searchResult.data.owner_wallet, 6, 4)})
+                  </span>
                 </div>
                 <div className="flex justify-between py-1 border-b border-blue-100">
                   <span className="text-slate-500">Anchor Tx Hash:</span>
@@ -735,7 +1055,7 @@ export const BlockchainExplorerPage: React.FC = () => {
         </Card>
       </div>
 
-      {/* Tabs Navigation */}
+      {/* Tabs Navigation (Sections A, B, C, D, E, F, G) */}
       <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-3">
         <button
           onClick={() => setActiveTab('overview')}
@@ -746,6 +1066,17 @@ export const BlockchainExplorerPage: React.FC = () => {
           }`}
         >
           Ledger Overview
+        </button>
+        <button
+          onClick={() => setActiveTab('chain')}
+          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 ${
+            activeTab === 'chain'
+              ? 'bg-blue-600 text-white'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+          }`}
+        >
+          <Link2 className="h-3.5 w-3.5" />
+          Visual Chain View ({blocks.length})
         </button>
         <button
           onClick={() => setActiveTab('blocks')}
@@ -804,10 +1135,14 @@ export const BlockchainExplorerPage: React.FC = () => {
         </button>
       </div>
 
-      {/* TAB 1: OVERVIEW */}
+      {/* TAB 1: OVERVIEW (Contains Section B Visual Chain + Quick Tables) */}
       {activeTab === 'overview' && (
         <div className="space-y-6">
+          {/* SECTION B: VISUAL BLOCKCHAIN STRUCTURE */}
+          {renderVisualChain(false)}
+
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            {/* Quick Blocks List */}
             <Card className="border-slate-200">
               <CardHeader className="flex flex-row items-center justify-between pb-3">
                 <div className="flex items-center gap-2">
@@ -834,8 +1169,11 @@ export const BlockchainExplorerPage: React.FC = () => {
                 ) : (
                   blocks.slice(0, 6).map((blk) => (
                     <div
-                      key={blk.hash}
-                      onClick={() => setSelectedBlock(blk)}
+                      key={blk.hash || blk.blockNumber}
+                      onClick={() => {
+                        setSelectedBlock(blk)
+                        setBlockDetailView('basic')
+                      }}
                       className="p-3.5 flex items-center justify-between hover:bg-blue-50/50 cursor-pointer transition-colors"
                       title="Click to view full block details"
                     >
@@ -866,6 +1204,7 @@ export const BlockchainExplorerPage: React.FC = () => {
               </CardContent>
             </Card>
 
+            {/* Quick Transactions List */}
             <Card className="border-slate-200">
               <CardHeader className="flex flex-row items-center justify-between pb-3">
                 <div className="flex items-center gap-2">
@@ -934,7 +1273,51 @@ export const BlockchainExplorerPage: React.FC = () => {
         </div>
       )}
 
-      {/* TAB 2: BLOCKS SECTION */}
+      {/* TAB 2: DEDICATED VISUAL CHAIN VIEW (Section B) */}
+      {activeTab === 'chain' && (
+        <div className="space-y-6">
+          {renderVisualChain(true)}
+
+          {/* Educational Blockchain Structure Card */}
+          <Card className="border-slate-200">
+            <CardHeader className="pb-2">
+              <div className="flex items-center gap-2">
+                <Info className="h-4 w-4 text-blue-600" />
+                <CardTitle className="text-sm font-semibold">
+                  How PropChain Connects Blocks & Ensures Immutability
+                </CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent className="text-xs text-slate-600 space-y-3">
+              <p>
+                In the PropChain decentralized ledger, blocks form a continuous chronological chain where each block header includes the cryptographic SHA-256/Keccak-256 hash of the previous block (Parent Hash). This creates a tamper-proof link: any modification to a historical block would alter its hash and invalidate every subsequent block in the chain.
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2">
+                <div className="p-3 rounded-lg bg-slate-50 border border-slate-200">
+                  <span className="font-semibold text-slate-900 block mb-1">1. Block Genesis (#0)</span>
+                  <p className="text-[11px] text-slate-500">
+                    The root anchor of the blockchain with null parent hash (<code className="font-mono text-[10px]">0x00...</code>), establishing consensus rules.
+                  </p>
+                </div>
+                <div className="p-3 rounded-lg bg-slate-50 border border-slate-200">
+                  <span className="font-semibold text-slate-900 block mb-1">2. Smart Contract Foundations (#1-#5)</span>
+                  <p className="text-[11px] text-slate-500">
+                    Deploys <code className="font-mono text-[10px]">PropertyRegistry</code>, <code className="font-mono text-[10px]">OwnershipRegistry</code>, and <code className="font-mono text-[10px]">TransactionManager</code> with strict multi-role governance.
+                  </p>
+                </div>
+                <div className="p-3 rounded-lg bg-slate-50 border border-slate-200">
+                  <span className="font-semibold text-slate-900 block mb-1">3. Deed Anchoring (#6+)</span>
+                  <p className="text-[11px] text-slate-500">
+                    Every verifier-approved property anchors cryptographic SHA-256 document proofs into immutable state, accessible to authorized stakeholders.
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* TAB 3: BLOCKS SECTION (Section C) */}
       {activeTab === 'blocks' && (
         <Card className="border-slate-200">
           <CardHeader className="flex flex-row items-center justify-between pb-3">
@@ -968,7 +1351,7 @@ export const BlockchainExplorerPage: React.FC = () => {
                     </TableRow>
                   ) : (
                     blocks.map((blk) => (
-                      <TableRow key={blk.hash} className="hover:bg-blue-50/40">
+                      <TableRow key={blk.hash || blk.blockNumber} className="hover:bg-blue-50/40">
                         <TableCell className="font-mono font-bold text-blue-600">#{blk.blockNumber}</TableCell>
                         <TableCell>
                           <span
@@ -998,7 +1381,10 @@ export const BlockchainExplorerPage: React.FC = () => {
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => setSelectedBlock(blk)}
+                            onClick={() => {
+                              setSelectedBlock(blk)
+                              setBlockDetailView('basic')
+                            }}
                             className="h-7 text-xs px-2.5"
                           >
                             View Details
@@ -1014,7 +1400,7 @@ export const BlockchainExplorerPage: React.FC = () => {
         </Card>
       )}
 
-      {/* TAB 3: TRANSACTIONS EXPLORER */}
+      {/* TAB 4: TRANSACTIONS EXPLORER (Section D) */}
       {activeTab === 'transactions' && (
         <Card className="border-slate-200">
           <CardHeader className="flex flex-row items-center justify-between pb-3">
@@ -1094,7 +1480,7 @@ export const BlockchainExplorerPage: React.FC = () => {
         </Card>
       )}
 
-      {/* TAB 4: PROPERTY REGISTRATIONS */}
+      {/* TAB 5: PROPERTY REGISTRATIONS (Section E) */}
       {activeTab === 'registrations' && (
         <Card className="border-slate-200">
           <CardHeader className="flex flex-row items-center justify-between pb-3">
@@ -1115,12 +1501,12 @@ export const BlockchainExplorerPage: React.FC = () => {
                   <TableRow>
                     <TableHead>Property ID</TableHead>
                     <TableHead>Title</TableHead>
-                    <TableHead>Owner</TableHead>
+                    <TableHead>Recorded Owner</TableHead>
                     <TableHead>Tx Hash</TableHead>
                     <TableHead>Block #</TableHead>
                     <TableHead>Smart Contract</TableHead>
-                    <TableHead>Document Hashes (SHA-256)</TableHead>
-                    <TableHead>Registered At</TableHead>
+                    <TableHead>Verified Document Hashes (SHA-256)</TableHead>
+                    <TableHead>Registration Timestamp</TableHead>
                     <TableHead>On-Chain Status</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -1187,7 +1573,7 @@ export const BlockchainExplorerPage: React.FC = () => {
         </Card>
       )}
 
-      {/* TAB 5: OWNERSHIP TRANSFERS */}
+      {/* TAB 6: OWNERSHIP TRANSFERS (Section F) */}
       {activeTab === 'transfers' && (
         <Card className="border-slate-200">
           <CardHeader className="flex flex-row items-center justify-between pb-3">
@@ -1207,12 +1593,12 @@ export const BlockchainExplorerPage: React.FC = () => {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Property ID</TableHead>
-                    <TableHead>From Owner</TableHead>
-                    <TableHead>To Owner</TableHead>
+                    <TableHead>Previous Owner</TableHead>
+                    <TableHead>New Owner</TableHead>
                     <TableHead>Tx Hash</TableHead>
                     <TableHead>Block #</TableHead>
                     <TableHead>Smart Contract</TableHead>
-                    <TableHead>Settlement Timestamp</TableHead>
+                    <TableHead>Timestamp</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1256,7 +1642,7 @@ export const BlockchainExplorerPage: React.FC = () => {
         </Card>
       )}
 
-      {/* TAB 6: SMART CONTRACTS */}
+      {/* TAB 7: SMART CONTRACTS (Section G) */}
       {activeTab === 'contracts' && (
         <div className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -1274,11 +1660,11 @@ export const BlockchainExplorerPage: React.FC = () => {
                 </CardHeader>
                 <CardContent className="p-4 space-y-2 text-xs font-mono">
                   <div>
-                    <span className="text-[10px] text-slate-400 block">Contract Address</span>
+                    <span className="text-[10px] text-slate-400 block font-sans">Contract Address</span>
                     <HashDisplay value={c.address} explorerLink className="bg-transparent border-0 px-0 break-all" />
                   </div>
                   <div>
-                    <span className="text-[10px] text-slate-400 block">Deployment Tx Hash</span>
+                    <span className="text-[10px] text-slate-400 block font-sans">Deployment Tx Hash</span>
                     <HashDisplay value={c.deploymentTxHash} explorerLink className="bg-transparent border-0 px-0 truncate" />
                   </div>
                   <div className="flex justify-between pt-1 border-t border-slate-100">
@@ -1293,7 +1679,7 @@ export const BlockchainExplorerPage: React.FC = () => {
                   </div>
                   {c.deployedAt && (
                     <div className="flex justify-between">
-                      <span className="text-slate-400 font-sans">Deployed At:</span>
+                      <span className="text-slate-400 font-sans">Deployment Timestamp:</span>
                       <span className="text-slate-600 font-sans">{formatDate(c.deployedAt)}</span>
                     </div>
                   )}
@@ -1304,62 +1690,147 @@ export const BlockchainExplorerPage: React.FC = () => {
         </div>
       )}
 
-      {/* MODAL: Full Block Details */}
+      {/* MODAL: Full Block Details (Basic View vs. Advanced View) */}
       {selectedBlock && (
         <Modal
           isOpen={Boolean(selectedBlock)}
-          onClose={() => setSelectedBlock(null)}
+          onClose={() => {
+            setSelectedBlock(null)
+            setBlockDetailView('basic')
+          }}
           title={`Block Details #${selectedBlock.blockNumber}`}
-          description="EVM Consensus block verified on local Hardhat network."
+          description={
+            user?.role === 'ADMIN'
+              ? 'EVM Consensus Block with cryptographic state roots and gas telemetry.'
+              : 'EVM Consensus Block verified on PropChain ledger.'
+          }
           maxWidth="lg"
         >
-          <div className="space-y-3 font-mono text-xs">
-            <div className="flex justify-between py-1.5 border-b border-slate-100">
-              <span className="text-slate-500 font-sans">Block Height:</span>
-              <span className="font-bold text-slate-900 text-sm">#{selectedBlock.blockNumber}</span>
-            </div>
-            <div className="flex justify-between py-1.5 border-b border-slate-100">
-              <span className="text-slate-500 font-sans">Block Type:</span>
-              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded border ${getBlockTypeBadgeClass(selectedBlock.blockType)}`}>
-                {selectedBlock.blockType || 'Consensus Block'}
-              </span>
-            </div>
-            <div className="space-y-1 py-1.5 border-b border-slate-100">
-              <span className="text-slate-500 font-sans block">Block Hash:</span>
-              <span className="text-slate-800 break-all font-semibold select-all">{selectedBlock.hash}</span>
-            </div>
-            <div className="space-y-1 py-1.5 border-b border-slate-100">
-              <span className="text-slate-500 font-sans block">Parent Block Hash:</span>
-              <span className="text-slate-600 break-all select-all">{selectedBlock.parentHash}</span>
-            </div>
-            <div className="flex justify-between py-1.5 border-b border-slate-100">
-              <span className="text-slate-500 font-sans">Transactions Count:</span>
-              <span className="font-bold text-blue-700">{selectedBlock.transactionsCount} txs included</span>
-            </div>
-            <div className="flex justify-between py-1.5 border-b border-slate-100">
-              <span className="text-slate-500 font-sans">Gas Used / Limit:</span>
-              <span className="text-slate-800">{selectedBlock.gasUsed} {selectedBlock.gasLimit ? `/ ${selectedBlock.gasLimit}` : ''}</span>
-            </div>
-            {selectedBlock.baseFeePerGas && (
-              <div className="flex justify-between py-1.5 border-b border-slate-100">
-                <span className="text-slate-500 font-sans">Base Fee Per Gas:</span>
-                <span className="text-slate-800">{selectedBlock.baseFeePerGas}</span>
+          <div className="space-y-4 text-xs">
+            {/* View selector for ADMIN */}
+            {user?.role === 'ADMIN' && (
+              <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
+                <button
+                  onClick={() => setBlockDetailView('basic')}
+                  className={`px-3 py-1 rounded-md font-medium text-xs transition-colors ${
+                    blockDetailView === 'basic'
+                      ? 'bg-slate-900 text-white'
+                      : 'text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  Basic View
+                </button>
+                <button
+                  onClick={() => setBlockDetailView('advanced')}
+                  className={`px-3 py-1 rounded-md font-medium text-xs transition-colors flex items-center gap-1 ${
+                    blockDetailView === 'advanced'
+                      ? 'bg-blue-600 text-white'
+                      : 'text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  <Cpu className="h-3.5 w-3.5" />
+                  Advanced Technical View (Admin)
+                </button>
               </div>
             )}
-            <div className="flex justify-between py-1.5 border-b border-slate-100">
-              <span className="text-slate-500 font-sans">Miner / Validator:</span>
-              <span className="text-slate-700">{selectedBlock.miner || '0x0000000000000000000000000000000000000000'}</span>
+
+            {/* Basic Information (Visible to Seller, Buyer, Verifier, Legal Authority & Admin) */}
+            <div className="space-y-2.5 font-mono">
+              <div className="flex justify-between py-1.5 border-b border-slate-100">
+                <span className="text-slate-500 font-sans">Block Number:</span>
+                <span className="font-bold text-slate-900 text-sm">#{selectedBlock.blockNumber}</span>
+              </div>
+              <div className="flex justify-between py-1.5 border-b border-slate-100">
+                <span className="text-slate-500 font-sans">Block Type:</span>
+                <span
+                  className={`text-[10px] font-semibold px-2 py-0.5 rounded border ${getBlockTypeBadgeClass(
+                    selectedBlock.blockType
+                  )}`}
+                >
+                  {selectedBlock.blockType || 'Consensus Block'}
+                </span>
+              </div>
+              <div className="space-y-1 py-1.5 border-b border-slate-100">
+                <span className="text-slate-500 font-sans block">Block Hash:</span>
+                <span className="text-slate-800 break-all font-semibold select-all text-[11px]">{selectedBlock.hash}</span>
+              </div>
+              <div className="space-y-1 py-1.5 border-b border-slate-100">
+                <span className="text-slate-500 font-sans block">Previous Block Hash (Parent):</span>
+                <span className="text-slate-600 break-all select-all text-[11px]">{selectedBlock.parentHash}</span>
+              </div>
+              <div className="flex justify-between py-1.5 border-b border-slate-100">
+                <span className="text-slate-500 font-sans">Transaction Count:</span>
+                <span className="font-bold text-blue-700">{selectedBlock.transactionsCount} txs included</span>
+              </div>
+              <div className="flex justify-between py-1.5 border-b border-slate-100">
+                <span className="text-slate-500 font-sans">Timestamp:</span>
+                <span className="text-slate-800 font-sans">{formatDate(selectedBlock.timestamp)}</span>
+              </div>
+              <div className="flex justify-between py-1.5 border-b border-slate-100">
+                <span className="text-slate-500 font-sans">Gas Used:</span>
+                <span className="text-slate-800">{selectedBlock.gasUsed}</span>
+              </div>
             </div>
-            <div className="flex justify-between py-1.5">
-              <span className="text-slate-500 font-sans">Mined Timestamp:</span>
-              <span className="text-slate-800 font-sans">{formatDate(selectedBlock.timestamp)}</span>
-            </div>
+
+            {/* Advanced Technical View (Strictly for ADMIN) */}
+            {user?.role === 'ADMIN' && blockDetailView === 'advanced' && (
+              <div className="mt-4 pt-3 border-t border-blue-100 bg-slate-50 p-3.5 rounded-lg space-y-2.5 font-mono text-xs">
+                <div className="flex items-center gap-1.5 text-blue-700 font-bold font-sans text-xs mb-2">
+                  <Cpu className="h-4 w-4" />
+                  <span>Ethereum EVM Technical State Roots & Gas Telemetry</span>
+                </div>
+                <div className="space-y-1 py-1 border-b border-slate-200">
+                  <span className="text-slate-500 font-sans block">Transactions Root (transactionsRoot):</span>
+                  <span className="text-slate-900 break-all select-all text-[11px] font-medium">
+                    {selectedBlock.transactionsRoot || 'N/A'}
+                  </span>
+                </div>
+                <div className="space-y-1 py-1 border-b border-slate-200">
+                  <span className="text-slate-500 font-sans block">State Root (stateRoot):</span>
+                  <span className="text-slate-900 break-all select-all text-[11px] font-medium">
+                    {selectedBlock.stateRoot || 'N/A'}
+                  </span>
+                </div>
+                <div className="space-y-1 py-1 border-b border-slate-200">
+                  <span className="text-slate-500 font-sans block">Receipts Root (receiptsRoot):</span>
+                  <span className="text-slate-900 break-all select-all text-[11px] font-medium">
+                    {selectedBlock.receiptsRoot || 'N/A'}
+                  </span>
+                </div>
+                <div className="flex justify-between py-1 border-b border-slate-200">
+                  <span className="text-slate-500 font-sans">Gas Limit:</span>
+                  <span className="text-slate-800 font-semibold">{selectedBlock.gasLimit || 'N/A'}</span>
+                </div>
+                <div className="flex justify-between py-1 border-b border-slate-200">
+                  <span className="text-slate-500 font-sans">Base Fee Per Gas:</span>
+                  <span className="text-slate-800">{selectedBlock.baseFeePerGas || 'N/A'}</span>
+                </div>
+                <div className="space-y-1 py-1 border-b border-slate-200">
+                  <span className="text-slate-500 font-sans block">Miner / Block Producer:</span>
+                  <span className="text-slate-800 break-all select-all text-[11px]">{selectedBlock.miner || 'N/A'}</span>
+                </div>
+              </div>
+            )}
+
+            {/* Included Transactions List */}
             {selectedBlock.transactions && selectedBlock.transactions.length > 0 && (
               <div className="pt-2 border-t border-slate-200">
-                <span className="text-slate-500 font-sans block mb-1 font-semibold">Included Transactions:</span>
-                <div className="space-y-1 max-h-32 overflow-y-auto">
+                <span className="text-slate-600 font-sans block mb-1 font-semibold">
+                  Included Transactions ({selectedBlock.transactions.length}):
+                </span>
+                <div className="space-y-1 max-h-32 overflow-y-auto font-mono">
                   {selectedBlock.transactions.map((txh, i) => (
-                    <div key={i} className="text-[11px] text-blue-600 hover:underline select-all">
+                    <div
+                      key={i}
+                      onClick={() => {
+                        const found = transactions.find((t) => t.hash.toLowerCase() === txh.toLowerCase())
+                        if (found) {
+                          setSelectedTx(found)
+                        }
+                      }}
+                      className="text-[11px] text-blue-600 hover:underline select-all cursor-pointer truncate"
+                      title="Click to inspect this transaction"
+                    >
                       {txh}
                     </div>
                   ))}
@@ -1381,7 +1852,7 @@ export const BlockchainExplorerPage: React.FC = () => {
         >
           <div className="space-y-3 font-mono text-xs">
             <div className="flex justify-between py-1.5 border-b border-slate-100 items-center">
-              <span className="text-slate-500 font-sans">Status:</span>
+              <span className="text-slate-500 font-sans">Confirmation Status:</span>
               <span className="flex items-center gap-1">
                 {selectedTx.status === 'Confirmed' ? (
                   <span className="text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded font-sans font-semibold flex items-center gap-1 text-[11px]">
@@ -1403,15 +1874,15 @@ export const BlockchainExplorerPage: React.FC = () => {
               <span className="text-blue-700 font-bold">#{selectedTx.blockNumber}</span>
             </div>
             <div className="flex justify-between py-1.5 border-b border-slate-100">
-              <span className="text-slate-500 font-sans">From (Sender):</span>
+              <span className="text-slate-500 font-sans">From Address:</span>
               <span className="text-slate-800 break-all">{getAddressLabel(selectedTx.from)}</span>
             </div>
             <div className="flex justify-between py-1.5 border-b border-slate-100">
-              <span className="text-slate-500 font-sans">To (Recipient):</span>
+              <span className="text-slate-500 font-sans">To Address:</span>
               <span className="text-slate-800 break-all">{getAddressLabel(selectedTx.to)}</span>
             </div>
             <div className="flex justify-between py-1.5 border-b border-slate-100">
-              <span className="text-slate-500 font-sans">Event / Method:</span>
+              <span className="text-slate-500 font-sans">Transaction Type / Event:</span>
               <span className="text-emerald-700 font-semibold">{selectedTx.event}</span>
             </div>
             {selectedTx.propertyId && (
@@ -1424,7 +1895,7 @@ export const BlockchainExplorerPage: React.FC = () => {
             )}
             {selectedTx.documentHash && (
               <div className="space-y-1 py-1.5 border-b border-slate-100">
-                <span className="text-slate-500 font-sans block">Document SHA-256 Hash:</span>
+                <span className="text-slate-500 font-sans block">Verified Document Hash (SHA-256):</span>
                 <span className="text-emerald-800 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded break-all text-[11px] block select-all">
                   {selectedTx.documentHash}
                 </span>

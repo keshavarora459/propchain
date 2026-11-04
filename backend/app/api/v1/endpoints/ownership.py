@@ -349,6 +349,8 @@ def get_blockchain_overview(
         registered_properties_list.append({
             "property_id": p.property_number,
             "property_uuid": str(p.id),
+            "creator_uuid": str(p.creator_user_id) if p.creator_user_id else "",
+            "owner_uuid": str(p.current_owner_id) if p.current_owner_id else "",
             "title": p.title,
             "owner_name": owner_name,
             "owner_wallet": owner_addr,
@@ -391,11 +393,34 @@ def get_blockchain_overview(
             "from_address": ev.previous_owner_address or "",
             "to_owner": to_name,
             "to_address": ev.new_owner_address or "",
+            "previous_owner_id": str(ev.previous_owner_id) if ev.previous_owner_id else "",
+            "new_owner_id": str(ev.new_owner_id) if ev.new_owner_id else "",
             "tx_hash": ev.blockchain_tx_hash or "",
             "block_number": ev.block_number or 0,
             "timestamp": ev.confirmed_at.isoformat() if ev.confirmed_at else ev.created_at.isoformat(),
             "contract_address": own_reg_addr,
         })
+
+    # Helper formatters
+    def ensure_0x(val) -> str:
+        if val is None:
+            return ""
+        if hasattr(val, "hex"):
+            val = val.hex()
+        s = str(val).strip()
+        if not s or s == "None":
+            return ""
+        return f"0x{s}" if not s.startswith("0x") else s
+
+    def format_root_field(val) -> str:
+        if val is None:
+            return "N/A"
+        if hasattr(val, "hex"):
+            val = val.hex()
+        s = str(val).strip()
+        if not s or s == "None":
+            return "N/A"
+        return f"0x{s}" if not s.startswith("0x") else s
 
     # 4. Check Web3 node connection and fetch real blocks and txs
     bc_service = BlockchainService(db)
@@ -417,32 +442,55 @@ def get_blockchain_overview(
         for b_num in range(latest_block_num, -1, -1):
             try:
                 blk = w3.eth.get_block(b_num, full_transactions=True)
-                b_hash = blk["hash"].hex()
-                p_hash = blk["parentHash"].hex()
+                b_hash = ensure_0x(blk.get("hash"))
+                p_hash = ensure_0x(blk.get("parentHash"))
                 b_time = datetime.fromtimestamp(blk["timestamp"], tz=timezone.utc).isoformat()
                 tx_objs = blk.get("transactions", [])
                 tx_count = len(tx_objs)
                 total_tx_count += tx_count
 
-                # Classify block type
+                # Classify block type strictly according to PropChain specifications
                 if b_num == 0:
                     b_type = "Genesis Block"
-                elif b_num == 1:
-                    b_type = "Contract Deployment (PropertyRegistry)"
-                elif b_num == 2:
-                    b_type = "Contract Deployment (OwnershipRegistry)"
-                elif b_num == 3:
-                    b_type = "Role Authorization (Registrar Role)"
-                elif b_num == 4:
-                    b_type = "Contract Deployment (TransactionManager)"
-                elif b_num == 5:
-                    b_type = "Role Authorization (Transfer Role)"
+                elif b_num in {1, 2, 4}:
+                    b_type = "Contract Deployment"
+                elif b_num in {3, 5}:
+                    b_type = "Role Authorization"
                 else:
-                    b_type = "Smart Contract Interaction"
+                    has_prop_reg = False
+                    has_transfer = False
+                    has_deployment = False
+                    for tx in tx_objs:
+                        tx_to_addr = (tx.get("to") or "").lower()
+                        if not tx_to_addr:
+                            has_deployment = True
+                        elif tx_to_addr == prop_reg_addr.lower():
+                            has_prop_reg = True
+                        elif tx_to_addr == own_reg_addr.lower():
+                            has_transfer = True
+
+                    if has_prop_reg:
+                        b_type = "Property Registration"
+                    elif has_transfer:
+                        b_type = "Ownership Transfer"
+                    elif has_deployment:
+                        b_type = "Contract Deployment"
+                    else:
+                        b_type = "Smart Contract Interaction"
+
+                # Technical block roots and gas metrics from actual Ethereum RPC
+                tx_root = format_root_field(blk.get("transactionsRoot"))
+                st_root = format_root_field(blk.get("stateRoot"))
+                rc_root = format_root_field(blk.get("receiptsRoot"))
+                gas_used_fmt = f"{blk.get('gasUsed', 0):,} gas"
+                gas_limit_fmt = f"{blk.get('gasLimit', 0):,} gas" if blk.get("gasLimit") is not None else "N/A"
+                base_fee_val = blk.get("baseFeePerGas")
+                base_fee_fmt = f"{base_fee_val} wei" if base_fee_val is not None else "N/A"
+                miner_val = str(blk.get("miner") or "0x0000000000000000000000000000000000000000")
 
                 block_tx_hashes = []
                 for tx in tx_objs:
-                    tx_h = tx["hash"].hex()
+                    tx_h = ensure_0x(tx.get("hash"))
                     block_tx_hashes.append(tx_h)
                     tx_from = tx.get("from", "")
                     tx_to = tx.get("to") or ""
@@ -476,7 +524,6 @@ def get_blockchain_overview(
                     elif tx_to.lower() == prop_reg_addr.lower():
                         if prop_id:
                             event_name = "Property Registered"
-                            b_type = "Property Registration Block"
                             details = f"Property {prop_id} anchored on-chain"
                             # Find document hash
                             for rp in registered_properties_list:
@@ -488,7 +535,6 @@ def get_blockchain_overview(
                     elif tx_to.lower() == own_reg_addr.lower():
                         if prop_id:
                             event_name = "Ownership Transfer"
-                            b_type = "Ownership Transfer Block"
                             details = f"Conveyance recorded for {prop_id}"
                         else:
                             event_name = "OwnershipRegistry Call"
@@ -517,10 +563,13 @@ def get_blockchain_overview(
                     "parentHash": p_hash,
                     "timestamp": b_time,
                     "transactionsCount": tx_count,
-                    "gasUsed": f"{blk.get('gasUsed', 0):,} gas",
-                    "gasLimit": f"{blk.get('gasLimit', 0):,} gas",
-                    "baseFeePerGas": f"{blk.get('baseFeePerGas', 0)} wei",
-                    "miner": blk.get("miner", "0x0000000000000000000000000000000000000000"),
+                    "gasUsed": gas_used_fmt,
+                    "gasLimit": gas_limit_fmt,
+                    "baseFeePerGas": base_fee_fmt,
+                    "miner": miner_val,
+                    "transactionsRoot": tx_root,
+                    "stateRoot": st_root,
+                    "receiptsRoot": rc_root,
                     "blockType": b_type,
                     "transactions": block_tx_hashes,
                 })
@@ -561,7 +610,102 @@ def get_blockchain_overview(
         },
     ]
 
+    # 6. Role-Based Scoping
+    user_role = (current_user.role or "").upper()
+    user_id_str = str(current_user.id)
+    user_wallets = list(
+        db.scalars(
+            select(UserWallet).where(UserWallet.user_id == current_user.id)
+        ).all()
+    )
+    user_wallet_addrs = {w.wallet_address.lower() for w in user_wallets if w.wallet_address}
+    if current_user.wallet_address:
+        user_wallet_addrs.add(current_user.wallet_address.lower())
+
+    scoped_properties = registered_properties_list
+    scoped_transfers = transfer_list
+    scoped_txs = txs_list
+    failed_ops_list = []
+
+    if user_role == "ADMIN":
+        # Admin has complete visibility into all records and failed/pending operations
+        failed_ops_db = list(
+            db.scalars(
+                select(BlockchainOperation)
+                .where(BlockchainOperation.status.in_(["FAILED", "PENDING"]))
+                .order_by(BlockchainOperation.created_at.desc())
+                .limit(20)
+            ).all()
+        )
+        failed_ops_list = [
+            {
+                "id": str(op.id),
+                "operationType": op.operation_type,
+                "status": op.status,
+                "txHash": op.tx_hash or "",
+                "retryCount": op.retry_count,
+                "errorMessage": op.error_message or "",
+                "createdAt": op.created_at.isoformat() if op.created_at else None,
+            }
+            for op in failed_ops_db
+        ]
+    elif user_role == "PROPERTY_OWNER":
+        # Seller: own registered properties, own transfers, own transactions + foundational deployments
+        seller_prop_ids = {
+            p["property_id"]
+            for p in registered_properties_list
+            if p["creator_uuid"] == user_id_str or p["owner_uuid"] == user_id_str
+        }
+        scoped_properties = [
+            p for p in registered_properties_list
+            if p["property_id"] in seller_prop_ids
+        ]
+        scoped_transfers = [
+            t for t in transfer_list
+            if t["previous_owner_id"] == user_id_str or t["new_owner_id"] == user_id_str
+        ]
+        scoped_txs = [
+            tx for tx in txs_list
+            if tx["blockNumber"] <= 5
+            or (tx.get("propertyId") and tx["propertyId"] in seller_prop_ids)
+            or (tx["from"].lower() in user_wallet_addrs or tx["to"].lower() in user_wallet_addrs)
+        ]
+    elif user_role == "BUYER":
+        # Buyer: public verified properties, authorized purchase transfers, and relevant txs
+        scoped_properties = [
+            {
+                k: v for k, v in p.items()
+                if k not in {"creator_uuid", "owner_uuid"}
+            }
+            for p in registered_properties_list
+        ]
+        scoped_transfers = [
+            t for t in transfer_list
+            if t["new_owner_id"] == user_id_str or t["to_address"].lower() in user_wallet_addrs
+        ]
+        scoped_txs = [
+            tx for tx in txs_list
+            if tx["blockNumber"] <= 5
+            or (tx["from"].lower() in user_wallet_addrs or tx["to"].lower() in user_wallet_addrs)
+            or tx["event"] in {"Property Registered", "Contract Deployment"}
+        ]
+    elif user_role == "VERIFIER":
+        # Verifier: verified property registrations, verification-related txs
+        scoped_properties = registered_properties_list
+        scoped_transfers = transfer_list
+        scoped_txs = [
+            tx for tx in txs_list
+            if tx["blockNumber"] <= 5
+            or tx["event"] in {"Property Registered", "Contract Deployment"}
+        ]
+    elif user_role == "LEGAL_AUTHORITY":
+        # Legal Authority: authorized property registrations and conveyance transfers
+        scoped_properties = registered_properties_list
+        scoped_transfers = transfer_list
+        scoped_txs = txs_list
+
     return {
+        "userRole": user_role,
         "network": {
             "name": "Local Hardhat Network",
             "chainId": 31337,
@@ -570,13 +714,14 @@ def get_blockchain_overview(
             "latestBlock": latest_block_num,
             "totalBlocks": latest_block_num + 1 if is_connected else 0,
             "totalTransactions": total_tx_count,
-            "totalPropertyRegistrations": len(registered_properties_list),
-            "totalOwnershipTransfers": len(transfer_list),
+            "totalPropertyRegistrations": len(scoped_properties),
+            "totalOwnershipTransfers": len(scoped_transfers),
             "deployedContractsCount": len(contracts_section),
         },
         "blocks": blocks_list,
-        "transactions": txs_list,
-        "registeredProperties": registered_properties_list,
-        "ownershipTransfers": transfer_list,
+        "transactions": scoped_txs,
+        "registeredProperties": scoped_properties,
+        "ownershipTransfers": scoped_transfers,
         "contracts": contracts_section,
+        "failedOperations": failed_ops_list,
     }
