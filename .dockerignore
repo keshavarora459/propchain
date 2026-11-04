@@ -1,0 +1,9 @@
+**/.git
+**/.venv
+**/node_modules
+**/dist
+**/cache
+**/artifacts
+storage/uploads/*
+logs/*
+
