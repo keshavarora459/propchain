@@ -1,17 +1,19 @@
 import React from 'react'
 import { Link } from 'react-router-dom'
-import { MapPin, Maximize2, ShieldCheck, ArrowRight, FileCheck2, AlertCircle, Clock } from 'lucide-react'
+import { MapPin, Maximize2, ShieldCheck, ArrowRight, FileCheck2, AlertCircle, Clock, Trash2 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/Card'
 import { StatusBadge } from './StatusBadge'
 import { formatCurrency, getPropertyLabel } from '@/lib/utils'
 import type { Property } from '@/types/property'
 import { useAuth } from '@/hooks/useAuth'
+import { propertyService } from '@/services/propertyService'
 
 export interface PropertyCardProps {
   property: Property
+  onDeleted?: () => void
 }
 
-export const PropertyCard: React.FC<PropertyCardProps> = ({ property }) => {
+export const PropertyCard: React.FC<PropertyCardProps> = ({ property, onDeleted }) => {
   const { user } = useAuth()
   const rawStatus = (property.verification_status || property.verificationStatus || '').toString().toUpperCase()
   const isVerified = rawStatus === 'VERIFIED'
@@ -37,8 +39,29 @@ export const PropertyCard: React.FC<PropertyCardProps> = ({ property }) => {
   )
 
   const isSeller = user?.role === 'PROPERTY_OWNER'
+  const isAdmin = user?.role === 'ADMIN'
   // Show Make Offer ONLY to BUYER role, and never on own property
   const canMakeOffer = user?.role === 'BUYER' && !isOwner
+
+  const handleDelete = async (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const label = getPropertyLabel(property) || 'this property'
+    if (!window.confirm(`Are you sure you want to permanently delete "${label}"? This will delete all records from the database and MongoDB Atlas.`)) {
+      return
+    }
+    try {
+      await propertyService.deleteProperty(property.id)
+      if (onDeleted) {
+        onDeleted()
+      } else {
+        window.location.reload()
+      }
+    } catch (err: any) {
+      console.error('Failed to delete property:', err)
+      alert(err.response?.data?.message || err.response?.data?.detail || 'Failed to delete property.')
+    }
+  }
 
   return (
     <Card className="hover:shadow-md transition-all group overflow-hidden border-slate-200">
@@ -86,6 +109,16 @@ export const PropertyCard: React.FC<PropertyCardProps> = ({ property }) => {
         </div>
 
         <div className="pt-2 flex items-center gap-2">
+          {(isAdmin || isOwner) && (
+            <button
+              type="button"
+              onClick={handleDelete}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 border border-slate-200 hover:border-red-200 transition-colors shrink-0"
+              title="Delete Property"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          )}
           {isSeller && isOwner ? (
             <>
               {isPending && (

@@ -9,6 +9,7 @@ import {
   ExternalLink,
   Loader2,
   AlertCircle,
+  Trash2,
 } from 'lucide-react'
 import { PageHeader } from '@/components/common/PageHeader'
 import { StatusBadge } from '@/components/common/StatusBadge'
@@ -90,6 +91,21 @@ export const PropertyDetailPage: React.FC = () => {
         setConveyanceCount(1)
       })
   }, [id])
+
+  const handleDeleteProperty = async () => {
+    if (!property?.id) return
+    const label = getPropertyLabel(property) || 'this property'
+    if (!window.confirm(`Are you sure you want to permanently delete "${label}"? This will delete all records from the database and MongoDB Atlas.`)) {
+      return
+    }
+    try {
+      await propertyService.deleteProperty(property.id)
+      navigate('/properties')
+    } catch (err: any) {
+      console.error('Failed to delete property:', err)
+      alert(err.response?.data?.message || err.response?.data?.detail || 'Failed to delete property.')
+    }
+  }
 
   const handleVerifyProperty = async () => {
     if (!property?.id) return
@@ -219,6 +235,17 @@ export const PropertyDetailPage: React.FC = () => {
         actions={
           <div className="flex items-center gap-2">
             <StatusBadge status={property.verificationStatus} />
+            {(user?.role === 'ADMIN' || isOwner) && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleDeleteProperty}
+                className="text-red-600 hover:bg-red-50 hover:border-red-200"
+                leftIcon={<Trash2 className="h-4 w-4" />}
+              >
+                Delete Property
+              </Button>
+            )}
             {(user?.role === 'VERIFIER' || user?.role === 'ADMIN') &&
               property.verificationStatus?.toLowerCase() === 'pending' && (
                 <Button

@@ -135,6 +135,10 @@ export const propertyService = {
     const response = await apiClient.post<Property>(`/properties/${propertyId}/retry-blockchain`)
     return normalizeProperty(response.data)
   },
+
+  async deleteProperty(propertyId: string): Promise<void> {
+    await apiClient.delete(`/properties/${propertyId}`)
+  },
 }
 
 export default propertyService

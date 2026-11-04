@@ -193,6 +193,24 @@ class PropertyService:
             assert_property_access(current_user, prop, allow_marketplace=True)
         return self._to_response(prop)
 
+    def delete_property(self, property_id: uuid.UUID, current_user: User) -> bool:
+        prop = self.repo.get_by_id(property_id)
+        if not prop:
+            raise NotFoundError(f"Property with ID '{property_id}' not found.")
+
+        raw_role = current_user.role
+        user_role = raw_role.value if hasattr(raw_role, "value") else str(raw_role)
+        is_admin = user_role == UserRole.ADMIN.value
+        is_owner = (
+            (prop.current_owner_id and str(prop.current_owner_id).lower() == str(current_user.id).lower()) or
+            (prop.creator_user_id and str(prop.creator_user_id).lower() == str(current_user.id).lower())
+        )
+
+        if not is_admin and not is_owner:
+            raise ForbiddenError("Only administrators or the property owner can delete this property.")
+
+        return self.repo.delete(property_id)
+
     def list_properties(
         self,
         page: int = 1,

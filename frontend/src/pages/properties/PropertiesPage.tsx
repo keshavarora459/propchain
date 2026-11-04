@@ -10,6 +10,7 @@ import {
   X,
   FileCheck2,
   AlertCircle,
+  Trash2,
 } from 'lucide-react'
 import { useSearchParams, Link, useNavigate } from 'react-router-dom'
 import { PageHeader } from '@/components/common/PageHeader'
@@ -153,6 +154,25 @@ export const PropertiesPage: React.FC = () => {
   }, [filteredProperties, currentPage])
 
   const totalPages = Math.max(1, Math.ceil(filteredProperties.length / itemsPerPage))
+
+  const handleDeleteProperty = async (propertyId: string, title?: string) => {
+    const label = title || 'this property'
+    if (!window.confirm(`Are you sure you want to permanently delete "${label}"? This will delete all records from the database and MongoDB Atlas.`)) {
+      return
+    }
+    try {
+      await propertyService.deleteProperty(propertyId)
+      setSuccessBanner({
+        message: 'Property permanently deleted.',
+        propertyId: '',
+        title: label,
+      })
+      await loadProperties()
+    } catch (err: any) {
+      console.error('Failed to delete property:', err)
+      alert(err.response?.data?.message || err.response?.data?.detail || 'Failed to delete property.')
+    }
+  }
 
   const handleRegisterSuccess = (newProperty: Property) => {
     setIsModalOpen(false)
@@ -494,7 +514,7 @@ export const PropertiesPage: React.FC = () => {
       ) : viewMode === 'grid' ? (
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
           {paginatedProperties.map((prop) => (
-            <PropertyCard key={prop.id || prop.propertyId} property={prop} />
+            <PropertyCard key={prop.id || prop.propertyId} property={prop} onDeleted={loadProperties} />
           ))}
         </div>
       ) : (
@@ -604,6 +624,16 @@ export const PropertiesPage: React.FC = () => {
                               </Link>
                             )}
                           </>
+                        )}
+                        {(isAdmin || ownerOfProp) && (
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteProperty(prop.id || prop.propertyId, getPropertyLabel(prop))}
+                            className="p-1 rounded text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors ml-1"
+                            title="Delete property"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
                         )}
                       </div>
                     </TableCell>

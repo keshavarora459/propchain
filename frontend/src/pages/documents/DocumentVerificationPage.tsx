@@ -1444,7 +1444,7 @@ export const DocumentVerificationPage: React.FC = () => {
                               <span>•</span>
                               <span>Seller: {prop.seller_name || prop.owner_name || prop.currentOwner || 'Property Owner'}</span>
                               <span>•</span>
-                              <span>Submitted: {formatDate(prop.submitted_at || prop.created_at)}</span>
+                              <span>Submitted: {formatDate(prop.submitted_at || prop.created_at || '')}</span>
                             </div>
                           </div>
 

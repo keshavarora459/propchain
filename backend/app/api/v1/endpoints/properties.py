@@ -108,6 +108,21 @@ def get_property(
     return service.get_property(property_id, current_user=current_user)
 
 
+@router.delete(
+    "/{property_id}",
+    status_code=status.HTTP_200_OK,
+    summary="Delete a property (Admin or Property Owner)",
+)
+def delete_property(
+    property_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    service = PropertyService(db)
+    service.delete_property(property_id, current_user=current_user)
+    return {"success": True, "message": "Property deleted successfully."}
+
+
 @router.patch(
     "/{property_id}",
     response_model=PropertyResponse,

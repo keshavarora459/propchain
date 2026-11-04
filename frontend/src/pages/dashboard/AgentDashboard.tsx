@@ -54,7 +54,7 @@ export const AgentDashboard: React.FC = () => {
 
   const verifierMetrics = dashboardData?.verifier_metrics || {}
   // Item 7: Assigned properties must show properties with verification status SUBMITTED or CORRECTION_REQUESTED
-  const submittedProps = (verifierMetrics?.properties_to_verify || allProperties).filter((p) => {
+  const submittedProps = (verifierMetrics?.properties_to_verify || allProperties).filter((p: any) => {
     const s = (p.verification_status || p.verificationStatus || '').toString().toUpperCase()
     return s === 'SUBMITTED' || s === 'CORRECTION_REQUESTED' || s === 'REQUIRES_CORRECTION'
   })

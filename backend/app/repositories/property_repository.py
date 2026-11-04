@@ -84,13 +84,20 @@ class PropertyRepository:
         creator_id: Optional[uuid.UUID] = None,
         current_user: Optional[User] = None,
     ) -> Tuple[List[Property], int]:
-        # Automatic safeguard: If cache is empty, hydrate all from MongoDB Atlas immediately
-        if self.db.query(Property).count() == 0:
-            try:
+        # Automatic safeguard: If cache is empty or out of sync with MongoDB Atlas, resync
+        try:
+            from app.core.mongo import get_mongo_db, hydrate_all_from_mongo
+            mongo_db = get_mongo_db()
+            if mongo_db is not None:
+                mongo_count = mongo_db["properties"].count_documents({})
+                sql_count = self.db.query(Property).count()
+                if mongo_count != sql_count:
+                    hydrate_all_from_mongo(self.db, clear_existing=True)
+            elif self.db.query(Property).count() == 0:
                 from app.core.mongo import hydrate_all_from_mongo
                 hydrate_all_from_mongo(self.db)
-            except Exception:
-                pass
+        except Exception:
+            pass
 
         stmt = select(Property).options(
             joinedload(Property.current_owner),
@@ -206,3 +213,38 @@ class PropertyRepository:
         self.db.commit()
         self.db.refresh(prop)
         return prop
+
+    def delete(self, property_id: uuid.UUID) -> bool:
+        prop = self.get_by_id(property_id)
+        if not prop:
+            return False
+
+        from app.models.approval import TransactionApproval
+        from app.models.transaction import PropertyTransaction
+        from app.models.document import PropertyDocument
+        from app.models.blockchain import OwnershipEvent
+
+        txs = self.db.query(PropertyTransaction).filter(PropertyTransaction.property_id == property_id).all()
+        for tx in txs:
+            self.db.query(TransactionApproval).filter(TransactionApproval.transaction_id == tx.id).delete()
+            self.db.delete(tx)
+        self.db.query(PropertyDocument).filter(PropertyDocument.property_id == property_id).delete()
+        self.db.query(OwnershipEvent).filter(OwnershipEvent.property_id == property_id).delete()
+
+        self.db.delete(prop)
+        self.db.commit()
+
+        # Explicitly purge from MongoDB Atlas collections
+        try:
+            from app.core.mongo import get_mongo_db
+            mongo_db = get_mongo_db()
+            if mongo_db is not None:
+                str_id = str(property_id)
+                mongo_db["properties"].delete_one({"_id": str_id})
+                mongo_db["documents"].delete_many({"property_id": str_id})
+                mongo_db["transactions"].delete_many({"property_id": str_id})
+                mongo_db["ownership_events"].delete_many({"property_id": str_id})
+        except Exception:
+            pass
+
+        return True
