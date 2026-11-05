@@ -2,6 +2,7 @@ export type UserRole =
   | 'ADMIN'
   | 'PROPERTY_OWNER'
   | 'BUYER'
+  | 'REGISTRAR'
   | 'VERIFIER'
   | 'LEGAL_AUTHORITY'
 

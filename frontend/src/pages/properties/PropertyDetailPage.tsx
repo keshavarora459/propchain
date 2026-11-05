@@ -22,7 +22,6 @@ import { Tabs } from '@/components/ui/Tabs'
 import { truncateHash } from '@/lib/utils'
 import { formatCurrency, formatDate, getPropertyLabel } from '@/lib/utils'
 import { propertyService } from '@/services/propertyService'
-import { ownershipService } from '@/services/ownershipService'
 import type { Property } from '@/types/property'
 import apiClient from '@/lib/axios'
 import { useAuth } from '@/hooks/useAuth'
@@ -256,7 +255,7 @@ export const PropertyDetailPage: React.FC = () => {
                 Delete Property
               </Button>
             )}
-            {user?.role === 'VERIFIER' &&
+            {(user?.role === 'REGISTRAR' || user?.role === 'VERIFIER') &&
               (property.verificationStatus?.toLowerCase() === 'pending' || (property.verification_status || '').toUpperCase() === 'SUBMITTED') && (
                 <Button
                   size="sm"

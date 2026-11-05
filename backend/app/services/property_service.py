@@ -477,7 +477,7 @@ class PropertyService:
         # Send notification to all VERIFIER users
         try:
             from app.models.user_activity import UserActivityLog
-            verifiers = self.db.query(User).filter(User.role.in_([UserRole.VERIFIER.value, "VERIFIER"])).all()
+            verifiers = self.db.query(User).filter(User.role.in_([UserRole.REGISTRAR.value, UserRole.VERIFIER.value, "REGISTRAR", "VERIFIER"])).all()
             for v in verifiers:
                 notif = UserActivityLog(
                     user_id=v.id,
@@ -500,8 +500,8 @@ class PropertyService:
 
         raw_role = current_user.role
         user_role = raw_role.value if hasattr(raw_role, "value") else str(raw_role)
-        if user_role not in {UserRole.VERIFIER.value, "VERIFIER"}:
-            raise ForbiddenError("Only role VERIFIER can verify a property.")
+        if user_role not in {UserRole.REGISTRAR.value, UserRole.VERIFIER.value, "REGISTRAR", "VERIFIER"}:
+            raise ForbiddenError("Only role REGISTRAR can verify a property.")
 
         if prop.verification_status == "PENDING":
             raise BadRequestError("Cannot verify a draft property that has not been submitted for verification.")
@@ -660,8 +660,8 @@ class PropertyService:
 
         raw_role = current_user.role
         user_role = raw_role.value if hasattr(raw_role, "value") else str(raw_role)
-        if user_role not in {UserRole.VERIFIER.value, "VERIFIER"}:
-            raise ForbiddenError("Only role VERIFIER can reject a property.")
+        if user_role not in {UserRole.REGISTRAR.value, UserRole.VERIFIER.value, "REGISTRAR", "VERIFIER"}:
+            raise ForbiddenError("Only role REGISTRAR can reject a property.")
 
         prop.verification_status = "REJECTED"
         prop.status = "REJECTED"
@@ -704,7 +704,7 @@ class PropertyService:
             (prop.current_owner_id is not None and str(prop.current_owner_id) == str(current_user.id))
             or (prop.creator_user_id is not None and str(prop.creator_user_id) == str(current_user.id))
         )
-        if user_role not in {UserRole.ADMIN.value, UserRole.VERIFIER.value, UserRole.LEGAL_AUTHORITY.value} and not is_owner:
+        if user_role not in {UserRole.ADMIN.value, UserRole.REGISTRAR.value, UserRole.VERIFIER.value, UserRole.LEGAL_AUTHORITY.value} and not is_owner:
             raise ForbiddenError("You are not authorized to retry blockchain registration for this property.")
 
         if (prop.verification_status or "").upper() != "VERIFIED":
@@ -760,7 +760,7 @@ class PropertyService:
                 prop.blockchain_tx_hash = bc_tx
             if not prop.verified_at:
                 prop.verified_at = datetime.now(timezone.utc)
-            if not prop.verified_by_id and user_role == UserRole.VERIFIER.value:
+            if not prop.verified_by_id and user_role in {UserRole.REGISTRAR.value, UserRole.VERIFIER.value}:
                 prop.verified_by_id = current_user.id
             updated = self.repo.update(prop)
         else:
@@ -785,7 +785,7 @@ class PropertyService:
 
         # Verification status can only be modified by Admin, Verifier, or Legal Authority
         if data.verification_status is not None:
-            if user_role not in {UserRole.ADMIN.value, UserRole.VERIFIER.value, UserRole.LEGAL_AUTHORITY.value}:
+            if user_role not in {UserRole.ADMIN.value, UserRole.REGISTRAR.value, UserRole.VERIFIER.value, UserRole.LEGAL_AUTHORITY.value}:
                 raise ForbiddenError("Only authorized verifiers or administrators can alter verification status.")
             target_v_status = data.verification_status.upper()
             if target_v_status == "VERIFIED":

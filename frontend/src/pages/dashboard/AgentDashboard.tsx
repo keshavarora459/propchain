@@ -140,7 +140,7 @@ export const AgentDashboard: React.FC = () => {
   return (
     <div className="space-y-6">
       <PageHeader
-        title={`Title Verification Console: ${user?.full_name || 'Agent Verifier'}`}
+        title={`Title Verification Console: ${user?.full_name || 'Land Registrar'}`}
         description="Review submitted cadastral records, perform deed verification, validate OCR documents, and approve properties for consensus settlement."
         actions={
           <div className="flex items-center gap-2">
@@ -195,7 +195,7 @@ export const AgentDashboard: React.FC = () => {
         <StatCard
           title="Pending Approval Tasks"
           value={(verifierMetrics?.pending_approval_tasks_count ?? 0).toString()}
-          subtitle="Conveyance deals awaiting verifier sign-off"
+          subtitle="Conveyance deals awaiting registrar sign-off"
           icon={<ShieldCheck className="h-5 w-5" />}
           iconBg="bg-purple-50 text-purple-600"
         />
@@ -204,7 +204,7 @@ export const AgentDashboard: React.FC = () => {
       {/* Tabs */}
       <Tabs
         tabs={[
-          { id: 'overview', label: 'Agent Overview' },
+          { id: 'overview', label: 'Registrar Overview' },
           { id: 'assigned', label: 'Assigned Properties', count: submittedProps.length },
           { id: 'verified', label: 'Verified Properties', count: verifiedCount },
           { id: 'manage', label: 'Property Registry', count: allProperties.length },

@@ -80,7 +80,7 @@ export const AppRoutes: React.FC = () => {
           <Route
             path="/documents"
             element={
-              <ProtectedRoute requiredRole={['ADMIN', 'PROPERTY_OWNER', 'VERIFIER', 'LEGAL_AUTHORITY']}>
+              <ProtectedRoute requiredRole={['ADMIN', 'PROPERTY_OWNER', 'REGISTRAR', 'VERIFIER', 'LEGAL_AUTHORITY']}>
                 <DocumentVerificationPage />
               </ProtectedRoute>
             }
@@ -88,7 +88,7 @@ export const AppRoutes: React.FC = () => {
           <Route
             path="/approvals"
             element={
-              <ProtectedRoute requiredRole={['ADMIN', 'VERIFIER', 'LEGAL_AUTHORITY']}>
+              <ProtectedRoute requiredRole={['ADMIN', 'REGISTRAR', 'VERIFIER', 'LEGAL_AUTHORITY']}>
                 <ApprovalsPage />
               </ProtectedRoute>
             }
@@ -96,7 +96,7 @@ export const AppRoutes: React.FC = () => {
           <Route
             path="/fraud-detection"
             element={
-              <ProtectedRoute requiredRole={['ADMIN', 'VERIFIER']}>
+              <ProtectedRoute requiredRole={['ADMIN', 'REGISTRAR', 'VERIFIER']}>
                 <FraudDetectionPage />
               </ProtectedRoute>
             }

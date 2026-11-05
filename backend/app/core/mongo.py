@@ -405,6 +405,8 @@ def hydrate_all_from_mongo(session: Session, clear_existing: bool = False) -> Di
             data = {k: v for k, v in u_doc.items() if not k.startswith("_") and k in User.__table__.columns}
             data["id"] = u_id
             data["email"] = email
+            if data.get("role") == "VERIFIER":
+                data["role"] = "REGISTRAR"
             session.add(User(**data))
             seen_user_ids.add(u_id)
             seen_user_emails.add(email)

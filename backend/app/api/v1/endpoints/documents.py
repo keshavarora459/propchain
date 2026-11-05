@@ -108,7 +108,7 @@ def download_document(
 @router.post(
     "/documents/{document_id}/verify",
     response_model=DocumentResponse,
-    summary="Approve and mark a document as VERIFIED (Verifier only)",
+    summary="Approve and mark a document as VERIFIED (Registrar only)",
 )
 def verify_document(
     document_id: uuid.UUID,
@@ -128,7 +128,7 @@ def verify_document(
 @router.post(
     "/documents/{document_id}/reject",
     response_model=DocumentResponse,
-    summary="Reject document with mandatory reason (Verifier only)",
+    summary="Reject document with mandatory reason (Registrar only)",
 )
 def reject_document(
     document_id: uuid.UUID,
@@ -148,7 +148,7 @@ def reject_document(
 @router.post(
     "/documents/{document_id}/request-correction",
     response_model=DocumentResponse,
-    summary="Flag document as REQUIRES_CORRECTION with instructions (Verifier only)",
+    summary="Flag document as REQUIRES_CORRECTION with instructions (Registrar only)",
 )
 def request_document_correction(
     document_id: uuid.UUID,

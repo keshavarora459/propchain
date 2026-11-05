@@ -69,8 +69,9 @@ export const Sidebar: React.FC = () => {
         return { label: getRoleLabel('ADMIN'), icon: Shield, color: 'text-amber-400 bg-amber-500/10 border-amber-500/20' }
       case 'LEGAL_AUTHORITY':
         return { label: getRoleLabel('LEGAL_AUTHORITY'), icon: Scale, color: 'text-purple-400 bg-purple-500/10 border-purple-500/20' }
+      case 'REGISTRAR':
       case 'VERIFIER':
-        return { label: getRoleLabel('VERIFIER'), icon: UserCheck, color: 'text-cyan-400 bg-cyan-500/10 border-cyan-500/20' }
+        return { label: getRoleLabel('REGISTRAR'), icon: UserCheck, color: 'text-cyan-400 bg-cyan-500/10 border-cyan-500/20' }
       case 'PROPERTY_OWNER':
         return { label: getRoleLabel('PROPERTY_OWNER'), icon: Home, color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' }
       case 'BUYER':

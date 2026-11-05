@@ -348,7 +348,7 @@ export const AdminDashboard: React.FC = () => {
                     <th className="p-3 border border-slate-200">Permission</th>
                     <th className="p-3 border border-slate-200 text-center">Buyer</th>
                     <th className="p-3 border border-slate-200 text-center">Seller</th>
-                    <th className="p-3 border border-slate-200 text-center">Verifier</th>
+                    <th className="p-3 border border-slate-200 text-center">Registrar</th>
                     <th className="p-3 border border-slate-200 text-center">Legal Authority</th>
                     <th className="p-3 border border-slate-200 text-center">Admin</th>
                   </tr>

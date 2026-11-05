@@ -1230,7 +1230,7 @@ export const BlockchainExplorerPage: React.FC = () => {
                 'Showing your registered properties, verified document hashes, and personal transactions on the immutable ledger.'}
               {user?.role === 'BUYER' &&
                 'Displaying publicly verified property titles, purchase transactions, and transparent blockchain records.'}
-              {user?.role === 'VERIFIER' &&
+              {(user?.role === 'REGISTRAR' || user?.role === 'VERIFIER') &&
                 'Displaying verified property titles, deed authentication transactions, and cryptographic proofs.'}
               {user?.role === 'LEGAL_AUTHORITY' &&
                 'Displaying verified cadastral records, statutory conveyance transfers, and deed confirmation events.'}

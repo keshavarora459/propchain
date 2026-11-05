@@ -158,7 +158,7 @@ def update_property_status(
 @router.post(
     "/{property_id}/submit-for-verification",
     response_model=PropertyResponse,
-    summary="Submit property for verifier review once all required documents are uploaded",
+    summary="Submit property for registrar review once all required documents are uploaded",
 )
 def submit_for_verification(
     property_id: uuid.UUID,
@@ -172,7 +172,7 @@ def submit_for_verification(
 @router.post(
     "/{property_id}/verify",
     response_model=PropertyResponse,
-    summary="Approve all 4 documents and verify property, anchoring on blockchain (Verifier only)",
+    summary="Approve all 4 documents and verify property, anchoring on blockchain (Registrar only)",
 )
 def verify_property(
     property_id: uuid.UUID,
@@ -190,7 +190,7 @@ class RejectPropertyRequest(BaseModel):
 @router.post(
     "/{property_id}/reject",
     response_model=PropertyResponse,
-    summary="Reject property verification (Verifier only)",
+    summary="Reject property verification (Registrar only)",
 )
 def reject_property(
     property_id: uuid.UUID,
@@ -234,7 +234,7 @@ def get_required_documents_status(
 @router.post(
     "/{property_id}/retry-blockchain",
     response_model=PropertyResponse,
-    summary="Retry anchoring verified property on blockchain (Owner, Verifier, or Admin)",
+    summary="Retry anchoring verified property on blockchain (Owner, Registrar, or Admin)",
 )
 def retry_blockchain_registration(
     property_id: uuid.UUID,

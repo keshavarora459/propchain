@@ -31,9 +31,9 @@ DEMO_ACCOUNTS = [
         "role": UserRole.LEGAL_AUTHORITY.value,
     },
     {
-        "full_name": "Senior Title Verifier",
+        "full_name": "Senior Title Registrar",
         "email": "verifier@propchain.network",
-        "role": UserRole.VERIFIER.value,
+        "role": UserRole.REGISTRAR.value,
     },
     {
         "full_name": "Alice Seller (Owner)",

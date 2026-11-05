@@ -104,7 +104,7 @@ def seller_reject_transaction(
 @router.post(
     "/{transaction_id}/verify-documents",
     response_model=TransactionResponse,
-    summary="Verifier approves document verification for this transaction",
+    summary="Registrar approves document verification for this transaction",
 )
 def verifier_approve_transaction(
     transaction_id: uuid.UUID,

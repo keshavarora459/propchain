@@ -85,8 +85,9 @@ export function getRoleLabel(role?: string | null): string {
       return 'Seller'
     case 'BUYER':
       return 'Buyer'
+    case 'REGISTRAR':
     case 'VERIFIER':
-      return 'Verifier'
+      return 'Registrar'
     case 'LEGAL_AUTHORITY':
       return 'Legal Authority'
     case 'ADMIN':
@@ -135,7 +136,7 @@ export function getVerificationLabel(
     .trim()
 
   const normalizedRole = (viewerRole || '').toUpperCase().trim()
-  const isVerifier = normalizedRole === 'VERIFIER'
+  const isVerifier = normalizedRole === 'REGISTRAR' || normalizedRole === 'VERIFIER'
 
   const approved =
     approvedDocsCount !== undefined
@@ -182,6 +183,8 @@ export function getVerificationLabel(
   if (
     rawStatus === 'SUBMITTED' ||
     rawStatus === 'SUBMITTED_FOR_REVIEW' ||
+    rawStatus === 'WAITING FOR REGISTRAR' ||
+    rawStatus === 'WAITING_FOR_REGISTRAR' ||
     rawStatus === 'WAITING FOR VERIFIER' ||
     rawStatus === 'WAITING_FOR_VERIFIER' ||
     rawStatus === 'UNDER_REVIEW' ||
