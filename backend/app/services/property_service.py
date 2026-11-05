@@ -499,8 +499,8 @@ class PropertyService:
             raise NotFoundError(f"Property with ID '{property_id}' not found.")
 
         raw_role = current_user.role
-        user_role = raw_role.value if hasattr(raw_role, "value") else str(raw_role)
-        if user_role not in {UserRole.REGISTRAR.value, UserRole.VERIFIER.value, "REGISTRAR", "VERIFIER"}:
+        user_role = (raw_role.value if hasattr(raw_role, "value") else str(raw_role)).upper().strip()
+        if user_role not in {UserRole.ADMIN.value, UserRole.REGISTRAR.value, UserRole.VERIFIER.value, "ADMIN", "REGISTRAR", "VERIFIER"}:
             raise ForbiddenError("Only role REGISTRAR can verify a property.")
 
         if prop.verification_status == "PENDING":
@@ -605,7 +605,9 @@ class PropertyService:
             prop.verification_status = "SUBMITTED"
             self.repo.update(prop)
             logger.error("Blockchain anchoring failed for property %s: %s", prop.property_number, bc_error)
-            raise BadRequestError("Blockchain not reachable. Start the node and try again.")
+            if not bc_service.is_network_connected():
+                raise BadRequestError("Blockchain not reachable. Start the node and try again.")
+            raise BadRequestError(f"Blockchain anchoring failed: {bc_error or 'Contract execution error'}")
 
         # Anchoring succeeded: update status to VERIFIED and ACTIVE (NOT BLOCKCHAIN_REGISTERED)
         now_utc = datetime.now(timezone.utc)
@@ -659,8 +661,8 @@ class PropertyService:
             raise NotFoundError(f"Property with ID '{property_id}' not found.")
 
         raw_role = current_user.role
-        user_role = raw_role.value if hasattr(raw_role, "value") else str(raw_role)
-        if user_role not in {UserRole.REGISTRAR.value, UserRole.VERIFIER.value, "REGISTRAR", "VERIFIER"}:
+        user_role = (raw_role.value if hasattr(raw_role, "value") else str(raw_role)).upper().strip()
+        if user_role not in {UserRole.ADMIN.value, UserRole.REGISTRAR.value, UserRole.VERIFIER.value, "ADMIN", "REGISTRAR", "VERIFIER"}:
             raise ForbiddenError("Only role REGISTRAR can reject a property.")
 
         prop.verification_status = "REJECTED"

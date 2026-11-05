@@ -323,8 +323,9 @@ class TransactionService:
         return self._to_response(txn)
 
     def verifier_approve(self, transaction_id: uuid.UUID, comments: Optional[str], current_user: User) -> TransactionResponse:
-        user_role = UserRole(current_user.role)
-        if user_role not in {UserRole.ADMIN, UserRole.REGISTRAR, UserRole.VERIFIER}:
+        raw_role = current_user.role
+        user_role_str = (raw_role.value if hasattr(raw_role, "value") else str(raw_role)).upper().strip()
+        if user_role_str not in {UserRole.ADMIN.value, UserRole.REGISTRAR.value, UserRole.VERIFIER.value, "ADMIN", "REGISTRAR", "VERIFIER"}:
             raise ForbiddenError("Only certified Verifiers or Administrators can approve document verification.")
 
         txn = self.db.get(PropertyTransaction, transaction_id)

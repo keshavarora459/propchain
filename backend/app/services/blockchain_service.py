@@ -27,13 +27,15 @@ class BlockchainService:
         self.w3 = Web3(Web3.HTTPProvider(rpc_url))
 
         # Hardhat account #0 default private key for local development
-        self.deployer_private_key = os.getenv(
-            "BLOCKCHAIN_DEPLOYER_PRIVATE_KEY",
-            "",
+        raw_key = os.getenv("BLOCKCHAIN_DEPLOYER_PRIVATE_KEY")
+        self.deployer_private_key = (
+            raw_key.strip() if raw_key and raw_key.strip()
+            else "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
         )
         try:
             self.deployer_account = self.w3.eth.account.from_key(self.deployer_private_key)
-        except Exception:
+        except Exception as key_err:
+            logger.warning("Could not initialize deployer account: %s", key_err)
             self.deployer_account = None
 
         self._load_contracts()
@@ -111,7 +113,7 @@ class BlockchainService:
         Prevents duplicate submissions when retrying.
         Returns: (success, tx_hash, error_message)
         """
-        if not self.is_network_connected() or not self.property_registry or not self.ownership_registry:
+        if not self.is_network_connected() or not self.property_registry or not self.ownership_registry or not self.deployer_account:
             # Record failed or skipped operation in DB
             op = BlockchainOperation(
                 operation_type="REGISTER_PROPERTY",
@@ -353,7 +355,7 @@ class BlockchainService:
         Executes on-chain transfer in OwnershipRegistry and updates local ownership history.
         Returns: (success, tx_hash, block_number, error_message)
         """
-        if not self.is_network_connected() or not self.ownership_registry:
+        if not self.is_network_connected() or not self.ownership_registry or not self.deployer_account:
             return False, None, None, "Blockchain EVM node unreachable or contracts not deployed."
 
         from app.core.config import get_settings

@@ -279,9 +279,9 @@ class DocumentService:
             raise NotFoundError(f"Property with ID '{property_id}' not found.")
 
         raw_role = current_user.role
-        user_role = raw_role.value if hasattr(raw_role, "value") else str(raw_role)
-        if user_role in {UserRole.VERIFIER.value, "VERIFIER"} and prop.verification_status == "PENDING":
-            raise ForbiddenError("Access denied: Draft properties cannot be viewed by verifiers until submitted.")
+        user_role = (raw_role.value if hasattr(raw_role, "value") else str(raw_role)).upper().strip()
+        if user_role in {UserRole.REGISTRAR.value, UserRole.VERIFIER.value, "REGISTRAR", "VERIFIER"} and prop.verification_status == "PENDING":
+            raise ForbiddenError("Access denied: Draft properties cannot be viewed by registrars until submitted.")
 
         if user_role == UserRole.PROPERTY_OWNER.value:
             is_owner = (prop.current_owner_id == current_user.id) or (prop.creator_user_id == current_user.id)
@@ -385,9 +385,9 @@ class DocumentService:
         current_user: User,
     ) -> DocumentResponse:
         raw_role = current_user.role
-        user_role = raw_role.value if hasattr(raw_role, "value") else str(raw_role)
-        if user_role not in {UserRole.VERIFIER.value, "VERIFIER"}:
-            raise ForbiddenError("Only role VERIFIER can review or verify documents.")
+        user_role = (raw_role.value if hasattr(raw_role, "value") else str(raw_role)).upper().strip()
+        if user_role not in {UserRole.REGISTRAR.value, UserRole.VERIFIER.value, UserRole.ADMIN.value, "REGISTRAR", "VERIFIER", "ADMIN"}:
+            raise ForbiddenError("Only role REGISTRAR or VERIFIER can review or verify documents.")
 
         doc = self.doc_repo.get_by_id(document_id)
         if not doc:
@@ -397,8 +397,8 @@ class DocumentService:
         if not prop:
             raise NotFoundError(f"Property with ID '{doc.property_id}' not found.")
 
-        # Verifiers cannot review draft properties that have not been submitted
-        if user_role in {UserRole.VERIFIER.value, "VERIFIER"} and prop.verification_status == "PENDING":
+        # Registrars cannot review draft properties that have not been submitted
+        if user_role in {UserRole.REGISTRAR.value, UserRole.VERIFIER.value, "REGISTRAR", "VERIFIER"} and prop.verification_status == "PENDING":
             raise ForbiddenError("Cannot review documents for draft properties that have not been submitted for verification.")
 
         # Item 4: Disable and reject action on documents in Needs correction or Replaced status
