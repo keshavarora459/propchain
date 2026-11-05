@@ -31,11 +31,15 @@ import { Button } from '@/components/ui/Button'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card'
 import { Modal } from '@/components/ui/Modal'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
-import { truncateHash, formatDate, getRoleLabel } from '@/lib/utils'
+import { truncateHash, formatDate, getRoleLabel, getPropertyLabel } from '@/lib/utils'
 import { ethers } from 'ethers'
 import {
   CONTRACT_ADDRESSES,
   CONTRACT_DEPLOYMENT_INFO,
+  PROPERTY_REGISTRY_ABI,
+  OWNERSHIP_REGISTRY_ABI,
+  TRANSACTION_MANAGER_ABI,
+  ACCESS_CONTROL_ABI,
 } from '@/contracts/contractConfig'
 
 export interface RealBlock {
@@ -52,8 +56,16 @@ export interface RealBlock {
   stateRoot?: string
   receiptsRoot?: string
   blockType?: string
+  friendlyTitle?: string
   transferDetails?: any
   transactions?: string[]
+  primaryTx?: RealTx
+  propertyId?: string
+  propertyTitle?: string
+  ownerWallet?: string
+  ownerName?: string
+  documentHash?: string
+  contractName?: string
 }
 
 export interface RealTx {
@@ -61,9 +73,13 @@ export interface RealTx {
   blockNumber: number
   from: string
   to: string
+  contractName?: string
   event: string
+  functionName?: string
   propertyId?: string
   propertyTitle?: string
+  ownerWallet?: string
+  ownerName?: string
   documentHash?: string
   value?: string
   gasUsed: string
@@ -71,6 +87,7 @@ export interface RealTx {
   status: 'Confirmed' | 'Reverted'
   timestamp: string
   details?: string
+  data?: string
 }
 
 export interface RegisteredPropertyTx {
@@ -132,67 +149,93 @@ function getAddressLabel(address?: string | null): string {
   return truncateHash(address, 6, 4)
 }
 
+function getContractFriendlyName(address?: string | null): string {
+  if (!address) return 'Contract Deployment'
+  const addr = address.toLowerCase()
+  if (addr === CONTRACT_ADDRESSES.PROPERTY_REGISTRY.toLowerCase()) {
+    return 'PropertyRegistry'
+  }
+  if (addr === CONTRACT_ADDRESSES.OWNERSHIP_REGISTRY.toLowerCase()) {
+    return 'OwnershipRegistry'
+  }
+  if (addr === CONTRACT_ADDRESSES.TRANSACTION_MANAGER.toLowerCase()) {
+    return 'TransactionManager'
+  }
+  if (addr === '0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266') {
+    return 'Hardhat Deployer'
+  }
+  return truncateHash(address, 6, 4)
+}
+
 function getBlockTypeBadgeClass(blockType?: string): string {
   if (!blockType) return 'bg-slate-100 text-slate-700 border-slate-200'
   const bt = blockType.toLowerCase()
   if (bt.includes('genesis')) return 'bg-purple-100 text-purple-800 border-purple-200'
-  if (bt.includes('deployment')) return 'bg-blue-100 text-blue-800 border-blue-200'
-  if (bt.includes('property')) return 'bg-emerald-100 text-emerald-800 border-emerald-200'
-  if (bt.includes('ownership')) return 'bg-indigo-100 text-indigo-800 border-indigo-200'
+  if (bt.includes('deploy') || bt.includes('creation')) return 'bg-blue-100 text-blue-800 border-blue-200'
+  if (bt.includes('property registered') || bt.includes('property registration') || bt.includes('property'))
+    return 'bg-emerald-100 text-emerald-800 border-emerald-200'
+  if (bt.includes('initial owner') || bt.includes('ownership') || bt.includes('conveyance') || bt.includes('transfer'))
+    return 'bg-purple-100 text-purple-800 border-purple-200'
   if (bt.includes('role')) return 'bg-amber-100 text-amber-800 border-amber-200'
   return 'bg-cyan-100 text-cyan-800 border-cyan-200'
 }
 
 function getBlockVisualTheme(blockType?: string, isGenesis?: boolean) {
-  if (isGenesis || (blockType && blockType.toLowerCase().includes('genesis'))) {
+  const bt = (blockType || '').toLowerCase()
+  if (isGenesis || bt.includes('genesis')) {
     return {
       containerClass:
         'bg-gradient-to-br from-purple-950/50 via-slate-900 to-slate-950 border-purple-500/30 hover:border-purple-400 hover:shadow-purple-500/10',
       topAccentClass: 'bg-gradient-to-r from-purple-500 to-indigo-500',
       iconClass: 'text-purple-400',
       badgeClass: 'bg-purple-950/80 text-purple-300 border-purple-500/40',
+      titleClass: 'text-purple-300',
       label: 'Genesis Block',
     }
   }
-  const bt = (blockType || '').toLowerCase()
-  if (bt.includes('deployment')) {
-    return {
-      containerClass:
-        'bg-gradient-to-br from-blue-950/50 via-slate-900 to-slate-950 border-blue-500/30 hover:border-blue-400 hover:shadow-blue-500/10',
-      topAccentClass: 'bg-gradient-to-r from-blue-500 to-cyan-500',
-      iconClass: 'text-blue-400',
-      badgeClass: 'bg-blue-950/80 text-blue-300 border-blue-500/40',
-      label: 'Contract Deployment',
-    }
-  }
-  if (bt.includes('role')) {
-    return {
-      containerClass:
-        'bg-gradient-to-br from-amber-950/50 via-slate-900 to-slate-950 border-amber-500/30 hover:border-amber-400 hover:shadow-amber-500/10',
-      topAccentClass: 'bg-gradient-to-r from-amber-500 to-yellow-500',
-      iconClass: 'text-amber-400',
-      badgeClass: 'bg-amber-950/80 text-amber-300 border-amber-500/40',
-      label: 'Role Authorization',
-    }
-  }
-  if (bt.includes('property')) {
+  if (bt.includes('property registered') || bt.includes('property registration') || bt.includes('property')) {
     return {
       containerClass:
         'bg-gradient-to-br from-emerald-950/50 via-slate-900 to-slate-950 border-emerald-500/30 hover:border-emerald-400 hover:shadow-emerald-500/10',
       topAccentClass: 'bg-gradient-to-r from-emerald-500 to-teal-500',
       iconClass: 'text-emerald-400',
       badgeClass: 'bg-emerald-950/80 text-emerald-300 border-emerald-500/40',
-      label: 'Property Registration',
+      titleClass: 'text-emerald-300',
+      label: 'Property Registered',
     }
   }
-  if (bt.includes('ownership')) {
+  if (bt.includes('initial owner') || bt.includes('ownership') || bt.includes('conveyance') || bt.includes('transfer')) {
+    const isInitial = bt.includes('initial')
     return {
       containerClass:
-        'bg-gradient-to-br from-indigo-950/50 via-slate-900 to-slate-950 border-indigo-500/30 hover:border-indigo-400 hover:shadow-indigo-500/10',
-      topAccentClass: 'bg-gradient-to-r from-indigo-500 to-purple-500',
-      iconClass: 'text-indigo-400',
-      badgeClass: 'bg-indigo-950/80 text-indigo-300 border-indigo-500/40',
-      label: 'Ownership Transferred',
+        'bg-gradient-to-br from-purple-950/50 via-slate-900 to-slate-950 border-purple-500/30 hover:border-purple-400 hover:shadow-purple-500/10',
+      topAccentClass: 'bg-gradient-to-r from-purple-500 to-indigo-500',
+      iconClass: 'text-purple-400',
+      badgeClass: 'bg-purple-950/80 text-purple-300 border-purple-500/40',
+      titleClass: 'text-purple-300',
+      label: isInitial ? 'Initial Owner Recorded' : 'Ownership Transferred',
+    }
+  }
+  if (bt.includes('role') || bt.includes('grantrole')) {
+    return {
+      containerClass:
+        'bg-gradient-to-br from-amber-950/50 via-slate-900 to-slate-950 border-amber-500/30 hover:border-amber-400 hover:shadow-amber-500/10',
+      topAccentClass: 'bg-gradient-to-r from-amber-500 to-yellow-500',
+      iconClass: 'text-amber-400',
+      badgeClass: 'bg-amber-950/80 text-amber-300 border-amber-500/40',
+      titleClass: 'text-amber-300',
+      label: 'Role Granted',
+    }
+  }
+  if (bt.includes('deploy') || bt.includes('contract creation')) {
+    return {
+      containerClass:
+        'bg-gradient-to-br from-blue-950/50 via-slate-900 to-slate-950 border-blue-500/30 hover:border-blue-400 hover:shadow-blue-500/10',
+      topAccentClass: 'bg-gradient-to-r from-blue-500 to-cyan-500',
+      iconClass: 'text-blue-400',
+      badgeClass: 'bg-blue-950/80 text-blue-300 border-blue-500/40',
+      titleClass: 'text-blue-300',
+      label: 'Contract Deployed',
     }
   }
   return {
@@ -201,7 +244,236 @@ function getBlockVisualTheme(blockType?: string, isGenesis?: boolean) {
     topAccentClass: 'bg-gradient-to-r from-cyan-500 to-blue-500',
     iconClass: 'text-cyan-400',
     badgeClass: 'bg-slate-800 text-slate-300 border-slate-700',
+    titleClass: 'text-cyan-300',
     label: 'Smart Contract Interaction',
+  }
+}
+
+/**
+ * Decodes transaction calldata with ethers.Interface using contract ABIs.
+ * Maps function calls to friendly event names per specification:
+ * - PropertyRegistry.registerProperty -> "Property Registered"
+ * - OwnershipRegistry.recordInitialOwnership -> "Initial Owner Recorded"
+ * - OwnershipRegistry.recordOwnershipTransfer -> "Ownership Transferred"
+ * - grantRole -> "Role Granted"
+ * - contract creation -> "Contract Deployed (<contract name>)"
+ * - anything else -> "Contract Call: <functionName>"
+ */
+function decodeTxWithInterfaces(
+  tx: {
+    hash: string
+    from?: string
+    to?: string | null
+    data?: string | null
+    value?: any
+    receiptContractAddress?: string | null
+    event?: string
+    propertyId?: string
+    propertyTitle?: string
+    documentHash?: string
+    ownerWallet?: string
+    ownerName?: string
+  },
+  interfaces: {
+    propertyRegistry: ethers.Interface
+    ownershipRegistry: ethers.Interface
+    transactionManager: ethers.Interface
+    accessControl: ethers.Interface
+  },
+  registeredProps: RegisteredPropertyTx[],
+  transfers: OwnershipTransferTx[]
+) {
+  const txTo = (tx.to || '').toLowerCase()
+  const txData = (tx.data || '').toLowerCase()
+  const txHash = (tx.hash || '').toLowerCase()
+
+  let eventName = tx.event || 'Smart Contract Call'
+  let functionName: string | undefined = undefined
+  let contractName = getContractFriendlyName(tx.to)
+  let propertyId = tx.propertyId
+  let propertyTitle = tx.propertyTitle
+  let documentHash = tx.documentHash
+  let ownerWallet = tx.ownerWallet
+  let ownerName = tx.ownerName
+  let details = ''
+
+  // 1. Contract Deployment
+  if (!tx.to || tx.to === 'Contract Deployment' || tx.to === '0x' || tx.to === ethers.ZeroAddress) {
+    contractName = 'Smart Contract'
+    const ca = (tx.receiptContractAddress || '').toLowerCase()
+    if (
+      ca === CONTRACT_ADDRESSES.PROPERTY_REGISTRY.toLowerCase() ||
+      txHash === CONTRACT_DEPLOYMENT_INFO.PROPERTY_REGISTRY.deploymentTxHash.toLowerCase()
+    ) {
+      contractName = 'PropertyRegistry'
+    } else if (
+      ca === CONTRACT_ADDRESSES.OWNERSHIP_REGISTRY.toLowerCase() ||
+      txHash === CONTRACT_DEPLOYMENT_INFO.OWNERSHIP_REGISTRY.deploymentTxHash.toLowerCase()
+    ) {
+      contractName = 'OwnershipRegistry'
+    } else if (
+      ca === CONTRACT_ADDRESSES.TRANSACTION_MANAGER.toLowerCase() ||
+      txHash === CONTRACT_DEPLOYMENT_INFO.TRANSACTION_MANAGER.deploymentTxHash.toLowerCase()
+    ) {
+      contractName = 'TransactionManager'
+    }
+    eventName = `Contract Deployed (${contractName})`
+    details = `${contractName} Deployed`
+    return {
+      event: eventName,
+      functionName,
+      contractName,
+      propertyId,
+      propertyTitle,
+      documentHash,
+      ownerWallet,
+      ownerName,
+      details,
+    }
+  }
+
+  // 2. Decode with ethers.Interface
+  if (txData && txData !== '0x') {
+    let parsed: ethers.TransactionDescription | null = null
+
+    // Match contract by "to" address
+    if (txTo === CONTRACT_ADDRESSES.PROPERTY_REGISTRY.toLowerCase()) {
+      contractName = 'PropertyRegistry'
+      try {
+        parsed = interfaces.propertyRegistry.parseTransaction({ data: tx.data!, value: tx.value || 0 })
+      } catch {}
+      if (!parsed) {
+        try {
+          parsed = interfaces.accessControl.parseTransaction({ data: tx.data!, value: tx.value || 0 })
+        } catch {}
+      }
+    } else if (txTo === CONTRACT_ADDRESSES.OWNERSHIP_REGISTRY.toLowerCase()) {
+      contractName = 'OwnershipRegistry'
+      try {
+        parsed = interfaces.ownershipRegistry.parseTransaction({ data: tx.data!, value: tx.value || 0 })
+      } catch {}
+      if (!parsed) {
+        try {
+          parsed = interfaces.accessControl.parseTransaction({ data: tx.data!, value: tx.value || 0 })
+        } catch {}
+      }
+    } else if (txTo === CONTRACT_ADDRESSES.TRANSACTION_MANAGER.toLowerCase()) {
+      contractName = 'TransactionManager'
+      try {
+        parsed = interfaces.transactionManager.parseTransaction({ data: tx.data!, value: tx.value || 0 })
+      } catch {}
+      if (!parsed) {
+        try {
+          parsed = interfaces.accessControl.parseTransaction({ data: tx.data!, value: tx.value || 0 })
+        } catch {}
+      }
+    } else {
+      // Try all interfaces
+      try {
+        parsed = interfaces.propertyRegistry.parseTransaction({ data: tx.data!, value: tx.value || 0 })
+        if (parsed) contractName = 'PropertyRegistry'
+      } catch {}
+      if (!parsed) {
+        try {
+          parsed = interfaces.ownershipRegistry.parseTransaction({ data: tx.data!, value: tx.value || 0 })
+          if (parsed) contractName = 'OwnershipRegistry'
+        } catch {}
+      }
+      if (!parsed) {
+        try {
+          parsed = interfaces.transactionManager.parseTransaction({ data: tx.data!, value: tx.value || 0 })
+          if (parsed) contractName = 'TransactionManager'
+        } catch {}
+      }
+      if (!parsed) {
+        try {
+          parsed = interfaces.accessControl.parseTransaction({ data: tx.data!, value: tx.value || 0 })
+        } catch {}
+      }
+    }
+
+    if (parsed) {
+      functionName = parsed.name
+      if (parsed.name === 'registerProperty') {
+        eventName = 'Property Registered'
+        propertyId = String(parsed.args[0] || parsed.args.propertyId || propertyId || '')
+        ownerWallet = String(parsed.args[1] || parsed.args.ownerWallet || ownerWallet || '')
+        const rawDh = parsed.args[2] || parsed.args.documentHash
+        if (rawDh) documentHash = String(rawDh)
+        details = `Property ${propertyId} Registered On-Chain`
+      } else if (parsed.name === 'recordInitialOwnership') {
+        eventName = 'Initial Owner Recorded'
+        propertyId = String(parsed.args[0] || parsed.args.propertyId || propertyId || '')
+        ownerWallet = String(parsed.args[1] || parsed.args.ownerWallet || ownerWallet || '')
+        details = `Initial Owner Recorded for ${propertyId}`
+      } else if (parsed.name === 'recordOwnershipTransfer') {
+        eventName = 'Ownership Transferred'
+        propertyId = String(parsed.args[0] || parsed.args.propertyId || propertyId || '')
+        ownerWallet = String(parsed.args[2] || parsed.args.newOwner || ownerWallet || '')
+        details = `Ownership Conveyance Recorded for ${propertyId}`
+      } else if (parsed.name === 'grantRole') {
+        eventName = 'Role Granted'
+        details = `${contractName} Role Granted`
+      } else if (parsed.name === 'createTransaction') {
+        eventName = 'Contract Call: createTransaction'
+        propertyId = String(parsed.args[1] || parsed.args.propertyId || propertyId || '')
+        details = `Transaction Created for ${propertyId}`
+      } else {
+        eventName = `Contract Call: ${parsed.name}`
+        details = `${contractName}.${parsed.name}`
+      }
+    } else if (txData.startsWith('0x2f2ff15d')) {
+      eventName = 'Role Granted'
+      functionName = 'grantRole'
+      details = `${contractName} Role Granted`
+    } else if (txData.startsWith('0x050888b8')) {
+      eventName = 'Property Registered'
+      functionName = 'registerProperty'
+    } else if (txData.startsWith('0xaff4c199')) {
+      eventName = 'Initial Owner Recorded'
+      functionName = 'recordInitialOwnership'
+    } else if (txData.startsWith('0x98d1ef86')) {
+      eventName = 'Ownership Transferred'
+      functionName = 'recordOwnershipTransfer'
+    }
+  }
+
+  // Lookup property metadata by property number / ID from registered properties or transfers
+  if (propertyId) {
+    const matchedProp = registeredProps.find(
+      (p) =>
+        p.property_id.toLowerCase() === propertyId!.toLowerCase() ||
+        (p.property_uuid && p.property_uuid.toLowerCase() === propertyId!.toLowerCase())
+    )
+    if (matchedProp) {
+      if (!propertyTitle) propertyTitle = matchedProp.title
+      if (!ownerWallet) ownerWallet = matchedProp.owner_wallet
+      if (!ownerName) ownerName = matchedProp.owner_name
+      if (!documentHash && matchedProp.document_hashes?.length) {
+        documentHash = matchedProp.document_hashes[0]
+      }
+    } else {
+      const matchedTransfer = transfers.find(
+        (t) => t.property_id.toLowerCase() === propertyId!.toLowerCase()
+      )
+      if (matchedTransfer) {
+        if (!propertyTitle) propertyTitle = matchedTransfer.property_title || matchedTransfer.property_id
+        if (!ownerWallet) ownerWallet = matchedTransfer.to_address
+        if (!ownerName) ownerName = matchedTransfer.to_owner
+      }
+    }
+  }
+
+  return {
+    event: eventName,
+    functionName,
+    contractName,
+    propertyId,
+    propertyTitle,
+    documentHash,
+    ownerWallet,
+    ownerName,
+    details,
   }
 }
 
@@ -263,6 +535,30 @@ export const BlockchainExplorerPage: React.FC = () => {
   const loadBlockchainData = useCallback(async () => {
     setIsLoading(true)
     try {
+      // 1. Initialize ethers.Interfaces with default human-readable ABIs
+      let propIface = new ethers.Interface(PROPERTY_REGISTRY_ABI)
+      let ownIface = new ethers.Interface(OWNERSHIP_REGISTRY_ABI)
+      let txMgrIface = new ethers.Interface(TRANSACTION_MANAGER_ABI)
+      const acIface = new ethers.Interface(ACCESS_CONTROL_ABI)
+
+      // Try loading full ABIs from localhost.json via dedicated backend endpoint or overview
+      try {
+        const contractsRes = await apiClient.get('/blockchain/contracts')
+        if (contractsRes.data?.contracts) {
+          const cData = contractsRes.data.contracts
+          if (cData.PropertyRegistry?.abi) propIface = new ethers.Interface(cData.PropertyRegistry.abi)
+          if (cData.OwnershipRegistry?.abi) ownIface = new ethers.Interface(cData.OwnershipRegistry.abi)
+          if (cData.TransactionManager?.abi) txMgrIface = new ethers.Interface(cData.TransactionManager.abi)
+        }
+      } catch {}
+
+      const activeInterfaces = {
+        propertyRegistry: propIface,
+        ownershipRegistry: ownIface,
+        transactionManager: txMgrIface,
+        accessControl: acIface,
+      }
+
       let backendOverview: any = null
       try {
         const res = await apiClient.get('/blockchain/overview')
@@ -281,18 +577,93 @@ export const BlockchainExplorerPage: React.FC = () => {
             status: backendOverview.network.status || 'Connected',
           }))
         }
-        if (Array.isArray(backendOverview.blocks)) {
-          setBlocks(backendOverview.blocks)
-        }
-        if (Array.isArray(backendOverview.transactions)) {
-          setTransactions(backendOverview.transactions)
-        }
-        if (Array.isArray(backendOverview.registeredProperties)) {
-          setRegisteredProperties(backendOverview.registeredProperties)
-        }
-        if (Array.isArray(backendOverview.ownershipTransfers)) {
-          setOwnershipTransfers(backendOverview.ownershipTransfers)
-        }
+
+        const rawRegProps: RegisteredPropertyTx[] = Array.isArray(backendOverview.registeredProperties)
+          ? backendOverview.registeredProperties
+          : []
+        const rawTransfers: OwnershipTransferTx[] = Array.isArray(backendOverview.ownershipTransfers)
+          ? backendOverview.ownershipTransfers
+          : []
+        const rawTxs: any[] = Array.isArray(backendOverview.transactions) ? backendOverview.transactions : []
+        const rawBlocks: any[] = Array.isArray(backendOverview.blocks) ? backendOverview.blocks : []
+
+        setRegisteredProperties(rawRegProps)
+        setOwnershipTransfers(rawTransfers)
+
+        // Decode every transaction using contract ABIs and map to friendly names
+        const decodedTxs: RealTx[] = rawTxs.map((t: any) => {
+          const dec = decodeTxWithInterfaces(t, activeInterfaces, rawRegProps, rawTransfers)
+          return {
+            ...t,
+            event: dec.event,
+            functionName: dec.functionName || t.functionName,
+            contractName: dec.contractName,
+            propertyId: dec.propertyId || t.propertyId,
+            propertyTitle: dec.propertyTitle || t.propertyTitle,
+            ownerWallet: dec.ownerWallet || t.ownerWallet,
+            ownerName: dec.ownerName || t.ownerName,
+            documentHash: dec.documentHash || t.documentHash,
+            details: dec.details || t.details,
+          }
+        })
+        setTransactions(decodedTxs)
+
+        // Enhance blocks with friendly event names, type classification and primary tx
+        const enhancedBlocks: RealBlock[] = rawBlocks.map((blk: any) => {
+          const blockTxs = decodedTxs.filter(
+            (t) => t.blockNumber === blk.blockNumber || (blk.transactions && blk.transactions.includes(t.hash))
+          )
+          const primaryTx = blockTxs[0]
+
+          let friendlyTitle = blk.friendlyTitle
+          let blockType = blk.blockType || 'Consensus Block'
+
+          if (blk.blockNumber === 0) {
+            friendlyTitle = 'Genesis Block'
+            blockType = 'Genesis Block'
+          } else {
+            const propRegTx = blockTxs.find((t) => t.event === 'Property Registered')
+            const initOwnerTx = blockTxs.find((t) => t.event === 'Initial Owner Recorded')
+            const transferTx = blockTxs.find((t) => t.event === 'Ownership Transferred')
+            const roleTx = blockTxs.find((t) => t.event === 'Role Granted')
+            const deployTx = blockTxs.find((t) => t.event.includes('Contract Deployed'))
+
+            if (propRegTx) {
+              friendlyTitle = 'Property Registered'
+              blockType = 'Property Registered'
+            } else if (initOwnerTx) {
+              friendlyTitle = 'Initial Owner Recorded'
+              blockType = 'Initial Owner Recorded'
+            } else if (transferTx) {
+              friendlyTitle = 'Ownership Transferred'
+              blockType = 'Ownership Transferred'
+            } else if (roleTx) {
+              friendlyTitle = blk.blockNumber <= 5 ? 'Role Authorization' : 'Role Granted'
+              blockType = blk.blockNumber <= 5 ? 'Role Authorization' : 'Role Granted'
+            } else if (deployTx) {
+              friendlyTitle = blk.blockNumber <= 5 ? 'Contract Deployment' : deployTx.event
+              blockType = 'Contract Deployment'
+            } else if (primaryTx) {
+              friendlyTitle = primaryTx.event
+              blockType = primaryTx.event.includes('Contract Call') ? 'Smart Contract Interaction' : primaryTx.event
+            }
+          }
+
+          return {
+            ...blk,
+            friendlyTitle: friendlyTitle || blk.blockType || 'Consensus Block',
+            blockType,
+            primaryTx,
+            propertyId: primaryTx?.propertyId || blk.transferDetails?.property_id,
+            propertyTitle: primaryTx?.propertyTitle || blk.transferDetails?.property_title,
+            ownerWallet: primaryTx?.ownerWallet || blk.transferDetails?.to_address,
+            ownerName: primaryTx?.ownerName || blk.transferDetails?.to_owner,
+            documentHash: primaryTx?.documentHash,
+            contractName: primaryTx?.contractName,
+          }
+        })
+        setBlocks(enhancedBlocks)
+
         if (Array.isArray(backendOverview.contracts)) {
           setContractsList(backendOverview.contracts)
         }
@@ -328,15 +699,8 @@ export const BlockchainExplorerPage: React.FC = () => {
                 }
               }
 
-              let hasDeployment = false
-              let hasPropReg = false
-              let hasTransfer = false
-              let hasRoleAuth = false
-
               const blockTxs: RealTx[] = []
               for (const tx of rawTxs) {
-                let eventName = 'Smart Contract Call'
-                let details = ''
                 let gasUsedFmt = '0 gas'
                 let txStatus: 'Confirmed' | 'Reverted' = 'Confirmed'
                 let contractAddress: string | null = null
@@ -350,47 +714,35 @@ export const BlockchainExplorerPage: React.FC = () => {
                   }
                 } catch {}
 
-                const txTo = (tx.to || '').toLowerCase()
-                const txData = (tx.data || '').toLowerCase()
-                const isRoleGrant = txData.startsWith('0x2f2ff15d')
-
-                if (!tx.to) {
-                  hasDeployment = true
-                  eventName = 'Contract deployed'
-                  const ca = (contractAddress || '').toLowerCase()
-                  if (ca && ca === CONTRACT_ADDRESSES.PROPERTY_REGISTRY.toLowerCase()) {
-                    details = 'PropertyRegistry Deployed'
-                  } else if (ca && ca === CONTRACT_ADDRESSES.OWNERSHIP_REGISTRY.toLowerCase()) {
-                    details = 'OwnershipRegistry Deployed'
-                  } else if (ca && ca === CONTRACT_ADDRESSES.TRANSACTION_MANAGER.toLowerCase()) {
-                    details = 'TransactionManager Deployed'
-                  } else {
-                    details = 'Smart Contract Deployed'
-                  }
-                } else if (isRoleGrant) {
-                  hasRoleAuth = true
-                  eventName = 'Role granted'
-                  details = 'AccessControl Role Granted'
-                } else if (txTo === CONTRACT_ADDRESSES.PROPERTY_REGISTRY.toLowerCase()) {
-                  hasPropReg = true
-                  eventName = 'Property registered'
-                  details = 'Property Registered On-Chain'
-                } else if (txTo === CONTRACT_ADDRESSES.OWNERSHIP_REGISTRY.toLowerCase()) {
-                  hasTransfer = true
-                  eventName = 'Ownership transferred'
-                  details = 'Ownership Conveyance Recorded'
-                } else if (txTo === CONTRACT_ADDRESSES.TRANSACTION_MANAGER.toLowerCase()) {
-                  eventName = 'Transaction initiated'
-                  details = 'TransactionManager Call'
-                }
+                const decoded = decodeTxWithInterfaces(
+                  {
+                    hash: tx.hash,
+                    from: tx.from,
+                    to: tx.to,
+                    data: tx.data,
+                    value: tx.value,
+                    receiptContractAddress: contractAddress,
+                  },
+                  activeInterfaces,
+                  registeredProperties,
+                  ownershipTransfers
+                )
 
                 blockTxs.push({
                   hash: tx.hash,
                   blockNumber: block.number,
                   from: tx.from,
                   to: tx.to || 'Contract Deployment',
-                  event: eventName,
-                  details,
+                  contractName: decoded.contractName,
+                  event: decoded.event,
+                  functionName: decoded.functionName,
+                  propertyId: decoded.propertyId,
+                  propertyTitle: decoded.propertyTitle,
+                  ownerWallet: decoded.ownerWallet,
+                  ownerName: decoded.ownerName,
+                  documentHash: decoded.documentHash,
+                  details: decoded.details,
+                  data: tx.data,
                   gasUsed: gasUsedFmt,
                   status: txStatus,
                   value: ethers.formatEther(tx.value || 0) + ' ETH',
@@ -398,17 +750,36 @@ export const BlockchainExplorerPage: React.FC = () => {
                 })
               }
 
+              const propRegTx = blockTxs.find((t) => t.event === 'Property Registered')
+              const initOwnerTx = blockTxs.find((t) => t.event === 'Initial Owner Recorded')
+              const transferTx = blockTxs.find((t) => t.event === 'Ownership Transferred')
+              const roleTx = blockTxs.find((t) => t.event === 'Role Granted')
+              const deployTx = blockTxs.find((t) => t.event.includes('Contract Deployed'))
+              const primaryTx = blockTxs[0]
+
               let blockType = 'Smart Contract Interaction'
+              let friendlyTitle = 'Smart Contract Interaction'
               if (block.number === 0) {
                 blockType = 'Genesis Block'
-              } else if (hasPropReg) {
-                blockType = 'Property Registration'
-              } else if (hasTransfer) {
-                blockType = 'Ownership Transfer'
-              } else if (hasDeployment) {
+                friendlyTitle = 'Genesis Block'
+              } else if (propRegTx) {
+                blockType = 'Property Registered'
+                friendlyTitle = 'Property Registered'
+              } else if (initOwnerTx) {
+                blockType = 'Initial Owner Recorded'
+                friendlyTitle = 'Initial Owner Recorded'
+              } else if (transferTx) {
+                blockType = 'Ownership Transferred'
+                friendlyTitle = 'Ownership Transferred'
+              } else if (roleTx) {
+                blockType = block.number <= 5 ? 'Role Authorization' : 'Role Granted'
+                friendlyTitle = block.number <= 5 ? 'Role Authorization' : 'Role Granted'
+              } else if (deployTx) {
                 blockType = 'Contract Deployment'
-              } else if (hasRoleAuth) {
-                blockType = 'Role Authorization'
+                friendlyTitle = block.number <= 5 ? 'Contract Deployment' : deployTx.event
+              } else if (primaryTx) {
+                friendlyTitle = primaryTx.event
+                blockType = primaryTx.event.includes('Contract Call') ? 'Smart Contract Interaction' : primaryTx.event
               }
 
               fetchedBlocks.push({
@@ -422,6 +793,14 @@ export const BlockchainExplorerPage: React.FC = () => {
                 baseFeePerGas: block.baseFeePerGas ? `${block.baseFeePerGas.toString()} wei` : undefined,
                 miner: block.miner,
                 blockType,
+                friendlyTitle,
+                primaryTx,
+                propertyId: primaryTx?.propertyId,
+                propertyTitle: primaryTx?.propertyTitle,
+                ownerWallet: primaryTx?.ownerWallet,
+                ownerName: primaryTx?.ownerName,
+                documentHash: primaryTx?.documentHash,
+                contractName: primaryTx?.contractName,
                 transactions: block.transactions.map((t: any) => (typeof t === 'string' ? t : t.hash)),
               })
 
@@ -456,7 +835,7 @@ export const BlockchainExplorerPage: React.FC = () => {
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }, [registeredProperties, ownershipTransfers])
 
   useEffect(() => {
     loadBlockchainData()
@@ -677,13 +1056,10 @@ export const BlockchainExplorerPage: React.FC = () => {
             Role Authorization
           </span>
           <span className="px-2 py-0.5 rounded border bg-emerald-950/70 text-emerald-300 border-emerald-500/40">
-            Property Registration
+            Property Registered
           </span>
-          <span className="px-2 py-0.5 rounded border bg-indigo-950/70 text-indigo-300 border-indigo-500/40">
-            Ownership Transferred
-          </span>
-          <span className="px-2 py-0.5 rounded border bg-cyan-950/70 text-cyan-300 border-cyan-500/40">
-            Smart Contract Interaction
+          <span className="px-2 py-0.5 rounded border bg-purple-950/70 text-purple-300 border-purple-500/40">
+            Ownership (Initial & Conveyance)
           </span>
         </div>
 
@@ -741,14 +1117,22 @@ export const BlockchainExplorerPage: React.FC = () => {
                     <div className={`absolute top-0 left-0 right-0 h-1 ${theme.topAccentClass}`} />
 
                     {/* Header: Block Number & Type */}
-                    <div className="flex items-center justify-between gap-1.5 mb-2.5">
+                    <div className="flex items-center justify-between gap-1.5 mb-1.5">
                       <div className="flex items-center gap-1.5">
                         <Box className={`h-4 w-4 ${theme.iconClass}`} />
                         <span className="font-mono font-bold text-sm text-white">Block #{blk.blockNumber}</span>
                       </div>
                       <span className={`text-[10px] font-semibold px-2 py-0.5 rounded border ${theme.badgeClass}`}>
-                        {blk.blockType?.toLowerCase().includes('ownership') ? 'Ownership Transferred' : theme.label}
+                        {blk.friendlyTitle || theme.label}
                       </span>
+                    </div>
+
+                    {/* Block Title under block number */}
+                    <div
+                      className={`text-xs font-semibold mb-2 truncate ${theme.titleClass}`}
+                      title={`Block #${blk.blockNumber} – ${blk.friendlyTitle || theme.label}`}
+                    >
+                      Block #{blk.blockNumber} – {blk.friendlyTitle || theme.label}
                     </div>
 
                     {/* Ownership Transfer Summary if applicable */}
@@ -955,57 +1339,84 @@ export const BlockchainExplorerPage: React.FC = () => {
           </CardHeader>
           <CardContent className="text-xs">
             {searchResult.type === 'transaction' ? (
-              <div className="space-y-2 font-mono">
-                <div className="flex justify-between py-1 border-b border-blue-100 items-center">
-                  <span className="text-slate-500">Tx Hash:</span>
-                  <HashDisplay value={searchResult.data.hash} explorerLink className="bg-transparent border-0 px-0" />
+              <div className="space-y-2.5 font-mono">
+                <div className="p-2.5 rounded-lg bg-blue-100/60 border border-blue-200 mb-2 flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] text-blue-600 block uppercase font-sans font-semibold">Action / Event</span>
+                    <span className="text-sm font-bold text-blue-950 font-sans">{searchResult.data.event}</span>
+                  </div>
+                  <StatusBadge status={searchResult.data.status} />
                 </div>
-                <div className="flex justify-between py-1 border-b border-blue-100">
-                  <span className="text-slate-500">Status:</span>
-                  <span className="flex items-center gap-1">
-                    {searchResult.data.status === 'Confirmed' ? (
-                      <span className="text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded font-sans font-semibold flex items-center gap-1 text-[11px]">
-                        <CheckCircle2 className="h-3 w-3" /> Confirmed On-Chain
-                      </span>
-                    ) : (
-                      <span className="text-rose-700 bg-rose-100 px-2 py-0.5 rounded font-sans font-semibold flex items-center gap-1 text-[11px]">
-                        <XCircle className="h-3 w-3" /> Reverted
-                      </span>
-                    )}
-                  </span>
-                </div>
-                <div className="flex justify-between py-1 border-b border-blue-100">
-                  <span className="text-slate-500">Block Number:</span>
-                  <span className="text-blue-700 font-bold">#{searchResult.data.blockNumber}</span>
-                </div>
-                <div className="flex justify-between py-1 border-b border-blue-100">
-                  <span className="text-slate-500">From:</span>
-                  <span className="text-slate-800 break-all">{searchResult.data.from}</span>
-                </div>
-                <div className="flex justify-between py-1 border-b border-blue-100">
-                  <span className="text-slate-500">To:</span>
-                  <span className="text-slate-800 break-all">{searchResult.data.to}</span>
-                </div>
-                {searchResult.data.propertyId && (
-                  <div className="flex justify-between py-1 border-b border-blue-100">
-                    <span className="text-slate-500">Property Identifier:</span>
-                    <span className="font-bold text-blue-700 bg-blue-100/70 px-2 py-0.5 rounded">
-                      {searchResult.data.propertyId}
+
+                {(searchResult.data.propertyTitle || searchResult.data.propertyId) && (
+                  <div className="flex justify-between py-1 border-b border-blue-100 font-sans">
+                    <span className="text-slate-500">Property:</span>
+                    <span className="font-bold text-blue-900 block">
+                      {searchResult.data.propertyTitle ? `${searchResult.data.propertyTitle}${searchResult.data.propertyId ? ` (${searchResult.data.propertyId})` : ''}` : searchResult.data.propertyId}
                     </span>
                   </div>
                 )}
+
+                {searchResult.data.ownerWallet && (
+                  <div className="flex justify-between py-1 border-b border-blue-100 font-sans">
+                    <span className="text-slate-500">Owner Wallet:</span>
+                    <div className="text-right font-mono text-[11px]">
+                      {searchResult.data.ownerName && (
+                        <span className="font-sans font-medium text-slate-800 block text-xs">
+                          {searchResult.data.ownerName}
+                        </span>
+                      )}
+                      <HashDisplay value={searchResult.data.ownerWallet} copyable explorerLink className="bg-transparent border-0 px-0" />
+                    </div>
+                  </div>
+                )}
+
                 {searchResult.data.documentHash && (
-                  <div className="flex justify-between py-1 border-b border-blue-100">
-                    <span className="text-slate-500">Deed Document Hash:</span>
-                    <span className="font-bold text-emerald-800 bg-emerald-100/80 px-2 py-0.5 rounded break-all text-[11px]">
-                      {searchResult.data.documentHash}
+                  <div className="space-y-1 py-1 border-b border-blue-100 font-sans">
+                    <span className="text-slate-500 block mb-1">Deed Document Hash:</span>
+                    <HashDisplay value={searchResult.data.documentHash} copyable fullHash label="SHA-256" />
+                  </div>
+                )}
+
+                <div className="space-y-1 py-1 border-b border-blue-100 font-sans">
+                  <span className="text-slate-500 block mb-1">Tx Hash:</span>
+                  <HashDisplay value={searchResult.data.hash} copyable fullHash explorerLink className="bg-transparent border-0 px-0" />
+                </div>
+
+                <div className="flex justify-between py-1 border-b border-blue-100 font-sans">
+                  <span className="text-slate-500">Block Number:</span>
+                  <span className="text-blue-700 font-bold font-mono">#{searchResult.data.blockNumber}</span>
+                </div>
+
+                {searchResult.data.from && (
+                  <div className="flex justify-between py-1 border-b border-blue-100 font-sans">
+                    <span className="text-slate-500">From:</span>
+                    <span className="text-slate-800 font-mono text-[11px]">{getAddressLabel(searchResult.data.from)}</span>
+                  </div>
+                )}
+
+                {searchResult.data.to && (
+                  <div className="flex justify-between py-1 border-b border-blue-100 font-sans">
+                    <span className="text-slate-500">To Contract:</span>
+                    <span className="font-semibold text-slate-800 font-sans">
+                      {searchResult.data.contractName || getContractFriendlyName(searchResult.data.to)}
                     </span>
                   </div>
                 )}
-                <div className="flex justify-between py-1">
-                  <span className="text-slate-500">Contract Event / Action:</span>
-                  <span className="text-emerald-700 font-semibold">{searchResult.data.event}</span>
-                </div>
+
+                {searchResult.data.gasUsed && (
+                  <div className="flex justify-between py-1 border-b border-blue-100 font-sans">
+                    <span className="text-slate-500">Gas Used:</span>
+                    <span className="text-slate-800 font-mono">{searchResult.data.gasUsed}</span>
+                  </div>
+                )}
+
+                {searchResult.data.timestamp && (
+                  <div className="flex justify-between py-1 font-sans">
+                    <span className="text-slate-500">Timestamp:</span>
+                    <span className="text-slate-800">{formatDate(searchResult.data.timestamp)}</span>
+                  </div>
+                )}
               </div>
             ) : searchResult.type === 'property' ? (
               <div className="space-y-2 font-mono">
@@ -1046,8 +1457,10 @@ export const BlockchainExplorerPage: React.FC = () => {
             ) : searchResult.type === 'block' ? (
               <div className="space-y-2 font-mono">
                 <div className="flex justify-between py-1 border-b border-blue-100">
-                  <span className="text-slate-500">Block Height:</span>
-                  <span className="font-bold text-slate-900 text-sm">#{searchResult.data.blockNumber}</span>
+                  <span className="text-slate-500 font-sans">Block:</span>
+                  <span className="font-bold text-slate-900 text-sm font-sans">
+                    Block #{searchResult.data.blockNumber} – {searchResult.data.friendlyTitle || searchResult.data.blockType || 'Consensus Block'}
+                  </span>
                 </div>
                 <div className="flex justify-between py-1 border-b border-blue-100">
                   <span className="text-slate-500">Block Hash:</span>
@@ -1346,9 +1759,9 @@ export const BlockchainExplorerPage: React.FC = () => {
                             ? 'bg-blue-50 text-blue-800 border-blue-200'
                             : 'bg-slate-100 text-slate-800 border-slate-200'
 
-                          const propLabel = tx.propertyTitle || tx.propertyId
+                          const propDisplayTitle = tx.propertyTitle
                             ? getPropertyLabel({ title: tx.propertyTitle, property_number: tx.propertyId })
-                            : null
+                            : tx.propertyId
 
                           return (
                             <TableRow key={tx.hash} className="hover:bg-slate-50/60 transition-colors">
@@ -1365,11 +1778,13 @@ export const BlockchainExplorerPage: React.FC = () => {
                                 </div>
                               </TableCell>
                               <TableCell>
-                                {propLabel ? (
+                                {propDisplayTitle || tx.propertyId ? (
                                   <div>
-                                    <p className="font-semibold text-slate-800">{propLabel}</p>
-                                    {tx.propertyId && (
-                                      <p className="font-mono text-[10px] text-blue-600">{tx.propertyId}</p>
+                                    <p className="font-semibold text-slate-800">
+                                      {propDisplayTitle || 'Property'}
+                                    </p>
+                                    {tx.propertyId && propDisplayTitle !== tx.propertyId && (
+                                      <p className="font-mono text-[10px] text-blue-600 font-medium">{tx.propertyId}</p>
                                     )}
                                   </div>
                                 ) : (
@@ -1377,11 +1792,14 @@ export const BlockchainExplorerPage: React.FC = () => {
                                 )}
                               </TableCell>
                               <TableCell>
-                                <span className="font-mono text-[11px] text-slate-700 font-medium">{getAddressLabel(tx.from)}</span>
+                                <div>
+                                  {tx.ownerName && <p className="text-[11px] font-medium text-slate-800">{tx.ownerName}</p>}
+                                  <span className="font-mono text-[11px] text-slate-700 font-medium">{getAddressLabel(tx.from)}</span>
+                                </div>
                               </TableCell>
                               <TableCell>
                                 {tx.documentHash ? (
-                                  <HashDisplay value={tx.documentHash} explorerLink label="SHA-256" />
+                                  <HashDisplay value={tx.documentHash} copyable label="SHA-256" />
                                 ) : (
                                   <span className="text-slate-400 font-mono">—</span>
                                 )}
@@ -1501,7 +1919,7 @@ export const BlockchainExplorerPage: React.FC = () => {
                               blk.blockType
                             )}`}
                           >
-                            {blk.blockType || 'Consensus Block'}
+                            {blk.friendlyTitle || blk.blockType || 'Consensus Block'}
                           </span>
                         </TableCell>
                         <TableCell className="font-mono text-slate-700">
@@ -1579,13 +1997,25 @@ export const BlockchainExplorerPage: React.FC = () => {
                     transactions.map((tx) => (
                       <TableRow key={tx.hash} className="hover:bg-blue-50/40">
                         <TableCell className="font-mono">
-                          <HashDisplay value={tx.hash} explorerLink className="bg-transparent border-0 px-0" />
+                          <HashDisplay value={tx.hash} explorerLink copyable className="bg-transparent border-0 px-0" />
                         </TableCell>
                         <TableCell className="font-mono text-blue-600 font-semibold">#{tx.blockNumber}</TableCell>
                         <TableCell className="font-mono text-slate-600">{getAddressLabel(tx.from)}</TableCell>
-                        <TableCell className="font-mono text-slate-600">{getAddressLabel(tx.to)}</TableCell>
+                        <TableCell className="font-mono text-slate-700 font-medium">
+                          {tx.contractName || getContractFriendlyName(tx.to)}
+                        </TableCell>
                         <TableCell>
-                          <span className="bg-emerald-50 text-emerald-800 font-semibold px-2 py-0.5 rounded font-mono text-[11px]">
+                          <span className={`font-semibold px-2 py-0.5 rounded font-mono text-[11px] border ${
+                            tx.event.includes('Property Registered')
+                              ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                              : tx.event.includes('Initial Owner') || tx.event.includes('Ownership')
+                              ? 'bg-purple-50 text-purple-800 border-purple-200'
+                              : tx.event.includes('Role')
+                              ? 'bg-amber-50 text-amber-800 border-amber-200'
+                              : tx.event.includes('Deploy')
+                              ? 'bg-blue-50 text-blue-800 border-blue-200'
+                              : 'bg-slate-100 text-slate-800 border-slate-200'
+                          }`}>
                             {tx.event}
                           </span>
                         </TableCell>
@@ -1595,7 +2025,7 @@ export const BlockchainExplorerPage: React.FC = () => {
                               {tx.propertyId}
                             </span>
                           ) : (
-                            <span className="text-slate-400">—</span>
+                            <span className="text-slate-400 font-mono">—</span>
                           )}
                         </TableCell>
                         <TableCell>
@@ -1847,9 +2277,11 @@ export const BlockchainExplorerPage: React.FC = () => {
                     <Blocks className="h-4 w-4" />
                   </div>
                   <div>
-                    <h3 className="font-bold text-base text-white">Block #{selectedBlock.blockNumber}</h3>
+                    <h3 className="font-bold text-base text-white">
+                      Block #{selectedBlock.blockNumber} – {selectedBlock.friendlyTitle || getBlockVisualTheme(selectedBlock.blockType).label}
+                    </h3>
                     <span className={`text-[10px] font-semibold px-2 py-0.5 rounded border inline-block mt-0.5 ${getBlockTypeBadgeClass(selectedBlock.blockType)}`}>
-                      {selectedBlock.blockType?.toLowerCase().includes('ownership') ? 'Ownership Transferred' : (selectedBlock.blockType || 'Consensus Block')}
+                      {selectedBlock.friendlyTitle || selectedBlock.blockType || 'Consensus Block'}
                     </span>
                   </div>
                 </div>
@@ -1901,6 +2333,85 @@ export const BlockchainExplorerPage: React.FC = () => {
                     </p>
                   )}
                 </div>
+
+                {/* Decoded Transaction / Property Summary Card */}
+                {(selectedBlock.friendlyTitle || selectedBlock.propertyId || selectedBlock.primaryTx) && (
+                  <div className="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 space-y-2 text-xs">
+                    <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                      <span className="text-[10px] text-slate-400 uppercase font-sans font-semibold tracking-wider">
+                        Action / Event
+                      </span>
+                      <span className="text-xs font-bold text-white font-sans">
+                        {selectedBlock.friendlyTitle || selectedBlock.primaryTx?.event || 'Block Activity'}
+                      </span>
+                    </div>
+
+                    {(selectedBlock.propertyTitle || selectedBlock.propertyId) && (
+                      <div className="flex justify-between py-1 border-b border-slate-800/60 font-sans">
+                        <span className="text-slate-400 text-[11px]">Property:</span>
+                        <div className="text-right">
+                          <span className="font-bold text-white block">
+                            {selectedBlock.propertyTitle ? `${selectedBlock.propertyTitle}${selectedBlock.propertyId ? ` (${selectedBlock.propertyId})` : ''}` : selectedBlock.propertyId}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    {selectedBlock.ownerWallet && (
+                      <div className="flex justify-between py-1 border-b border-slate-800/60 font-sans">
+                        <span className="text-slate-400 text-[11px]">Owner Wallet:</span>
+                        <div className="text-right font-mono text-[11px]">
+                          {selectedBlock.ownerName && (
+                            <span className="font-sans font-medium text-slate-300 block text-xs">
+                              {selectedBlock.ownerName}
+                            </span>
+                          )}
+                          <HashDisplay value={selectedBlock.ownerWallet} copyable explorerLink className="bg-transparent border-0 px-0 text-slate-300" />
+                        </div>
+                      </div>
+                    )}
+
+                    {selectedBlock.documentHash && (
+                      <div className="py-1 border-b border-slate-800/60 font-sans">
+                        <span className="text-slate-400 text-[11px] block mb-1">Deed Hash (SHA-256):</span>
+                        <HashDisplay value={selectedBlock.documentHash} copyable fullHash label="SHA-256" className="text-emerald-300" />
+                      </div>
+                    )}
+
+                    {selectedBlock.primaryTx?.hash && (
+                      <div className="py-1 border-b border-slate-800/60 font-sans">
+                        <span className="text-slate-400 text-[11px] block mb-1">Transaction Hash:</span>
+                        <HashDisplay value={selectedBlock.primaryTx.hash} copyable fullHash explorerLink className="text-blue-300" />
+                      </div>
+                    )}
+
+                    <div className="flex justify-between py-1 border-b border-slate-800/60 font-sans">
+                      <span className="text-slate-400 text-[11px]">Block Number:</span>
+                      <span className="font-mono font-bold text-blue-400">#{selectedBlock.blockNumber}</span>
+                    </div>
+
+                    {selectedBlock.contractName && (
+                      <div className="flex justify-between py-1 border-b border-slate-800/60 font-sans">
+                        <span className="text-slate-400 text-[11px]">To Contract:</span>
+                        <span className="font-sans font-semibold text-slate-200">{selectedBlock.contractName}</span>
+                      </div>
+                    )}
+
+                    {selectedBlock.gasUsed && (
+                      <div className="flex justify-between py-1 border-b border-slate-800/60 font-sans">
+                        <span className="text-slate-400 text-[11px]">Gas Used:</span>
+                        <span className="font-mono text-slate-300">{selectedBlock.gasUsed}</span>
+                      </div>
+                    )}
+
+                    {selectedBlock.timestamp && (
+                      <div className="flex justify-between py-1 font-sans">
+                        <span className="text-slate-400 text-[11px]">Time:</span>
+                        <span className="text-slate-300 text-[11px]">{formatDate(selectedBlock.timestamp)}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Ownership Transfer Details Card */}
                 {(() => {
@@ -2042,7 +2553,7 @@ export const BlockchainExplorerPage: React.FC = () => {
             setSelectedBlock(null)
             setBlockDetailView('basic')
           }}
-          title={`Block Details #${selectedBlock.blockNumber}`}
+          title={`Block #${selectedBlock.blockNumber} – ${selectedBlock.friendlyTitle || getBlockVisualTheme(selectedBlock.blockType).label}`}
           description={
             user?.role === 'ADMIN'
               ? 'EVM Consensus Block with cryptographic state roots and gas telemetry.'
@@ -2075,6 +2586,85 @@ export const BlockchainExplorerPage: React.FC = () => {
                   <Cpu className="h-3.5 w-3.5" />
                   Advanced Technical View (Admin)
                 </button>
+              </div>
+            )}
+
+            {/* Decoded Transaction / Property Summary Card */}
+            {(selectedBlock.friendlyTitle || selectedBlock.propertyId || selectedBlock.primaryTx) && (
+              <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-2 text-xs mb-3">
+                <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                  <span className="text-[10px] text-slate-500 uppercase font-sans font-semibold tracking-wider">
+                    Action / Event
+                  </span>
+                  <span className="text-sm font-bold text-slate-900 font-sans">
+                    {selectedBlock.friendlyTitle || selectedBlock.primaryTx?.event || 'Block Activity'}
+                  </span>
+                </div>
+
+                {(selectedBlock.propertyTitle || selectedBlock.propertyId) && (
+                  <div className="flex justify-between py-1 border-b border-slate-100 font-sans">
+                    <span className="text-slate-500 text-[11px]">Property:</span>
+                    <div className="text-right">
+                      <span className="font-bold text-slate-900 block">
+                        {selectedBlock.propertyTitle ? `${selectedBlock.propertyTitle}${selectedBlock.propertyId ? ` (${selectedBlock.propertyId})` : ''}` : selectedBlock.propertyId}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {selectedBlock.ownerWallet && (
+                  <div className="flex justify-between py-1 border-b border-slate-100 font-sans">
+                    <span className="text-slate-500 text-[11px]">Owner Wallet:</span>
+                    <div className="text-right font-mono text-[11px]">
+                      {selectedBlock.ownerName && (
+                        <span className="font-sans font-medium text-slate-800 block text-xs">
+                          {selectedBlock.ownerName}
+                        </span>
+                      )}
+                      <HashDisplay value={selectedBlock.ownerWallet} copyable explorerLink className="bg-transparent border-0 px-0 text-slate-700" />
+                    </div>
+                  </div>
+                )}
+
+                {selectedBlock.documentHash && (
+                  <div className="py-1 border-b border-slate-100 font-sans">
+                    <span className="text-slate-500 text-[11px] block mb-1">Deed Hash (SHA-256):</span>
+                    <HashDisplay value={selectedBlock.documentHash} copyable fullHash label="SHA-256" />
+                  </div>
+                )}
+
+                {selectedBlock.primaryTx?.hash && (
+                  <div className="py-1 border-b border-slate-100 font-sans">
+                    <span className="text-slate-500 text-[11px] block mb-1">Transaction Hash:</span>
+                    <HashDisplay value={selectedBlock.primaryTx.hash} copyable fullHash explorerLink />
+                  </div>
+                )}
+
+                <div className="flex justify-between py-1 border-b border-slate-100 font-sans">
+                  <span className="text-slate-500 text-[11px]">Block Number:</span>
+                  <span className="font-mono font-bold text-blue-700">#{selectedBlock.blockNumber}</span>
+                </div>
+
+                {selectedBlock.contractName && (
+                  <div className="flex justify-between py-1 border-b border-slate-100 font-sans">
+                    <span className="text-slate-500 text-[11px]">To Contract:</span>
+                    <span className="font-sans font-semibold text-slate-800">{selectedBlock.contractName}</span>
+                  </div>
+                )}
+
+                {selectedBlock.gasUsed && (
+                  <div className="flex justify-between py-1 border-b border-slate-100 font-sans">
+                    <span className="text-slate-500 text-[11px]">Gas Used:</span>
+                    <span className="font-mono text-slate-700">{selectedBlock.gasUsed}</span>
+                  </div>
+                )}
+
+                {selectedBlock.timestamp && (
+                  <div className="flex justify-between py-1 font-sans">
+                    <span className="text-slate-500 text-[11px]">Time:</span>
+                    <span className="text-slate-700 text-[11px]">{formatDate(selectedBlock.timestamp)}</span>
+                  </div>
+                )}
               </div>
             )}
 
@@ -2190,73 +2780,129 @@ export const BlockchainExplorerPage: React.FC = () => {
         <Modal
           isOpen={Boolean(selectedTx)}
           onClose={() => setSelectedTx(null)}
-          title="Transaction Details"
+          title={`Transaction Details: ${selectedTx.event}`}
           description="EVM verified state transition on PropChain smart contracts."
           maxWidth="lg"
         >
-          <div className="space-y-3 font-mono text-xs">
-            <div className="flex justify-between py-1.5 border-b border-slate-100 items-center">
-              <span className="text-slate-500 font-sans">Confirmation Status:</span>
-              <span className="flex items-center gap-1">
-                {selectedTx.status === 'Confirmed' ? (
-                  <span className="text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded font-sans font-semibold flex items-center gap-1 text-[11px]">
-                    <CheckCircle2 className="h-3 w-3" /> Confirmed On-Chain
-                  </span>
-                ) : (
-                  <span className="text-rose-700 bg-rose-100 px-2 py-0.5 rounded font-sans font-semibold flex items-center gap-1 text-[11px]">
-                    <XCircle className="h-3 w-3" /> Reverted
-                  </span>
-                )}
+          {/* Header Title with Friendly Name */}
+          <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between mb-4">
+            <div>
+              <span className="text-[10px] text-slate-500 block uppercase font-sans font-semibold tracking-wider">
+                Event / Action
+              </span>
+              <span className="text-base font-bold text-slate-900 font-sans">
+                {selectedTx.event}
               </span>
             </div>
-            <div className="space-y-1 py-1.5 border-b border-slate-100">
-              <span className="text-slate-500 font-sans block">Transaction Hash:</span>
-              <span className="text-slate-900 break-all font-semibold select-all">{selectedTx.hash}</span>
-            </div>
-            <div className="flex justify-between py-1.5 border-b border-slate-100">
-              <span className="text-slate-500 font-sans">Block Number:</span>
-              <span className="text-blue-700 font-bold">#{selectedTx.blockNumber}</span>
-            </div>
-            <div className="flex justify-between py-1.5 border-b border-slate-100">
-              <span className="text-slate-500 font-sans">From Address:</span>
-              <span className="text-slate-800 break-all">{getAddressLabel(selectedTx.from)}</span>
-            </div>
-            <div className="flex justify-between py-1.5 border-b border-slate-100">
-              <span className="text-slate-500 font-sans">To Address:</span>
-              <span className="text-slate-800 break-all">{getAddressLabel(selectedTx.to)}</span>
-            </div>
-            <div className="flex justify-between py-1.5 border-b border-slate-100">
-              <span className="text-slate-500 font-sans">Transaction Type / Event:</span>
-              <span className="text-emerald-700 font-semibold">{selectedTx.event}</span>
-            </div>
-            {selectedTx.propertyId && (
+            <StatusBadge status={selectedTx.status} />
+          </div>
+
+          <div className="space-y-3 font-mono text-xs">
+            {/* Property: simple property name and Parcel ID, looked up from backend by property number */}
+            {(selectedTx.propertyTitle || selectedTx.propertyId) && (
               <div className="flex justify-between py-1.5 border-b border-slate-100">
-                <span className="text-slate-500 font-sans">Property ID:</span>
-                <span className="font-bold text-blue-700 bg-blue-100/70 px-2 py-0.5 rounded">
-                  {selectedTx.propertyId}
-                </span>
+                <span className="text-slate-500 font-sans">Property:</span>
+                <div className="text-right">
+                  <span className="font-sans font-bold text-slate-900 block">
+                    {selectedTx.propertyTitle ? `${selectedTx.propertyTitle}${selectedTx.propertyId ? ` (${selectedTx.propertyId})` : ''}` : selectedTx.propertyId}
+                  </span>
+                </div>
               </div>
             )}
+
+            {/* Owner wallet with seller's name when known */}
+            {selectedTx.ownerWallet && (
+              <div className="flex justify-between py-1.5 border-b border-slate-100">
+                <span className="text-slate-500 font-sans">Owner Wallet:</span>
+                <div className="text-right">
+                  {selectedTx.ownerName && (
+                    <span className="font-sans font-medium text-slate-800 block text-xs">
+                      {selectedTx.ownerName}
+                    </span>
+                  )}
+                  <HashDisplay
+                    value={selectedTx.ownerWallet}
+                    copyable
+                    fullHash
+                    explorerLink
+                    className="bg-transparent border-0 px-0"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Deed Hash: HashDisplay, full value with copy */}
             {selectedTx.documentHash && (
               <div className="space-y-1 py-1.5 border-b border-slate-100">
-                <span className="text-slate-500 font-sans block">Verified Document Hash (SHA-256):</span>
-                <span className="text-emerald-800 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded break-all text-[11px] block select-all">
-                  {selectedTx.documentHash}
-                </span>
+                <span className="text-slate-500 font-sans block">Deed Hash (SHA-256):</span>
+                <HashDisplay
+                  value={selectedTx.documentHash}
+                  copyable
+                  fullHash
+                  label="SHA-256"
+                />
               </div>
             )}
-            <div className="flex justify-between py-1.5 border-b border-slate-100">
-              <span className="text-slate-500 font-sans">Value Transferred:</span>
-              <span className="text-slate-800">{selectedTx.value || '0 ETH'}</span>
-            </div>
-            <div className="flex justify-between py-1.5 border-b border-slate-100">
-              <span className="text-slate-500 font-sans">Gas Used:</span>
-              <span className="text-slate-800">{selectedTx.gasUsed}</span>
-            </div>
-            <div className="flex justify-between py-1.5">
-              <span className="text-slate-500 font-sans">Timestamp:</span>
-              <span className="text-slate-800 font-sans">{formatDate(selectedTx.timestamp)}</span>
-            </div>
+
+            {/* Tx Hash */}
+            {selectedTx.hash && (
+              <div className="space-y-1 py-1.5 border-b border-slate-100">
+                <span className="text-slate-500 font-sans block">Transaction Hash:</span>
+                <HashDisplay
+                  value={selectedTx.hash}
+                  copyable
+                  fullHash
+                  explorerLink
+                />
+              </div>
+            )}
+
+            {/* Block Number */}
+            {selectedTx.blockNumber !== undefined && selectedTx.blockNumber !== null && (
+              <div className="flex justify-between py-1.5 border-b border-slate-100">
+                <span className="text-slate-500 font-sans">Block Number:</span>
+                <span className="text-blue-700 font-bold">#{selectedTx.blockNumber}</span>
+              </div>
+            )}
+
+            {/* From Address */}
+            {selectedTx.from && (
+              <div className="flex justify-between py-1.5 border-b border-slate-100">
+                <span className="text-slate-500 font-sans">From Address:</span>
+                <span className="text-slate-800 break-all">{getAddressLabel(selectedTx.from)}</span>
+              </div>
+            )}
+
+            {/* To Contract with contract NAME instead of only address */}
+            {selectedTx.to && (
+              <div className="flex justify-between py-1.5 border-b border-slate-100">
+                <span className="text-slate-500 font-sans">To Contract:</span>
+                <div className="text-right">
+                  <span className="font-semibold text-slate-800 font-sans block">
+                    {selectedTx.contractName || getContractFriendlyName(selectedTx.to)}
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-mono">
+                    {truncateHash(selectedTx.to, 6, 4)}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* Gas Used */}
+            {selectedTx.gasUsed && (
+              <div className="flex justify-between py-1.5 border-b border-slate-100">
+                <span className="text-slate-500 font-sans">Gas Used:</span>
+                <span className="text-slate-800">{selectedTx.gasUsed}</span>
+              </div>
+            )}
+
+            {/* Timestamp */}
+            {selectedTx.timestamp && (
+              <div className="flex justify-between py-1.5">
+                <span className="text-slate-500 font-sans">Timestamp:</span>
+                <span className="text-slate-800 font-sans">{formatDate(selectedTx.timestamp)}</span>
+              </div>
+            )}
           </div>
         </Modal>
       )}

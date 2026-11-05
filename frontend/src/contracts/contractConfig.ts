@@ -133,3 +133,11 @@ export const TRANSACTION_MANAGER_ABI = [
   'function cancelTransaction(string calldata transactionId, string calldata reason) external',
   'function getTransaction(string calldata transactionId) external view returns (string propertyId, address buyer, address seller, uint256 amount, uint8 status, bool sellerAccepted, bool documentsVerified, bool legallyConfirmed, uint256 createdAt, uint256 completedAt, bool exists)',
 ]
+
+export const ACCESS_CONTROL_ABI = [
+  'function grantRole(bytes32 role, address account) external',
+  'function revokeRole(bytes32 role, address account) external',
+  'function hasRole(bytes32 role, address account) external view returns (bool)',
+  'event RoleGranted(bytes32 indexed role, address indexed account, address indexed sender)',
+  'event RoleRevoked(bytes32 indexed role, address indexed account, address indexed sender)',
+]
