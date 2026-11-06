@@ -48,6 +48,7 @@ COLLECTION_MAPPING = {
     "BlockchainOperation": "blockchain_operations",
     "AuditLog": "audit_logs",
     "UserActivityLog": "user_activity_logs",
+    "Notification": "notifications",
     "LoginAttempt": "login_attempts",
     "RefreshToken": "refresh_tokens",
 }
@@ -563,6 +564,27 @@ def hydrate_all_from_mongo(session: Session, clear_existing: bool = False) -> Di
         session.rollback()
         logger.warning("Failed to flush hydrated approvals, rolled back: %s", e)
     hydrated["approvals"] = a_count
+
+    # 5b. Notifications
+    n_count = 0
+    from app.models.notification import Notification
+    for n_doc in db["notifications"].find():
+        try:
+            n_id = safe_uuid(n_doc.get("_id"))
+            if not n_id:
+                continue
+            data = {k: v for k, v in n_doc.items() if not k.startswith("_") and k in Notification.__table__.columns}
+            data["id"] = n_id
+            u_id = safe_uuid(data.get("user_id"))
+            if not u_id or u_id not in seen_user_ids:
+                continue
+            data["user_id"] = u_id
+            session.add(Notification(**data))
+            n_count += 1
+        except Exception as e:
+            logger.warning("Could not hydrate notification %s: %s", n_doc.get("_id"), e)
+    session.flush()
+    hydrated["notifications"] = n_count
 
     # 6. Ownership Events
     o_count = 0

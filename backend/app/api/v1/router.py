@@ -11,6 +11,7 @@ from app.api.v1.endpoints import (
     blockchain,
     documents,
     health,
+    notifications,
     ownership,
     properties,
     transactions,
@@ -87,4 +88,11 @@ api_v1_router.include_router(
 api_v1_router.include_router(
     approvals.router,
     tags=["Approvals"],
+)
+
+# Mount user notifications router
+api_v1_router.include_router(
+    notifications.router,
+    prefix="/notifications",
+    tags=["Notifications"],
 )

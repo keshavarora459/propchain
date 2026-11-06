@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import {
   Menu,
   Bell,
@@ -12,12 +13,50 @@ import {
   ExternalLink,
   X,
   CheckCircle2,
+  AlertTriangle,
+  Info,
 } from 'lucide-react'
 import { useUI } from '@/hooks/useUI'
 import { useAuth } from '@/hooks/useAuth'
 import { useWallet } from '@/context/WalletContext'
 import { Button } from '@/components/ui/Button'
-import { truncateHash, getRoleLabel } from '@/lib/utils'
+import { truncateHash, getRoleLabel, cn } from '@/lib/utils'
+import type { NotificationItem } from '@/types/notification'
+
+function formatRelativeTime(dateString: string): string {
+  try {
+    const date = new Date(dateString)
+    const now = new Date()
+    const diffMs = now.getTime() - date.getTime()
+    if (isNaN(diffMs)) return ''
+    const diffSec = Math.floor(diffMs / 1000)
+    if (diffSec < 60) return 'just now'
+    const diffMin = Math.floor(diffSec / 60)
+    if (diffMin < 60) return `${diffMin} min ago`
+    const diffHours = Math.floor(diffMin / 60)
+    if (diffHours < 24) return `${diffHours} hr ago`
+    const diffDays = Math.floor(diffHours / 24)
+    if (diffDays < 7) return `${diffDays}d ago`
+    return date.toLocaleDateString()
+  } catch {
+    return ''
+  }
+}
+
+function getNotificationIcon(type: string) {
+  switch ((type || '').toUpperCase()) {
+    case 'SUCCESS':
+      return <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
+    case 'WARNING':
+    case 'ACTION_REQUIRED':
+      return <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+    case 'ERROR':
+      return <AlertCircle className="h-4 w-4 text-rose-500 shrink-0 mt-0.5" />
+    case 'INFO':
+    default:
+      return <Info className="h-4 w-4 text-blue-500 shrink-0 mt-0.5" />
+  }
+}
 
 export const Header: React.FC = () => {
   const {
@@ -25,8 +64,21 @@ export const Header: React.FC = () => {
     toggleSidebar,
     setMobileSidebarOpen,
     notificationsCount,
-    clearNotifications,
+    notifications,
+    markAsRead,
+    markAllAsRead,
   } = useUI()
+  const navigate = useNavigate()
+
+  const handleNotificationClick = async (notif: NotificationItem) => {
+    if (!notif.is_read) {
+      await markAsRead(notif.id)
+    }
+    setNotificationsOpen(false)
+    if (notif.link) {
+      navigate(notif.link)
+    }
+  }
   const { user, logout } = useAuth()
   const {
     account,
@@ -255,37 +307,77 @@ export const Header: React.FC = () => {
             <Bell className="h-4 w-4" />
             {notificationsCount > 0 && (
               <span className="absolute top-1.5 right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 text-[9px] font-bold text-white">
-                {notificationsCount}
+                {notificationsCount > 99 ? '99+' : notificationsCount}
               </span>
             )}
           </button>
 
           {notificationsOpen && (
-            <div className="absolute right-0 mt-2 w-80 rounded-xl border border-slate-200 bg-white p-4 shadow-xl z-50">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                <span className="text-xs font-semibold text-slate-900">Notifications</span>
+            <div className="absolute right-0 mt-2 w-80 sm:w-96 rounded-xl border border-slate-200 bg-white shadow-xl z-50 overflow-hidden flex flex-col max-h-[480px]">
+              <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3 bg-slate-50/50">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold text-slate-900">Notifications</span>
+                  {notificationsCount > 0 && (
+                    <span className="rounded-full bg-blue-100 text-blue-800 text-[10px] px-2 py-0.5 font-semibold">
+                      {notificationsCount} unread
+                    </span>
+                  )}
+                </div>
                 {notificationsCount > 0 && (
                   <button
-                    onClick={clearNotifications}
-                    className="text-[11px] text-blue-600 hover:underline cursor-pointer"
+                    onClick={() => markAllAsRead()}
+                    className="text-[11px] font-medium text-blue-600 hover:underline cursor-pointer"
                   >
                     Mark all read
                   </button>
                 )}
               </div>
-              <div className="divide-y divide-slate-100 text-xs py-1">
-                <div className="py-2">
-                  <p className="font-medium text-slate-800">Critical Alert Detected</p>
-                  <p className="text-slate-500 text-[11px]">Property PROP-10045 flagged for signature anomaly.</p>
-                </div>
-                <div className="py-2">
-                  <p className="font-medium text-slate-800">Escrow Funded</p>
-                  <p className="text-slate-500 text-[11px]">$12.5M deposit received for TXN-9021.</p>
-                </div>
-                <div className="py-2">
-                  <p className="font-medium text-slate-800">Title Token Minted</p>
-                  <p className="text-slate-500 text-[11px]">Token #10046 minted to block 5089120.</p>
-                </div>
+
+              <div className="overflow-y-auto divide-y divide-slate-100 flex-1">
+                {notifications.length === 0 ? (
+                  <div className="p-8 text-center text-slate-400 text-xs">
+                    No notifications yet
+                  </div>
+                ) : (
+                  notifications.map((notif) => (
+                    <div
+                      key={notif.id}
+                      onClick={() => handleNotificationClick(notif)}
+                      className={cn(
+                        'flex items-start gap-3 p-3 transition-colors cursor-pointer hover:bg-slate-50',
+                        !notif.is_read ? 'bg-blue-50/40' : 'bg-white'
+                      )}
+                    >
+                      {getNotificationIcon(notif.type)}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-1">
+                          <p className={cn('text-xs leading-tight', !notif.is_read ? 'font-semibold text-slate-900' : 'font-medium text-slate-700')}>
+                            {notif.title}
+                          </p>
+                          {!notif.is_read && (
+                            <span className="h-2 w-2 rounded-full bg-blue-600 shrink-0" title="Unread" />
+                          )}
+                        </div>
+                        <p className="text-[11px] text-slate-500 mt-1 line-clamp-2 leading-relaxed">
+                          {notif.message}
+                        </p>
+                        <p className="text-[10px] text-slate-400 mt-1">
+                          {formatRelativeTime(notif.created_at)}
+                        </p>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <div className="border-t border-slate-100 p-2.5 text-center bg-slate-50/60">
+                <Link
+                  to="/notifications"
+                  onClick={() => setNotificationsOpen(false)}
+                  className="text-xs font-semibold text-blue-600 hover:text-blue-800 transition-colors inline-block py-0.5"
+                >
+                  View all notifications →
+                </Link>
               </div>
             </div>
           )}

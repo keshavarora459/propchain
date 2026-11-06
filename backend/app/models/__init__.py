@@ -13,6 +13,7 @@ from app.models.transaction import PropertyTransaction, TransactionStatusHistory
 from app.models.user import User
 from app.models.user_activity import UserActivityLog
 from app.models.wallet import UserWallet
+from app.models.notification import Notification
 
 __all__ = [
     "Base",
@@ -35,4 +36,5 @@ __all__ = [
     "TransactionStatusHistory",
     "TransactionApproval",
     "LegalRegistrationConfirmation",
+    "Notification",
 ]

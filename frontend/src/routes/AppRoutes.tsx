@@ -67,6 +67,7 @@ const ReportsPage = lazy(() =>
 const SettingsPage = lazy(() =>
   import('@/pages/settings/SettingsPage').then((m) => ({ default: m.SettingsPage }))
 )
+const NotificationsPage = lazy(() => import('@/pages/notifications/NotificationsPage'))
 const NotFoundPage = lazy(() =>
   import('@/pages/not-found/NotFoundPage').then((m) => ({ default: m.NotFoundPage }))
 )
@@ -121,6 +122,7 @@ export const AppRoutes: React.FC = () => {
           <Route path="/transactions" element={<TransactionsPage />} />
           <Route path="/blockchain-explorer" element={<BlockchainExplorerPage />} />
           <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/notifications" element={<NotificationsPage />} />
 
           {/* Role-Protected Routes */}
           <Route

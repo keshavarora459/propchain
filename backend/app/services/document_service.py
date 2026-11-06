@@ -445,18 +445,20 @@ class DocumentService:
 
             # Notify seller
             try:
-                from app.models.user_activity import UserActivityLog
+                from app.services.notification_service import notify
                 seller_id = prop.creator_user_id or prop.current_owner_id
                 if seller_id:
-                    notif = UserActivityLog(
+                    v_msg = comments or "Please re-upload a clear copy."
+                    notify(
                         user_id=seller_id,
-                        activity_type="NOTIFICATION",
-                        description=f"Correction requested on {doc.document_type} for property {prop.title}: {comments or 'Please re-upload a clear copy.'}",
+                        title=f"Action needed: {doc.document_type} needs correction",
+                        message=f"Action needed: {doc.document_type} needs correction. Verifier message: {v_msg}. Next: upload a corrected file in Document Uploads, then submit again.",
+                        type="WARNING",
+                        link="/documents",
+                        db=self.db,
                     )
-                    self.db.add(notif)
-                    self.db.commit()
-            except Exception:
-                pass
+            except Exception as notif_err:
+                logger.warning("Notification on doc correction notice: %s", notif_err)
         elif norm_action == "REJECTED":
             doc.status = "REJECTED"
             prop.verification_status = "CORRECTION_REQUESTED"
@@ -464,18 +466,20 @@ class DocumentService:
 
             # Notify seller
             try:
-                from app.models.user_activity import UserActivityLog
+                from app.services.notification_service import notify
                 seller_id = prop.creator_user_id or prop.current_owner_id
                 if seller_id:
-                    notif = UserActivityLog(
+                    v_msg = comments or "Rejected by reviewer."
+                    notify(
                         user_id=seller_id,
-                        activity_type="NOTIFICATION",
-                        description=f"Document {doc.document_type} for property {prop.title} was rejected: {comments or 'Rejected by reviewer.'}",
+                        title=f"Action needed: {doc.document_type} rejected",
+                        message=f"Action needed: {doc.document_type} was rejected: {v_msg}. Next: upload a corrected file in Document Uploads, then submit again.",
+                        type="WARNING",
+                        link="/documents",
+                        db=self.db,
                     )
-                    self.db.add(notif)
-                    self.db.commit()
-            except Exception:
-                pass
+            except Exception as notif_err:
+                logger.warning("Notification on doc rejection notice: %s", notif_err)
         elif norm_action == "VERIFIED":
             doc.status = "VERIFIED"
         else:
@@ -492,32 +496,45 @@ class DocumentService:
         )
         self.doc_repo.save_verification_record(v_record)
 
-        # When the last (4th) document is approved, notify seller and verifier
+        # When document is approved, notify seller (and verifier when 4 of 4)
         if norm_action == "VERIFIED":
             try:
+                from app.services.notification_service import notify
                 approved_count = self.db.query(PropertyDocument).filter(
                     PropertyDocument.property_id == prop.id,
                     PropertyDocument.status == "VERIFIED",
                 ).count()
+                seller_id = prop.creator_user_id or prop.current_owner_id
                 if approved_count >= 4:
-                    from app.models.user_activity import UserActivityLog
-                    seller_id = prop.creator_user_id or prop.current_owner_id
                     if seller_id:
-                        seller_notif = UserActivityLog(
+                        notify(
                             user_id=seller_id,
-                            activity_type="NOTIFICATION",
-                            description=f"All documents approved, final verification pending for {prop.title} ({prop.property_number})",
+                            title="All documents approved",
+                            message=f"All documents approved ({approved_count} of 4). Final verification is pending.",
+                            type="SUCCESS",
+                            link="/documents",
+                            db=self.db,
                         )
-                        self.db.add(seller_notif)
 
-                    verifier_notif = UserActivityLog(
+                    notify(
                         user_id=current_user.id,
-                        activity_type="NOTIFICATION",
-                        description=f"Property is ready to verify: {prop.title} ({prop.property_number})",
+                        title="Property ready to verify",
+                        message=f"Property is ready to verify: {prop.title} ({prop.property_number})",
+                        type="ACTION_REQUIRED",
+                        link="/documents",
+                        db=self.db,
                     )
-                    self.db.add(verifier_notif)
-                    self.db.commit()
+                else:
+                    if seller_id:
+                        notify(
+                            user_id=seller_id,
+                            title=f"{doc.document_type} approved",
+                            message=f"{doc.document_type} approved ({approved_count} of 4). Awaiting review of remaining documents.",
+                            type="SUCCESS",
+                            link="/documents",
+                            db=self.db,
+                        )
             except Exception as notif_err:
-                logger.warning("Notification on 4th doc approval notice: %s", notif_err)
+                logger.warning("Notification on doc approval notice: %s", notif_err)
 
         return DocumentResponse.model_validate(doc)

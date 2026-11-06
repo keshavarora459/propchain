@@ -1,3 +1,5 @@
+import logging
+logger = logging.getLogger(__name__)
 """
 Transaction Management and Stakeholder Approval Service for PropChain.
 Enforces the 13-state real estate conveyance lifecycle and multi-stakeholder approval gates.
@@ -174,6 +176,22 @@ class TransactionService:
         self.db.commit()
         self.db.refresh(txn)
 
+        # Notify seller about new offer
+        try:
+            from app.services.notification_service import notify
+            buyer_name = current_user.full_name or "A buyer"
+            prop_name = prop.title if prop else "your property"
+            notify(
+                user_id=seller_id,
+                title="New offer received",
+                message=f"{buyer_name} offered ${float(amount):,.2f} on {prop_name}. Next: accept or reject it under Received Offers.",
+                type="ACTION_REQUIRED",
+                link="/transactions",
+                db=self.db,
+            )
+        except Exception as notif_err:
+            logger.warning("Notification on offer initiate notice: %s", notif_err)
+
         return self._to_response(txn)
 
     def get_transaction(self, transaction_id: uuid.UUID, current_user: Optional[User] = None) -> TransactionDetailResponse:
@@ -287,6 +305,22 @@ class TransactionService:
 
         self.db.commit()
         self.db.refresh(txn)
+
+        # Notify buyer about accepted offer
+        try:
+            from app.services.notification_service import notify
+            prop_name = txn.property.title if txn.property else "the property"
+            notify(
+                user_id=txn.buyer_id,
+                title="Offer Accepted",
+                message=f"Your offer on {prop_name} was accepted. Next: the verifier will review the deal documents.",
+                type="SUCCESS",
+                link="/transactions",
+                db=self.db,
+            )
+        except Exception as notif_err:
+            logger.warning("Notification on offer accept notice: %s", notif_err)
+
         return self._to_response(txn)
 
     def seller_reject(self, transaction_id: uuid.UUID, reason: str, current_user: User) -> TransactionResponse:
@@ -320,6 +354,22 @@ class TransactionService:
 
         self.db.commit()
         self.db.refresh(txn)
+
+        # Notify buyer about rejected offer
+        try:
+            from app.services.notification_service import notify
+            prop_name = txn.property.title if txn.property else "the property"
+            notify(
+                user_id=txn.buyer_id,
+                title="Offer Rejected",
+                message=f"Your offer on {prop_name} was rejected. Reason: {reason}. Next: browse other properties in the marketplace.",
+                type="WARNING",
+                link="/properties",
+                db=self.db,
+            )
+        except Exception as notif_err:
+            logger.warning("Notification on offer reject notice: %s", notif_err)
+
         return self._to_response(txn)
 
     def verifier_approve(self, transaction_id: uuid.UUID, comments: Optional[str], current_user: User) -> TransactionResponse:
@@ -349,6 +399,30 @@ class TransactionService:
 
         self.db.commit()
         self.db.refresh(txn)
+
+        # Notify legal authorities that deal documents are approved
+        try:
+            from app.services.notification_service import notify
+            legal_authorities = self.db.scalars(
+                select(User).where(
+                    or_(
+                        User.role == UserRole.LEGAL_AUTHORITY,
+                        User.role == "LEGAL_AUTHORITY",
+                    )
+                )
+            ).all()
+            for la in legal_authorities:
+                notify(
+                    user_id=la.id,
+                    title="Deal Ready for Legal Registration",
+                    message=f"Deal {txn.transaction_number} is ready for legal registration.",
+                    type="ACTION_REQUIRED",
+                    link="/approvals",
+                    db=self.db,
+                )
+        except Exception as notif_err:
+            logger.warning("Notification on deal docs approval notice: %s", notif_err)
+
         return self._to_response(txn)
 
     def legal_confirm(
@@ -511,19 +585,27 @@ class TransactionService:
         # Notify both buyer and seller:
         buyer_name = txn.buyer.full_name if txn.buyer else "Buyer"
         prop_name = prop.title or prop.property_number or "Property"
-        notif_msg = f"Ownership of {prop_name} has been transferred to {buyer_name}. Recorded on the blockchain in block #{block_num}."
 
         try:
-            self.db.add(UserActivityLog(
+            from app.services.notification_service import notify
+            # To buyer
+            notify(
                 user_id=txn.buyer_id,
-                activity_type="NOTIFICATION",
-                description=notif_msg,
-            ))
-            self.db.add(UserActivityLog(
+                title="Ownership Transferred",
+                message=f"Ownership of {prop_name} was transferred to {buyer_name}. Recorded on the blockchain in block #{block_num}. The property is now in your My Properties.",
+                type="SUCCESS",
+                link=f"/properties/{prop.id}",
+                db=self.db,
+            )
+            # To seller
+            notify(
                 user_id=txn.seller_id,
-                activity_type="NOTIFICATION",
-                description=notif_msg,
-            ))
+                title="Ownership Transferred",
+                message=f"Ownership of {prop_name} was transferred to {buyer_name}. Recorded on the blockchain in block #{block_num}.",
+                type="INFO",
+                link=f"/properties/{prop.id}",
+                db=self.db,
+            )
         except Exception as notif_e:
             logger.warning("Error creating user notifications: %s", notif_e)
 

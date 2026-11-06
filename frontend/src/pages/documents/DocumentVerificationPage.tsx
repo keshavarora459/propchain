@@ -744,11 +744,12 @@ export const DocumentVerificationPage: React.FC = () => {
 
   const awaitingProps = properties.filter((p) => {
     const s = (p.verification_status || p.verificationStatus || '').toString().toUpperCase()
-    return s === 'SUBMITTED' || recentlyVerifiedIds.has(p.id) || recentlyVerifiedIds.has(p.propertyId)
+    const isVerified = s === 'VERIFIED' || recentlyVerifiedIds.has(p.id) || recentlyVerifiedIds.has(p.propertyId)
+    return s === 'SUBMITTED' && !isVerified
   })
   const verifiedProps = properties.filter((p) => {
     const s = (p.verification_status || p.verificationStatus || '').toString().toUpperCase()
-    return s === 'VERIFIED'
+    return s === 'VERIFIED' || recentlyVerifiedIds.has(p.id) || recentlyVerifiedIds.has(p.propertyId)
   })
   const correctionOrRejectedProps = properties.filter((p) => {
     const s = (p.verification_status || p.verificationStatus || '').toString().toUpperCase()
@@ -798,7 +799,7 @@ export const DocumentVerificationPage: React.FC = () => {
             </div>
           </div>
           <span className="font-mono text-xs font-semibold px-2.5 py-1 rounded-full bg-blue-100 text-blue-800 whitespace-nowrap">
-            {properties.filter((p) => (p.verification_status || p.verificationStatus || '').toString().toUpperCase() !== 'PENDING').length} Properties in Queue
+            {awaitingProps.length} Properties in Queue
           </span>
         </div>
       )}

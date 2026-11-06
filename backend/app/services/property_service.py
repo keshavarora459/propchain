@@ -474,18 +474,32 @@ class PropertyService:
                 d.status = "SUBMITTED_FOR_REVIEW"
                 self.doc_repo.update(d)
 
-        # Send notification to all VERIFIER users
+        # Send notifications
         try:
-            from app.models.user_activity import UserActivityLog
-            verifiers = self.db.query(User).filter(User.role.in_([UserRole.REGISTRAR.value, UserRole.VERIFIER.value, "REGISTRAR", "VERIFIER"])).all()
-            for v in verifiers:
-                notif = UserActivityLog(
-                    user_id=v.id,
-                    activity_type="NOTIFICATION",
-                    description=f"New property submitted for verification: {prop.title} ({prop.property_number})",
+            from app.services.notification_service import notify
+            seller_id = prop.creator_user_id or prop.current_owner_id or current_user.id
+            if seller_id:
+                notify(
+                    user_id=seller_id,
+                    title="Submitted for verification",
+                    message="Submitted for verification. A verifier will review your 4 documents. We will notify you of the result.",
+                    type="INFO",
+                    link="/documents",
+                    db=self.db,
                 )
-                self.db.add(notif)
-            self.db.commit()
+
+            verifiers = self.db.query(User).filter(
+                User.role.in_([UserRole.REGISTRAR.value, UserRole.VERIFIER.value, "REGISTRAR", "VERIFIER"])
+            ).all()
+            for v in verifiers:
+                notify(
+                    user_id=v.id,
+                    title="New property submitted for review",
+                    message=f"{prop.title} ({prop.property_number}) has been submitted for document verification.",
+                    type="INFO",
+                    link="/documents",
+                    db=self.db,
+                )
         except Exception as notif_err:
             logger.warning("Notification creation notice: %s", notif_err)
 
@@ -624,18 +638,25 @@ class PropertyService:
 
         # Notify seller and log verifier audit entry
         try:
-            from app.models.user_activity import UserActivityLog
+            from app.services.notification_service import notify
             seller_id = prop.creator_user_id or prop.current_owner_id
             if seller_id:
-                desc = f"Your property {prop.title} is verified and recorded on the blockchain. Buyers can now see it."
-                notif = UserActivityLog(
+                blk_num = prop.blockchain_block_number or "latest"
+                notify(
                     user_id=seller_id,
-                    activity_type="NOTIFICATION",
-                    description=desc,
+                    title="Your property is verified",
+                    message=(
+                        f"Your property is verified. {prop.title} is verified and recorded on the blockchain "
+                        f"(block #{blk_num}). It is now visible to buyers, who can view it and make offers. "
+                        f"Next: check 'Received Offers' for buyer offers, or open the property to see its on-chain proof."
+                    ),
+                    type="SUCCESS",
+                    link=f"/properties/{prop.id}",
+                    db=self.db,
                 )
-                self.db.add(notif)
 
             # Verifier audit record
+            from app.models.user_activity import UserActivityLog
             verifier_display = current_user.full_name or current_user.email
             audit_entry = UserActivityLog(
                 user_id=current_user.id,
@@ -671,19 +692,18 @@ class PropertyService:
 
         # Notify seller
         try:
-            from app.models.user_activity import UserActivityLog
+            from app.services.notification_service import notify
             seller_id = prop.creator_user_id or prop.current_owner_id
             if seller_id:
-                notif_msg = f"Your property '{prop.title}' ({prop.property_number}) verification was rejected."
-                if reason:
-                    notif_msg += f" Reason: {reason}"
-                notif = UserActivityLog(
+                reason_part = f" Reason: {reason}." if reason else ""
+                notify(
                     user_id=seller_id,
-                    activity_type="NOTIFICATION",
-                    description=notif_msg,
+                    title="Property Verification Rejected",
+                    message=f"Property '{prop.title}' ({prop.property_number}) verification was rejected.{reason_part} You can register a new property with correct documents.",
+                    type="WARNING",
+                    link="/properties",
+                    db=self.db,
                 )
-                self.db.add(notif)
-                self.db.commit()
         except Exception as notif_err:
             logger.warning("Notification log notice: %s", notif_err)
 
