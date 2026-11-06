@@ -3,6 +3,8 @@
 
 export const SEPOLIA_CHAIN_ID = 11155111
 export const LOCAL_CHAIN_ID = 31337
+export const SETUP_END_BLOCK = Number(import.meta.env.VITE_SETUP_END_BLOCK || 1)
+
 
 export interface NetworkConfig {
   chainId: number

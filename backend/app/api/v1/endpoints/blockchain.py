@@ -47,6 +47,7 @@ class BlockItem(BaseModel):
     transactionsCount: int
     miner: str
     gasUsed: str
+    blockType: Optional[str] = "Smart Contract Interaction"
 
 
 class TransactionItem(BaseModel):
@@ -82,6 +83,26 @@ class BlockchainStatsResponse(BaseModel):
 def _get_web3_instance() -> Web3:
     rpc_url = os.getenv("BLOCKCHAIN_RPC_URL", "http://127.0.0.1:8545")
     return Web3(Web3.HTTPProvider(rpc_url, request_kwargs={"timeout": 5}))
+
+
+def get_setup_end_block() -> int:
+    try:
+        from pathlib import Path
+        import json
+        repo_root = Path(__file__).resolve().parents[5]
+        deploy_file = repo_root / "blockchain" / "deployments" / "localhost.json"
+        if deploy_file.is_file():
+            data = json.loads(deploy_file.read_text())
+            if "setupEndBlock" in data:
+                return int(data["setupEndBlock"])
+        summary_file = repo_root / "blockchain" / "deployments" / "addresses.json"
+        if summary_file.is_file():
+            sdata = json.loads(summary_file.read_text())
+            if "SETUP_END_BLOCK" in sdata:
+                return int(sdata["SETUP_END_BLOCK"])
+    except Exception:
+        pass
+    return int(os.getenv("SETUP_END_BLOCK", "1"))
 
 
 @router.get("/status", response_model=NetworkStatusResponse, summary="Get live EVM network status")
@@ -131,41 +152,209 @@ def get_latest_blocks(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Fetches recent blocks from the EVM node with tx counts and gas metrics."""
+    """Fetches recent blocks from the EVM node strictly greater than setupEndBlock."""
     w3 = _get_web3_instance()
     blocks: List[BlockItem] = []
+    setup_end_block = get_setup_end_block()
 
     try:
         if w3.is_connected():
             latest = w3.eth.block_number
-            start = latest
-            end = max(0, latest - (limit - 1))
+            if latest > setup_end_block:
+                start = latest
+                end = max(setup_end_block, latest - (limit - 1))
 
-            for b_num in range(start, end - 1, -1):
-                try:
-                    b = w3.eth.get_block(b_num, full_transactions=False)
-                    if b:
-                        block_dt = datetime.fromtimestamp(b.timestamp, tz=timezone.utc).isoformat()
-                        tx_count = len(b.transactions) if hasattr(b, "transactions") else 0
-                        gas_used_str = f"{b.gasUsed:,} gas"
+                for b_num in range(start, end, -1):
+                    try:
+                        b = w3.eth.get_block(b_num, full_transactions=False)
+                        if b:
+                            block_dt = datetime.fromtimestamp(b.timestamp, tz=timezone.utc).isoformat()
+                            tx_count = len(b.transactions) if hasattr(b, "transactions") else 0
+                            gas_used_str = f"{b.gasUsed:,} gas"
 
-                        blocks.append(
-                            BlockItem(
-                                blockNumber=b.number,
-                                hash=w3.to_hex(b.hash),
-                                parentHash=w3.to_hex(b.parentHash),
-                                timestamp=block_dt,
-                                transactionsCount=tx_count,
-                                miner=str(b.miner),
-                                gasUsed=gas_used_str,
+                            blocks.append(
+                                BlockItem(
+                                    blockNumber=b.number,
+                                    hash=w3.to_hex(b.hash),
+                                    parentHash=w3.to_hex(b.parentHash),
+                                    timestamp=block_dt,
+                                    transactionsCount=tx_count,
+                                    miner=str(b.miner),
+                                    gasUsed=gas_used_str,
+                                    blockType="Smart Contract Interaction",
+                                )
                             )
-                        )
-                except Exception as b_err:
-                    logger.warning("Error fetching block %s: %s", b_num, b_err)
+                    except Exception as b_err:
+                        logger.warning("Error fetching block %s: %s", b_num, b_err)
     except Exception as e:
         logger.warning("Error fetching blocks from node: %s", e)
 
     return blocks
+
+
+@router.get("/overview", summary="Get aggregated blockchain overview for explorer")
+def get_blockchain_overview(
+    limit: int = Query(25, ge=1, le=50),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Returns aggregated telemetry, blocks, transactions, registered properties,
+    and contract statuses in a single call to populate the visual blockchain explorer.
+    """
+    w3 = _get_web3_instance()
+    is_connected = False
+    try:
+        is_connected = w3.is_connected()
+    except Exception:
+        is_connected = False
+
+    blocks_data = get_latest_blocks(limit=limit, current_user=current_user, db=db)
+    txs_data = get_recent_transactions(limit=limit, current_user=current_user, db=db)
+    net_status = get_network_status(current_user=current_user, db=db)
+
+    # Registered Properties from DB
+    reg_props = []
+    try:
+        db_props = db.scalars(
+            select(Property).where(Property.blockchain_property_id.isnot(None)).limit(limit)
+        ).all()
+        for p in db_props:
+            ev = db.scalar(
+                select(OwnershipEvent)
+                .where(OwnershipEvent.property_id == p.id)
+                .order_by(OwnershipEvent.created_at.asc())
+            )
+            reg_props.append({
+                "property_id": p.property_number,
+                "property_uuid": str(p.id),
+                "title": p.title,
+                "owner_name": p.owner.full_name if p.owner else "Platform Authority",
+                "owner_wallet": ev.new_owner_address if ev else os.getenv("DEFAULT_SELLER_WALLET", ""),
+                "tx_hash": ev.blockchain_tx_hash if ev else "",
+                "block_number": ev.block_number if ev else 1,
+                "contract_address": os.getenv("PROPERTY_REGISTRY_ADDRESS", "0x5FbDB2315678afecb367f032d93F642f64180aa3"),
+                "document_hashes": [d.document_hash for d in p.documents if d.document_hash] if p.documents else [],
+                "registered_at": p.created_at.isoformat() if p.created_at else "",
+                "confirmation_status": "Confirmed",
+            })
+    except Exception as e:
+        logger.warning("Error querying registered properties for overview: %s", e)
+
+    # Ownership Transfers from DB
+    transfers = []
+    try:
+        db_events = db.scalars(
+            select(OwnershipEvent)
+            .where(OwnershipEvent.event_type == "TRANSFER")
+            .order_by(OwnershipEvent.created_at.desc())
+            .limit(limit)
+        ).all()
+        for ev in db_events:
+            transfers.append({
+                "property_id": ev.property.property_number if ev.property else "PROP-UNKNOWN",
+                "property_title": ev.property.title if ev.property else "",
+                "from_owner": ev.previous_owner.full_name if ev.previous_owner else "Previous Owner",
+                "from_address": ev.previous_owner_address,
+                "to_owner": ev.new_owner.full_name if ev.new_owner else "New Owner",
+                "to_address": ev.new_owner_address,
+                "tx_hash": ev.blockchain_tx_hash,
+                "block_number": ev.block_number,
+                "timestamp": ev.created_at.isoformat() if ev.created_at else "",
+                "contract_address": os.getenv("OWNERSHIP_REGISTRY_ADDRESS", "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512"),
+            })
+    except Exception as e:
+        logger.warning("Error querying ownership transfers for overview: %s", e)
+
+    # Contracts info
+    contracts = [
+        {
+            "name": "PropertyRegistry",
+            "address": os.getenv("PROPERTY_REGISTRY_ADDRESS", "0x5FbDB2315678afecb367f032d93F642f64180aa3"),
+            "deploymentTxHash": "0xa7c140b7328a99cfe2980e4cd0fd52bdba4644f2a3e3aff06dba96164580880b",
+            "deploymentBlock": 1,
+            "status": "Active",
+            "abiStatus": "Verified",
+            "purpose": "Decentralized Parcel Title & Deed Hash Anchor Registry",
+        },
+        {
+            "name": "OwnershipRegistry",
+            "address": os.getenv("OWNERSHIP_REGISTRY_ADDRESS", "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512"),
+            "deploymentTxHash": "0x2a66d0ebbc1008bab413e3ed4bd095411a5c27df4fd76f04d815eaef42ecedd0",
+            "deploymentBlock": 2,
+            "status": "Active",
+            "abiStatus": "Verified",
+            "purpose": "Immutable Chain of Custody & Statutory Legal Signoff Tracker",
+        },
+        {
+            "name": "TransactionManager",
+            "address": os.getenv("TRANSACTION_MANAGER_ADDRESS", "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9"),
+            "deploymentTxHash": "0x681a77d7fa59724b712ccbc3459bff4b1bf95964283c8f1f1615c1ee4a7a6afd",
+            "deploymentBlock": 4,
+            "status": "Active",
+            "abiStatus": "Verified",
+            "purpose": "Multi-Stakeholder Escrow & Atomic Title Conveyance Settlement",
+        },
+    ]
+
+    # Failed operations
+    failed_ops = []
+    try:
+        db_ops = db.scalars(
+            select(BlockchainOperation)
+            .where(BlockchainOperation.status == "FAILED")
+            .order_by(BlockchainOperation.created_at.desc())
+            .limit(10)
+        ).all()
+        for op in db_ops:
+            failed_ops.append({
+                "id": str(op.id),
+                "operation_type": op.operation_type,
+                "error_message": op.error_message,
+                "created_at": op.created_at.isoformat() if op.created_at else "",
+            })
+    except Exception:
+        pass
+
+    total_props = len(reg_props)
+    total_transfers = len(transfers)
+    try:
+        total_props = db.scalar(
+            select(func.count(Property.id)).where(Property.blockchain_property_id.isnot(None))
+        ) or 0
+        total_transfers = db.scalar(
+            select(func.count(OwnershipEvent.id)).where(OwnershipEvent.event_type == "TRANSFER")
+        ) or 0
+    except Exception:
+        pass
+
+    setup_end_block = get_setup_end_block()
+    network_dict = {
+        "name": net_status.networkName,
+        "chainId": net_status.chainId,
+        "latestBlock": blocks_data[0].blockNumber if blocks_data else 0,
+        "totalBlocks": len(blocks_data),
+        "totalTransactions": len(txs_data),
+        "totalPropertyRegistrations": total_props,
+        "totalOwnershipTransfers": total_transfers,
+        "deployedContractsCount": 3,
+        "status": "Connected" if is_connected else "Disconnected",
+        "rpcUrl": net_status.rpcUrl,
+        "gasPriceGwei": net_status.gasPriceGwei,
+        "nodeVersion": net_status.nodeVersion,
+        "setupEndBlock": setup_end_block,
+    }
+
+    return {
+        "setupEndBlock": setup_end_block,
+        "network": network_dict,
+        "blocks": [b.model_dump() if hasattr(b, "model_dump") else b.dict() for b in blocks_data],
+        "transactions": txs_data,
+        "registeredProperties": reg_props,
+        "ownershipTransfers": transfers,
+        "contracts": contracts,
+        "failedOperations": failed_ops,
+    }
 
 
 @router.get("/transactions", summary="Get recent consensus transactions")
@@ -174,12 +363,13 @@ def get_recent_transactions(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Fetches confirmed transactions on-chain with decoded contract actions."""
+    """Fetches confirmed transactions on-chain strictly from blocks greater than setupEndBlock."""
     w3 = _get_web3_instance()
     tx_list: List[Dict[str, Any]] = []
     seen_hashes = set()
+    setup_end_block = get_setup_end_block()
 
-    # 1. Fetch on-chain transactions from recent blocks
+    # 1. Fetch on-chain transactions from recent blocks strictly greater than setupEndBlock
     try:
         if w3.is_connected():
             svc = BlockchainService(db)
@@ -188,112 +378,114 @@ def get_recent_transactions(
             tm_addr = svc.transaction_manager.address.lower() if svc.transaction_manager else ""
 
             latest = w3.eth.block_number
-            start = latest
-            end = max(0, latest - (limit - 1))
+            if latest > setup_end_block:
+                start = latest
+                end = max(setup_end_block, latest - (limit - 1))
 
-            for b_num in range(start, end - 1, -1):
-                try:
-                    b = w3.eth.get_block(b_num, full_transactions=True)
-                    if not b or not hasattr(b, "transactions"):
-                        continue
-
-                    block_dt = datetime.fromtimestamp(b.timestamp, tz=timezone.utc).isoformat()
-
-                    for tx in b.transactions:
-                        tx_hash = w3.to_hex(tx.hash)
-                        if tx_hash in seen_hashes:
+                for b_num in range(start, end, -1):
+                    try:
+                        b = w3.eth.get_block(b_num, full_transactions=True)
+                        if not b or not hasattr(b, "transactions"):
                             continue
-                        seen_hashes.add(tx_hash)
 
-                        receipt = None
-                        status_str = "Confirmed"
-                        gas_used_str = "21,000 gas"
-                        try:
-                            receipt = w3.eth.get_transaction_receipt(tx.hash)
-                            if receipt:
-                                status_str = "Confirmed" if receipt.status == 1 else "Reverted"
-                                gas_used_str = f"{receipt.gasUsed:,} gas"
-                        except Exception:
-                            pass
+                        block_dt = datetime.fromtimestamp(b.timestamp, tz=timezone.utc).isoformat()
 
-                        to_addr = tx.to if tx.to else "Contract Deployment"
-                        event_name = "Smart Contract Call" if tx.to else "Contract Deployed"
-                        prop_id = None
-                        doc_hash = None
-                        details = None
+                        for tx in b.transactions:
+                            tx_hash = w3.to_hex(tx.hash)
+                            if tx_hash in seen_hashes:
+                                continue
+                            seen_hashes.add(tx_hash)
 
-                        # Check known contract addresses
-                        if not tx.to:
-                            event_name = "Contract Deployed"
-                            if receipt and receipt.contractAddress:
-                                ca = receipt.contractAddress.lower()
-                                if ca == prop_addr:
-                                    details = "PropertyRegistry Deployed"
-                                elif ca == own_addr:
-                                    details = "OwnershipRegistry Deployed"
-                                elif ca == tm_addr:
-                                    details = "TransactionManager Deployed"
-                        else:
-                            to_lower = tx.to.lower()
-                            if to_lower == prop_addr:
-                                event_name = "Property Registered"
-                                details = "Property anchor on PropertyRegistry"
-                            elif to_lower == own_addr:
-                                event_name = "Genesis Ownership Recorded"
-                                details = "Title deed on OwnershipRegistry"
-                            elif to_lower == tm_addr:
-                                event_name = "Conveyance Escrow Execution"
-                                details = "Atomic settlement on TransactionManager"
+                            receipt = None
+                            status_str = "Confirmed"
+                            gas_used_str = "21,000 gas"
+                            try:
+                                receipt = w3.eth.get_transaction_receipt(tx.hash)
+                                if receipt:
+                                    status_str = "Confirmed" if receipt.status == 1 else "Reverted"
+                                    gas_used_str = f"{receipt.gasUsed:,} gas"
+                            except Exception:
+                                pass
 
-                        # Check if matched with DB OwnershipEvent
-                        db_event = db.scalar(
-                            select(OwnershipEvent)
-                            .options(joinedload(OwnershipEvent.property))
-                            .where(OwnershipEvent.blockchain_tx_hash == tx_hash)
-                        )
-                        if db_event:
-                            event_name = (
-                                "Property Registered"
-                                if db_event.event_type == "INITIAL_REGISTRATION"
-                                else "Ownership Transferred"
+                            to_addr = tx.to if tx.to else "Contract Deployment"
+                            event_name = "Smart Contract Call" if tx.to else "Contract Deployed"
+                            prop_id = None
+                            doc_hash = None
+                            details = None
+
+                            # Check known contract addresses
+                            if not tx.to:
+                                event_name = "Contract Deployed"
+                                if receipt and receipt.contractAddress:
+                                    ca = receipt.contractAddress.lower()
+                                    if ca == prop_addr:
+                                        details = "PropertyRegistry Deployed"
+                                    elif ca == own_addr:
+                                        details = "OwnershipRegistry Deployed"
+                                    elif ca == tm_addr:
+                                        details = "TransactionManager Deployed"
+                            else:
+                                to_lower = tx.to.lower()
+                                if to_lower == prop_addr:
+                                    event_name = "Property Registered"
+                                    details = "Property anchor on PropertyRegistry"
+                                elif to_lower == own_addr:
+                                    event_name = "Ownership (Initial & Conveyance)"
+                                    details = "Title deed on OwnershipRegistry"
+                                elif to_lower == tm_addr:
+                                    event_name = "Ownership Transfer"
+                                    details = "Atomic settlement on TransactionManager"
+
+                            # Check if matched with DB OwnershipEvent
+                            db_event = db.scalar(
+                                select(OwnershipEvent)
+                                .options(joinedload(OwnershipEvent.property))
+                                .where(OwnershipEvent.blockchain_tx_hash == tx_hash)
                             )
-                            if db_event.property:
-                                prop_id = db_event.property.property_number
-                                details = f"Property {prop_id} conveyance anchored"
+                            if db_event:
+                                event_name = (
+                                    "Property Registered"
+                                    if db_event.event_type == "INITIAL_REGISTRATION"
+                                    else "Ownership Transfer"
+                                )
+                                if db_event.property:
+                                    prop_id = db_event.property.property_number
+                                    details = f"Property {prop_id} conveyance anchored"
 
-                        value_eth = f"{float(w3.from_wei(tx.value, 'ether')):.4f} ETH" if hasattr(tx, "value") else "0.0 ETH"
+                            value_eth = f"{float(w3.from_wei(tx.value, 'ether')):.4f} ETH" if hasattr(tx, "value") else "0.0 ETH"
 
-                        tx_list.append({
-                            "hash": tx_hash,
-                            "blockNumber": b.number,
-                            "from": tx["from"],
-                            "to": to_addr,
-                            "event": event_name,
-                            "propertyId": prop_id,
-                            "documentHash": doc_hash,
-                            "value": value_eth,
-                            "gasUsed": gas_used_str,
-                            "status": status_str,
-                            "timestamp": block_dt,
-                            "details": details,
-                        })
+                            tx_list.append({
+                                "hash": tx_hash,
+                                "blockNumber": b.number,
+                                "from": tx["from"],
+                                "to": to_addr,
+                                "event": event_name,
+                                "propertyId": prop_id,
+                                "documentHash": doc_hash,
+                                "value": value_eth,
+                                "gasUsed": gas_used_str,
+                                "status": status_str,
+                                "timestamp": block_dt,
+                                "details": details,
+                            })
 
-                        if len(tx_list) >= limit:
-                            break
-                except Exception as b_err:
-                    logger.warning("Error processing block txs %s: %s", b_num, b_err)
+                            if len(tx_list) >= limit:
+                                break
+                    except Exception as b_err:
+                        logger.warning("Error processing block txs %s: %s", b_num, b_err)
 
-                if len(tx_list) >= limit:
-                    break
+                    if len(tx_list) >= limit:
+                        break
     except Exception as e:
         logger.warning("Error querying on-chain transactions: %s", e)
 
-    # 2. Augment / fallback with DB ownership events if list is small
+    # 2. Augment with DB ownership events strictly > setupEndBlock
     if len(tx_list) < limit:
         db_events = list(
             db.scalars(
                 select(OwnershipEvent)
                 .options(joinedload(OwnershipEvent.property))
+                .where(OwnershipEvent.block_number > setup_end_block)
                 .order_by(OwnershipEvent.created_at.desc())
                 .limit(limit - len(tx_list))
             ).all()
@@ -302,10 +494,10 @@ def get_recent_transactions(
             if ev.blockchain_tx_hash and ev.blockchain_tx_hash not in seen_hashes:
                 seen_hashes.add(ev.blockchain_tx_hash)
                 prop_num = ev.property.property_number if ev.property else "PROP"
-                event_name = "Property Registered" if ev.event_type == "INITIAL_REGISTRATION" else "Ownership Transferred"
+                event_name = "Property Registered" if ev.event_type == "INITIAL_REGISTRATION" else "Ownership Transfer"
                 tx_list.append({
                     "hash": ev.blockchain_tx_hash,
-                    "blockNumber": ev.block_number or 1,
+                    "blockNumber": ev.block_number,
                     "from": ev.previous_owner_address or os.getenv("BLOCKCHAIN_DEPLOYER_ADDRESS", ""),
                     "to": ev.new_owner_address or os.getenv("PROPERTY_REGISTRY_ADDRESS", ""),
                     "event": event_name,

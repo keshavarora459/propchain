@@ -39,6 +39,7 @@ import {
   OWNERSHIP_REGISTRY_ABI,
   TRANSACTION_MANAGER_ABI,
   ACCESS_CONTROL_ABI,
+  SETUP_END_BLOCK,
 } from '@/contracts/contractConfig'
 
 export interface RealBlock {
@@ -520,6 +521,16 @@ export const BlockchainExplorerPage: React.FC = () => {
   })
 
   const visualChainRef = useRef<HTMLDivElement>(null)
+  const registeredPropsRef = useRef<RegisteredPropertyTx[]>([])
+  const transfersRef = useRef<OwnershipTransferTx[]>([])
+
+  useEffect(() => {
+    registeredPropsRef.current = registeredProperties
+  }, [registeredProperties])
+
+  useEffect(() => {
+    transfersRef.current = ownershipTransfers
+  }, [ownershipTransfers])
 
   const scrollChain = (direction: 'left' | 'right') => {
     if (visualChainRef.current) {
@@ -569,13 +580,11 @@ export const BlockchainExplorerPage: React.FC = () => {
       }
 
       if (backendOverview) {
-        if (backendOverview.network) {
-          setNetworkInfo((prev) => ({
-            ...prev,
-            ...backendOverview.network,
-            status: backendOverview.network.status || 'Connected',
-          }))
-        }
+        const setupEndBlock = Number(
+          backendOverview.network?.setupEndBlock ??
+          backendOverview.setupEndBlock ??
+          SETUP_END_BLOCK
+        )
 
         const rawRegProps: RegisteredPropertyTx[] = Array.isArray(backendOverview.registeredProperties)
           ? backendOverview.registeredProperties
@@ -583,8 +592,12 @@ export const BlockchainExplorerPage: React.FC = () => {
         const rawTransfers: OwnershipTransferTx[] = Array.isArray(backendOverview.ownershipTransfers)
           ? backendOverview.ownershipTransfers
           : []
-        const rawTxs: any[] = Array.isArray(backendOverview.transactions) ? backendOverview.transactions : []
-        const rawBlocks: any[] = Array.isArray(backendOverview.blocks) ? backendOverview.blocks : []
+        const rawTxs: any[] = Array.isArray(backendOverview.transactions)
+          ? backendOverview.transactions.filter((t: any) => Number(t.blockNumber) > setupEndBlock)
+          : []
+        const rawBlocks: any[] = Array.isArray(backendOverview.blocks)
+          ? backendOverview.blocks.filter((b: any) => Number(b.blockNumber) > setupEndBlock)
+          : []
 
         setRegisteredProperties(rawRegProps)
         setOwnershipTransfers(rawTransfers)
@@ -614,43 +627,33 @@ export const BlockchainExplorerPage: React.FC = () => {
           )
           const primaryTx = blockTxs[0]
 
+          const propRegTx = blockTxs.find((t) => t.event === 'Property Registered')
+          const initOwnerTx = blockTxs.find((t) => t.event === 'Initial Owner Recorded')
+          const transferTx = blockTxs.find((t) => t.event === 'Ownership Transferred')
+
           let friendlyTitle = blk.friendlyTitle
-          let blockType = blk.blockType || 'Consensus Block'
+          let blockType = 'Smart Contract Interaction'
 
-          if (blk.blockNumber === 0) {
-            friendlyTitle = 'Genesis Block'
-            blockType = 'Genesis Block'
+          if (propRegTx) {
+            friendlyTitle = 'Property Registered'
+            blockType = 'Property Registered'
+          } else if (transferTx || blk.transferDetails) {
+            friendlyTitle = 'Ownership Transfer'
+            blockType = 'Ownership Transfer'
+          } else if (initOwnerTx) {
+            friendlyTitle = 'Ownership (Initial & Conveyance)'
+            blockType = 'Ownership (Initial & Conveyance)'
+          } else if (primaryTx) {
+            friendlyTitle = primaryTx.event
+            blockType = primaryTx.event.includes('Contract Call') ? 'Smart Contract Interaction' : primaryTx.event
           } else {
-            const propRegTx = blockTxs.find((t) => t.event === 'Property Registered')
-            const initOwnerTx = blockTxs.find((t) => t.event === 'Initial Owner Recorded')
-            const transferTx = blockTxs.find((t) => t.event === 'Ownership Transferred')
-            const roleTx = blockTxs.find((t) => t.event === 'Role Granted')
-            const deployTx = blockTxs.find((t) => t.event.includes('Contract Deployed'))
-
-            if (propRegTx) {
-              friendlyTitle = 'Property Registered'
-              blockType = 'Property Registered'
-            } else if (initOwnerTx) {
-              friendlyTitle = 'Initial Owner Recorded'
-              blockType = 'Initial Owner Recorded'
-            } else if (transferTx) {
-              friendlyTitle = 'Ownership Transferred'
-              blockType = 'Ownership Transferred'
-            } else if (roleTx) {
-              friendlyTitle = blk.blockNumber <= 5 ? 'Role Authorization' : 'Role Granted'
-              blockType = blk.blockNumber <= 5 ? 'Role Authorization' : 'Role Granted'
-            } else if (deployTx) {
-              friendlyTitle = blk.blockNumber <= 5 ? 'Contract Deployment' : deployTx.event
-              blockType = 'Contract Deployment'
-            } else if (primaryTx) {
-              friendlyTitle = primaryTx.event
-              blockType = primaryTx.event.includes('Contract Call') ? 'Smart Contract Interaction' : primaryTx.event
-            }
+            friendlyTitle = 'Smart Contract Interaction'
+            blockType = 'Smart Contract Interaction'
           }
 
           return {
             ...blk,
-            friendlyTitle: friendlyTitle || blk.blockType || 'Consensus Block',
+            friendlyTitle: friendlyTitle || 'Smart Contract Interaction',
             blockType,
             primaryTx,
             propertyId: primaryTx?.propertyId || blk.transferDetails?.property_id,
@@ -663,6 +666,17 @@ export const BlockchainExplorerPage: React.FC = () => {
         })
         setBlocks(enhancedBlocks)
 
+        if (backendOverview.network) {
+          setNetworkInfo((prev) => ({
+            ...prev,
+            ...backendOverview.network,
+            latestBlock: enhancedBlocks.length > 0 ? Math.max(...enhancedBlocks.map((b) => b.blockNumber)) : 0,
+            totalBlocks: enhancedBlocks.length,
+            totalTransactions: decodedTxs.length,
+            status: backendOverview.network.status || 'Connected',
+          }))
+        }
+
         if (Array.isArray(backendOverview.contracts)) {
           setContractsList(backendOverview.contracts)
         }
@@ -673,140 +687,132 @@ export const BlockchainExplorerPage: React.FC = () => {
         const provider = new ethers.JsonRpcProvider(RPC_URL)
         const currentBlockNum = await provider.getBlockNumber()
         const network = await provider.getNetwork()
+        const setupEndBlock = SETUP_END_BLOCK
 
         const fetchedBlocks: RealBlock[] = []
         const fetchedTxs: RealTx[] = []
 
-        for (let i = currentBlockNum; i >= 0; i--) {
-          try {
-            const block = await provider.getBlock(i, true)
-            if (block) {
-              const blockDate = new Date(Number(block.timestamp) * 1000).toISOString()
-              const rawTxs: any[] = []
-              if (block.prefetchedTransactions && block.prefetchedTransactions.length > 0) {
-                rawTxs.push(...block.prefetchedTransactions)
-              } else if (block.transactions && block.transactions.length > 0) {
-                for (const t of block.transactions) {
-                  if (typeof t === 'string') {
-                    try {
-                      const txObj = await provider.getTransaction(t)
-                      if (txObj) rawTxs.push(txObj)
-                    } catch {}
-                  } else if (t && typeof t === 'object') {
-                    rawTxs.push(t)
+        if (currentBlockNum > setupEndBlock) {
+          for (let i = currentBlockNum; i > setupEndBlock; i--) {
+            try {
+              const block = await provider.getBlock(i, true)
+              if (block) {
+                const blockDate = new Date(Number(block.timestamp) * 1000).toISOString()
+                const rawTxs: any[] = []
+                if (block.prefetchedTransactions && block.prefetchedTransactions.length > 0) {
+                  rawTxs.push(...block.prefetchedTransactions)
+                } else if (block.transactions && block.transactions.length > 0) {
+                  for (const t of block.transactions) {
+                    if (typeof t === 'string') {
+                      try {
+                        const txObj = await provider.getTransaction(t)
+                        if (txObj) rawTxs.push(txObj)
+                      } catch {}
+                    } else if (t && typeof t === 'object') {
+                      rawTxs.push(t)
+                    }
                   }
                 }
-              }
 
-              const blockTxs: RealTx[] = []
-              for (const tx of rawTxs) {
-                let gasUsedFmt = '0 gas'
-                let txStatus: 'Confirmed' | 'Reverted' = 'Confirmed'
-                let contractAddress: string | null = null
+                const blockTxs: RealTx[] = []
+                for (const tx of rawTxs) {
+                  let gasUsedFmt = '0 gas'
+                  let txStatus: 'Confirmed' | 'Reverted' = 'Confirmed'
+                  let contractAddress: string | null = null
 
-                try {
-                  const receipt = await provider.getTransactionReceipt(tx.hash)
-                  if (receipt) {
-                    gasUsedFmt = `${Number(receipt.gasUsed).toLocaleString()} gas`
-                    txStatus = receipt.status === 1 ? 'Confirmed' : 'Reverted'
-                    contractAddress = receipt.contractAddress
-                  }
-                } catch {}
+                  try {
+                    const receipt = await provider.getTransactionReceipt(tx.hash)
+                    if (receipt) {
+                      gasUsedFmt = `${Number(receipt.gasUsed).toLocaleString()} gas`
+                      txStatus = receipt.status === 1 ? 'Confirmed' : 'Reverted'
+                      contractAddress = receipt.contractAddress
+                    }
+                  } catch {}
 
-                const decoded = decodeTxWithInterfaces(
-                  {
+                  const decoded = decodeTxWithInterfaces(
+                    {
+                      hash: tx.hash,
+                      from: tx.from,
+                      to: tx.to,
+                      data: tx.data,
+                      value: tx.value,
+                      receiptContractAddress: contractAddress,
+                    },
+                    activeInterfaces,
+                    registeredPropsRef.current,
+                    transfersRef.current
+                  )
+
+                  blockTxs.push({
                     hash: tx.hash,
+                    blockNumber: block.number,
                     from: tx.from,
-                    to: tx.to,
+                    to: tx.to || 'Contract Deployment',
+                    contractName: decoded.contractName,
+                    event: decoded.event,
+                    functionName: decoded.functionName,
+                    propertyId: decoded.propertyId,
+                    propertyTitle: decoded.propertyTitle,
+                    ownerWallet: decoded.ownerWallet,
+                    ownerName: decoded.ownerName,
+                    documentHash: decoded.documentHash,
+                    details: decoded.details,
                     data: tx.data,
-                    value: tx.value,
-                    receiptContractAddress: contractAddress,
-                  },
-                  activeInterfaces,
-                  registeredProperties,
-                  ownershipTransfers
-                )
+                    gasUsed: gasUsedFmt,
+                    status: txStatus,
+                    value: ethers.formatEther(tx.value || 0) + ' ETH',
+                    timestamp: blockDate,
+                  })
+                }
 
-                blockTxs.push({
-                  hash: tx.hash,
+                const propRegTx = blockTxs.find((t) => t.event === 'Property Registered')
+                const initOwnerTx = blockTxs.find((t) => t.event === 'Initial Owner Recorded')
+                const transferTx = blockTxs.find((t) => t.event === 'Ownership Transferred')
+                const primaryTx = blockTxs[0]
+
+                let blockType = 'Smart Contract Interaction'
+                let friendlyTitle = 'Smart Contract Interaction'
+                if (propRegTx) {
+                  blockType = 'Property Registered'
+                  friendlyTitle = 'Property Registered'
+                } else if (transferTx) {
+                  blockType = 'Ownership Transfer'
+                  friendlyTitle = 'Ownership Transfer'
+                } else if (initOwnerTx) {
+                  blockType = 'Ownership (Initial & Conveyance)'
+                  friendlyTitle = 'Ownership (Initial & Conveyance)'
+                } else if (primaryTx) {
+                  friendlyTitle = primaryTx.event
+                  blockType = primaryTx.event.includes('Contract Call') ? 'Smart Contract Interaction' : primaryTx.event
+                }
+
+                fetchedBlocks.push({
                   blockNumber: block.number,
-                  from: tx.from,
-                  to: tx.to || 'Contract Deployment',
-                  contractName: decoded.contractName,
-                  event: decoded.event,
-                  functionName: decoded.functionName,
-                  propertyId: decoded.propertyId,
-                  propertyTitle: decoded.propertyTitle,
-                  ownerWallet: decoded.ownerWallet,
-                  ownerName: decoded.ownerName,
-                  documentHash: decoded.documentHash,
-                  details: decoded.details,
-                  data: tx.data,
-                  gasUsed: gasUsedFmt,
-                  status: txStatus,
-                  value: ethers.formatEther(tx.value || 0) + ' ETH',
+                  hash: block.hash || '',
+                  parentHash: block.parentHash || '',
                   timestamp: blockDate,
+                  transactionsCount: block.transactions.length,
+                  gasUsed: `${Number(block.gasUsed).toLocaleString()} gas`,
+                  gasLimit: `${Number(block.gasLimit).toLocaleString()} gas`,
+                  baseFeePerGas: block.baseFeePerGas ? `${block.baseFeePerGas.toString()} wei` : undefined,
+                  miner: block.miner,
+                  blockType,
+                  friendlyTitle,
+                  primaryTx,
+                  propertyId: primaryTx?.propertyId,
+                  propertyTitle: primaryTx?.propertyTitle,
+                  ownerWallet: primaryTx?.ownerWallet,
+                  ownerName: primaryTx?.ownerName,
+                  documentHash: primaryTx?.documentHash,
+                  contractName: primaryTx?.contractName,
+                  transactions: block.transactions.map((t: any) => (typeof t === 'string' ? t : t.hash)),
                 })
+
+                fetchedTxs.push(...blockTxs)
               }
-
-              const propRegTx = blockTxs.find((t) => t.event === 'Property Registered')
-              const initOwnerTx = blockTxs.find((t) => t.event === 'Initial Owner Recorded')
-              const transferTx = blockTxs.find((t) => t.event === 'Ownership Transferred')
-              const roleTx = blockTxs.find((t) => t.event === 'Role Granted')
-              const deployTx = blockTxs.find((t) => t.event.includes('Contract Deployed'))
-              const primaryTx = blockTxs[0]
-
-              let blockType = 'Smart Contract Interaction'
-              let friendlyTitle = 'Smart Contract Interaction'
-              if (block.number === 0) {
-                blockType = 'Genesis Block'
-                friendlyTitle = 'Genesis Block'
-              } else if (propRegTx) {
-                blockType = 'Property Registered'
-                friendlyTitle = 'Property Registered'
-              } else if (initOwnerTx) {
-                blockType = 'Initial Owner Recorded'
-                friendlyTitle = 'Initial Owner Recorded'
-              } else if (transferTx) {
-                blockType = 'Ownership Transferred'
-                friendlyTitle = 'Ownership Transferred'
-              } else if (roleTx) {
-                blockType = block.number <= 5 ? 'Role Authorization' : 'Role Granted'
-                friendlyTitle = block.number <= 5 ? 'Role Authorization' : 'Role Granted'
-              } else if (deployTx) {
-                blockType = 'Contract Deployment'
-                friendlyTitle = block.number <= 5 ? 'Contract Deployment' : deployTx.event
-              } else if (primaryTx) {
-                friendlyTitle = primaryTx.event
-                blockType = primaryTx.event.includes('Contract Call') ? 'Smart Contract Interaction' : primaryTx.event
-              }
-
-              fetchedBlocks.push({
-                blockNumber: block.number,
-                hash: block.hash || '',
-                parentHash: block.parentHash || '',
-                timestamp: blockDate,
-                transactionsCount: block.transactions.length,
-                gasUsed: `${Number(block.gasUsed).toLocaleString()} gas`,
-                gasLimit: `${Number(block.gasLimit).toLocaleString()} gas`,
-                baseFeePerGas: block.baseFeePerGas ? `${block.baseFeePerGas.toString()} wei` : undefined,
-                miner: block.miner,
-                blockType,
-                friendlyTitle,
-                primaryTx,
-                propertyId: primaryTx?.propertyId,
-                propertyTitle: primaryTx?.propertyTitle,
-                ownerWallet: primaryTx?.ownerWallet,
-                ownerName: primaryTx?.ownerName,
-                documentHash: primaryTx?.documentHash,
-                contractName: primaryTx?.contractName,
-                transactions: block.transactions.map((t: any) => (typeof t === 'string' ? t : t.hash)),
-              })
-
-              fetchedTxs.push(...blockTxs)
+            } catch (bErr) {
+              console.warn(`Could not load block #${i}:`, bErr)
             }
-          } catch (bErr) {
-            console.warn(`Could not load block #${i}:`, bErr)
           }
         }
 
@@ -815,8 +821,8 @@ export const BlockchainExplorerPage: React.FC = () => {
         setNetworkInfo({
           name: 'Local Hardhat Network',
           chainId: Number(network.chainId),
-          latestBlock: currentBlockNum,
-          totalBlocks: currentBlockNum + 1,
+          latestBlock: fetchedBlocks.length > 0 ? Math.max(...fetchedBlocks.map((b) => b.blockNumber)) : 0,
+          totalBlocks: fetchedBlocks.length,
           totalTransactions: fetchedTxs.length,
           totalPropertyRegistrations: 0,
           totalOwnershipTransfers: 0,
@@ -834,10 +840,14 @@ export const BlockchainExplorerPage: React.FC = () => {
     } finally {
       setIsLoading(false)
     }
-  }, [registeredProperties, ownershipTransfers])
+  }, [])
 
   useEffect(() => {
     loadBlockchainData()
+    const interval = setInterval(() => {
+      loadBlockchainData()
+    }, 15000)
+    return () => clearInterval(interval)
   }, [loadBlockchainData])
 
   useEffect(() => {
@@ -1014,11 +1024,11 @@ export const BlockchainExplorerPage: React.FC = () => {
             {(() => {
               let brokenBlock: number | null = null
               let checkedCount = 0
-              if (sortedBlocks.length > 1) {
+              if (sortedBlocks.length > 0) {
+                checkedCount = 1
                 for (let i = 1; i < sortedBlocks.length; i++) {
                   const prev = sortedBlocks[i - 1]
                   const curr = sortedBlocks[i]
-                  checkedCount++
                   if (
                     !curr.parentHash ||
                     !prev.hash ||
@@ -1027,6 +1037,7 @@ export const BlockchainExplorerPage: React.FC = () => {
                     brokenBlock = curr.blockNumber
                     break
                   }
+                  checkedCount++
                 }
               }
               return brokenBlock === null ? (
@@ -1045,20 +1056,17 @@ export const BlockchainExplorerPage: React.FC = () => {
         {/* Legend */}
         <div className="relative z-10 flex flex-wrap items-center gap-2 pb-3 text-[10px] font-mono">
           <span className="text-slate-400 font-sans">Block Types:</span>
-          <span className="px-2 py-0.5 rounded border bg-purple-950/70 text-purple-300 border-purple-500/40">
-            Genesis Block
-          </span>
-          <span className="px-2 py-0.5 rounded border bg-blue-950/70 text-blue-300 border-blue-500/40">
-            Contract Deployment
-          </span>
-          <span className="px-2 py-0.5 rounded border bg-amber-950/70 text-amber-300 border-amber-500/40">
-            Role Authorization
-          </span>
           <span className="px-2 py-0.5 rounded border bg-emerald-950/70 text-emerald-300 border-emerald-500/40">
             Property Registered
           </span>
+          <span className="px-2 py-0.5 rounded border bg-blue-950/70 text-blue-300 border-blue-500/40">
+            Ownership Transfer
+          </span>
           <span className="px-2 py-0.5 rounded border bg-purple-950/70 text-purple-300 border-purple-500/40">
             Ownership (Initial & Conveyance)
+          </span>
+          <span className="px-2 py-0.5 rounded border bg-cyan-950/70 text-cyan-300 border-cyan-500/40">
+            Smart Contract Interaction
           </span>
         </div>
 
@@ -1067,10 +1075,17 @@ export const BlockchainExplorerPage: React.FC = () => {
           ref={visualChainRef}
           className="relative z-10 flex items-center gap-2 overflow-x-auto pb-4 pt-1 scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-slate-900"
         >
-          {sortedBlocks.length === 0 ? (
+          {isLoading && sortedBlocks.length === 0 ? (
             <div className="w-full py-12 text-center text-slate-500">
               <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2 text-blue-500" />
-              Loading blockchain structure from RPC...
+              Loading blockchain structure...
+            </div>
+          ) : sortedBlocks.length === 0 ? (
+            <div className="w-full py-10 text-center text-slate-400">
+              <Box className="h-8 w-8 text-slate-500 mx-auto mb-2 opacity-60" />
+              <p className="text-sm font-semibold text-slate-200">
+                No workflow blocks yet. Register a property to create the first block.
+              </p>
             </div>
           ) : (
             sortedBlocks.map((blk, idx) => {
@@ -1882,9 +1897,9 @@ export const BlockchainExplorerPage: React.FC = () => {
           <CardHeader className="flex flex-row items-center justify-between pb-3">
             <div className="flex items-center gap-2">
               <Blocks className="h-4 w-4 text-blue-600" />
-              <CardTitle className="text-sm font-semibold">All Mined Blocks (Genesis to Latest)</CardTitle>
+              <CardTitle className="text-sm font-semibold">Mined Workflow Blocks</CardTitle>
             </div>
-            <span className="text-xs font-mono text-slate-500">{blocks.length} total blocks mined</span>
+            <span className="text-xs font-mono text-slate-500">{blocks.length} workflow blocks</span>
           </CardHeader>
           <CardContent className="p-0">
             <div className="overflow-x-auto">
@@ -1905,7 +1920,7 @@ export const BlockchainExplorerPage: React.FC = () => {
                   {blocks.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={8} className="text-center py-8 text-slate-400">
-                        No blocks found.
+                        No workflow blocks yet. Register a property to create the first block.
                       </TableCell>
                     </TableRow>
                   ) : (

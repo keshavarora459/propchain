@@ -268,7 +268,7 @@ def get_blockchain_contracts():
     """Returns local deployments localhost.json metadata and contract ABIs."""
     from pathlib import Path
     import json
-    repo_root = Path(__file__).resolve().parent.parent.parent.parent.parent
+    repo_root = Path(__file__).resolve().parents[5]
     deployment_file = repo_root / "blockchain" / "deployments" / "localhost.json"
     if deployment_file.is_file():
         try:
@@ -297,7 +297,7 @@ def get_blockchain_overview(
     from app.models.blockchain import BlockchainOperation, OwnershipEvent, BlockchainEvent
 
     # 1. Load deployment metadata
-    repo_root = Path(__file__).resolve().parent.parent.parent.parent.parent
+    repo_root = Path(__file__).resolve().parents[5]
     deployment_file = repo_root / "blockchain" / "deployments" / "localhost.json"
     deploy_data = {}
     if deployment_file.is_file():
@@ -305,6 +305,21 @@ def get_blockchain_overview(
             deploy_data = json.loads(deployment_file.read_text())
         except Exception:
             pass
+
+    summary_file = repo_root / "blockchain" / "deployments" / "addresses.json"
+    summary_data = {}
+    if summary_file.is_file():
+        try:
+            summary_data = json.loads(summary_file.read_text())
+        except Exception:
+            pass
+
+    setup_end_block = int(
+        deploy_data.get("setupEndBlock")
+        or summary_data.get("SETUP_END_BLOCK")
+        or os.getenv("SETUP_END_BLOCK")
+        or 1
+    )
 
     contracts_info = deploy_data.get("contracts", {})
     prop_reg_addr = contracts_info.get("PropertyRegistry", {}).get("address", "0x5FbDB2315678afecb367f032d93F642f64180aa3")
@@ -474,252 +489,237 @@ def get_blockchain_overview(
         try:
             latest_block_num = w3.eth.block_number
         except Exception:
-            latest_block_num = 5
+            latest_block_num = 0
 
-        # Query blocks from latest down to 0
-        for b_num in range(latest_block_num, -1, -1):
-            try:
-                blk = w3.eth.get_block(b_num, full_transactions=True)
-                b_hash = ensure_0x(blk.get("hash"))
-                p_hash = ensure_0x(blk.get("parentHash"))
-                b_time = datetime.fromtimestamp(blk["timestamp"], tz=timezone.utc).isoformat()
-                tx_objs = blk.get("transactions", [])
-                tx_count = len(tx_objs)
-                total_tx_count += tx_count
-
-                # Technical block roots and gas metrics from actual Ethereum RPC
-                tx_root = format_root_field(blk.get("transactionsRoot"))
-                st_root = format_root_field(blk.get("stateRoot"))
-                rc_root = format_root_field(blk.get("receiptsRoot"))
-                gas_used_fmt = f"{blk.get('gasUsed', 0):,} gas"
-                gas_limit_fmt = f"{blk.get('gasLimit', 0):,} gas" if blk.get("gasLimit") is not None else "N/A"
-                base_fee_val = blk.get("baseFeePerGas")
-                base_fee_fmt = f"{base_fee_val} wei" if base_fee_val is not None else "N/A"
-                miner_val = str(blk.get("miner") or "0x0000000000000000000000000000000000000000")
-
-                block_tx_hashes = []
-                block_tx_objs = []
-                for tx in tx_objs:
-                    tx_h = ensure_0x(tx.get("hash"))
-                    block_tx_hashes.append(tx_h)
-                    tx_from = tx.get("from", "")
-                    tx_to = tx.get("to") or ""
-
-                    # Check receipt for gas used and status
-                    tx_receipt = None
-                    try:
-                        tx_receipt = w3.eth.get_transaction_receipt(tx["hash"])
-                    except Exception:
-                        pass
-
-                    gas_used_num = tx_receipt["gasUsed"] if tx_receipt else 0
-                    tx_status = "Confirmed" if (tx_receipt and tx_receipt.get("status") == 1) else ("Confirmed" if not tx_receipt else "Reverted")
-                    receipt_contract_addr = tx_receipt.get("contractAddress") if tx_receipt else None
-
-                    tx_in = ensure_0x(tx.get("input", "")).lower()
-                    tx_to_lower = (tx_to or "").lower()
-
-                    # Decode transaction using web3 contract ABI
-                    decoded_fn = None
-                    decoded_args = {}
-                    if tx_to_lower == prop_reg_addr.lower() and prop_contract:
+        # Query blocks from latest down to setup_end_block (strictly workflow blocks)
+        if latest_block_num > setup_end_block:
+            for b_num in range(latest_block_num, setup_end_block, -1):
+                try:
+                    blk = w3.eth.get_block(b_num, full_transactions=True)
+                    b_hash = ensure_0x(blk.get("hash"))
+                    p_hash = ensure_0x(blk.get("parentHash"))
+                    b_time = datetime.fromtimestamp(blk["timestamp"], tz=timezone.utc).isoformat()
+                    tx_objs = blk.get("transactions", [])
+                    tx_count = len(tx_objs)
+                    total_tx_count += tx_count
+    
+                    # Technical block roots and gas metrics from actual Ethereum RPC
+                    tx_root = format_root_field(blk.get("transactionsRoot"))
+                    st_root = format_root_field(blk.get("stateRoot"))
+                    rc_root = format_root_field(blk.get("receiptsRoot"))
+                    gas_used_fmt = f"{blk.get('gasUsed', 0):,} gas"
+                    gas_limit_fmt = f"{blk.get('gasLimit', 0):,} gas" if blk.get("gasLimit") is not None else "N/A"
+                    base_fee_val = blk.get("baseFeePerGas")
+                    base_fee_fmt = f"{base_fee_val} wei" if base_fee_val is not None else "N/A"
+                    miner_val = str(blk.get("miner") or "0x0000000000000000000000000000000000000000")
+    
+                    block_tx_hashes = []
+                    block_tx_objs = []
+                    for tx in tx_objs:
+                        tx_h = ensure_0x(tx.get("hash"))
+                        block_tx_hashes.append(tx_h)
+                        tx_from = tx.get("from", "")
+                        tx_to = tx.get("to") or ""
+    
+                        # Check receipt for gas used and status
+                        tx_receipt = None
                         try:
-                            decoded_fn, decoded_args = prop_contract.decode_function_input(tx_in)
+                            tx_receipt = w3.eth.get_transaction_receipt(tx["hash"])
                         except Exception:
                             pass
-                    elif tx_to_lower == own_reg_addr.lower() and own_contract:
-                        try:
-                            decoded_fn, decoded_args = own_contract.decode_function_input(tx_in)
-                        except Exception:
-                            pass
-                    elif tx_to_lower == tx_mgr_addr.lower() and tx_mgr_contract:
-                        try:
-                            decoded_fn, decoded_args = tx_mgr_contract.decode_function_input(tx_in)
-                        except Exception:
-                            pass
-
-                    fn_name = decoded_fn.fn_name if decoded_fn else None
-                    is_role_grant = tx_in.startswith("0x2f2ff15d") or fn_name == "grantRole"
-
-                    prop_id = prop_tx_map.get(tx_h.lower()) or transfer_tx_map.get(tx_h.lower())
-                    if decoded_args.get("propertyId"):
-                        prop_id = str(decoded_args["propertyId"])
-                    prop_title = prop_title_map.get(prop_id, "")
-
-                    owner_wallet = ""
-                    if decoded_args.get("ownerWallet"):
-                        owner_wallet = str(decoded_args["ownerWallet"])
-                    elif decoded_args.get("newOwner"):
-                        owner_wallet = str(decoded_args["newOwner"])
-
-                    doc_hash = ""
-                    if decoded_args.get("documentHash"):
-                        dh_val = decoded_args["documentHash"]
-                        doc_hash = ensure_0x(dh_val.hex() if hasattr(dh_val, "hex") else str(dh_val))
-
-                    # Friendly Name Mapping:
-                    # - PropertyRegistry.registerProperty -> "Property Registered"
-                    # - OwnershipRegistry.recordInitialOwnership -> "Initial Owner Recorded"
-                    # - OwnershipRegistry.recordOwnershipTransfer -> "Ownership Transferred"
-                    # - grantRole -> "Role Granted"
-                    # - contract creation -> "Contract Deployed (<contract name>)"
-                    # - anything else -> "Contract Call: <functionName>"
-                    contract_friendly_name = "Smart Contract"
-                    if not tx_to:
-                        contract_name = "Smart Contract"
-                        ca = (receipt_contract_addr or "").lower()
-                        if ca == prop_reg_addr.lower() or tx_h.lower() == contracts_info.get("PropertyRegistry", {}).get("deploymentTxHash", "").lower():
-                            contract_name = "PropertyRegistry"
-                        elif ca == own_reg_addr.lower() or tx_h.lower() == contracts_info.get("OwnershipRegistry", {}).get("deploymentTxHash", "").lower():
-                            contract_name = "OwnershipRegistry"
-                        elif ca == tx_mgr_addr.lower() or tx_h.lower() == contracts_info.get("TransactionManager", {}).get("deploymentTxHash", "").lower():
-                            contract_name = "TransactionManager"
-                        event_name = f"Contract Deployed ({contract_name})"
-                        contract_friendly_name = contract_name
-                        details = f"{contract_name} Deployed"
-                    elif is_role_grant:
-                        event_name = "Role Granted"
-                        contract_friendly_name = "PropertyRegistry" if tx_to_lower == prop_reg_addr.lower() else ("OwnershipRegistry" if tx_to_lower == own_reg_addr.lower() else "TransactionManager")
-                        details = f"{contract_friendly_name} Role Granted"
-                    elif fn_name == "registerProperty" or (tx_to_lower == prop_reg_addr.lower() and tx_in.startswith("0x050888b8")):
-                        event_name = "Property Registered"
-                        contract_friendly_name = "PropertyRegistry"
-                        details = f"Property {prop_id} registered" if prop_id else "Property Registered"
-                    elif fn_name == "recordInitialOwnership" or (tx_to_lower == own_reg_addr.lower() and tx_in.startswith("0xaff4c199")):
-                        event_name = "Initial Owner Recorded"
-                        contract_friendly_name = "OwnershipRegistry"
-                        details = f"Initial owner recorded for {prop_id}" if prop_id else "Initial Owner Recorded"
-                    elif fn_name == "recordOwnershipTransfer" or (tx_to_lower == own_reg_addr.lower() and tx_in.startswith("0x98d1ef86")):
-                        event_name = "Ownership Transferred"
-                        contract_friendly_name = "OwnershipRegistry"
-                        details = f"Ownership conveyance recorded for {prop_id}" if prop_id else "Ownership Transferred"
-                    elif fn_name:
-                        event_name = f"Contract Call: {fn_name}"
-                        contract_friendly_name = "PropertyRegistry" if tx_to_lower == prop_reg_addr.lower() else ("OwnershipRegistry" if tx_to_lower == own_reg_addr.lower() else "TransactionManager")
-                        details = f"{contract_friendly_name}.{fn_name}"
-                    elif tx_to_lower == prop_reg_addr.lower():
-                        event_name = "Contract Call: PropertyRegistry"
-                        contract_friendly_name = "PropertyRegistry"
-                        details = "PropertyRegistry Call"
-                    elif tx_to_lower == own_reg_addr.lower():
-                        event_name = "Contract Call: OwnershipRegistry"
-                        contract_friendly_name = "OwnershipRegistry"
-                        details = "OwnershipRegistry Call"
-                    elif tx_to_lower == tx_mgr_addr.lower():
-                        event_name = "Contract Call: TransactionManager"
-                        contract_friendly_name = "TransactionManager"
-                        details = "TransactionManager Call"
-                    else:
-                        event_name = "Contract Call"
-                        details = "Smart Contract Call"
-
-                    # Match property owner name if known
-                    owner_name = ""
-                    for rp in registered_properties_list:
-                        if rp["property_id"] == prop_id or (rp.get("property_uuid") and rp["property_uuid"] == prop_id):
-                            if not prop_title:
-                                prop_title = rp.get("title", "")
-                            if not doc_hash and rp.get("document_hashes"):
-                                doc_hash = rp["document_hashes"][0]
-                            if not owner_wallet and rp.get("owner_wallet"):
-                                owner_wallet = rp["owner_wallet"]
-                            owner_name = rp.get("owner_name", "")
-                            break
-
-                    if not owner_name:
-                        for tr in transfer_list:
-                            if tr["property_id"] == prop_id:
+    
+                        gas_used_num = tx_receipt["gasUsed"] if tx_receipt else 0
+                        tx_status = "Confirmed" if (tx_receipt and tx_receipt.get("status") == 1) else ("Confirmed" if not tx_receipt else "Reverted")
+                        receipt_contract_addr = tx_receipt.get("contractAddress") if tx_receipt else None
+    
+                        tx_in = ensure_0x(tx.get("input", "")).lower()
+                        tx_to_lower = (tx_to or "").lower()
+    
+                        # Decode transaction using web3 contract ABI
+                        decoded_fn = None
+                        decoded_args = {}
+                        if tx_to_lower == prop_reg_addr.lower() and prop_contract:
+                            try:
+                                decoded_fn, decoded_args = prop_contract.decode_function_input(tx_in)
+                            except Exception:
+                                pass
+                        elif tx_to_lower == own_reg_addr.lower() and own_contract:
+                            try:
+                                decoded_fn, decoded_args = own_contract.decode_function_input(tx_in)
+                            except Exception:
+                                pass
+                        elif tx_to_lower == tx_mgr_addr.lower() and tx_mgr_contract:
+                            try:
+                                decoded_fn, decoded_args = tx_mgr_contract.decode_function_input(tx_in)
+                            except Exception:
+                                pass
+    
+                        fn_name = decoded_fn.fn_name if decoded_fn else None
+                        is_role_grant = tx_in.startswith("0x2f2ff15d") or fn_name == "grantRole"
+    
+                        prop_id = prop_tx_map.get(tx_h.lower()) or transfer_tx_map.get(tx_h.lower())
+                        if decoded_args.get("propertyId"):
+                            prop_id = str(decoded_args["propertyId"])
+                        prop_title = prop_title_map.get(prop_id, "")
+    
+                        owner_wallet = ""
+                        if decoded_args.get("ownerWallet"):
+                            owner_wallet = str(decoded_args["ownerWallet"])
+                        elif decoded_args.get("newOwner"):
+                            owner_wallet = str(decoded_args["newOwner"])
+    
+                        doc_hash = ""
+                        if decoded_args.get("documentHash"):
+                            dh_val = decoded_args["documentHash"]
+                            doc_hash = ensure_0x(dh_val.hex() if hasattr(dh_val, "hex") else str(dh_val))
+    
+                        # Friendly Name Mapping:
+                        # - PropertyRegistry.registerProperty -> "Property Registered"
+                        # - OwnershipRegistry.recordInitialOwnership -> "Initial Owner Recorded"
+                        # - OwnershipRegistry.recordOwnershipTransfer -> "Ownership Transferred"
+                        # - grantRole -> "Role Granted"
+                        # - contract creation -> "Contract Deployed (<contract name>)"
+                        # - anything else -> "Contract Call: <functionName>"
+                        contract_friendly_name = "Smart Contract"
+                        if not tx_to:
+                            contract_name = "Smart Contract"
+                            ca = (receipt_contract_addr or "").lower()
+                            if ca == prop_reg_addr.lower() or tx_h.lower() == contracts_info.get("PropertyRegistry", {}).get("deploymentTxHash", "").lower():
+                                contract_name = "PropertyRegistry"
+                            elif ca == own_reg_addr.lower() or tx_h.lower() == contracts_info.get("OwnershipRegistry", {}).get("deploymentTxHash", "").lower():
+                                contract_name = "OwnershipRegistry"
+                            elif ca == tx_mgr_addr.lower() or tx_h.lower() == contracts_info.get("TransactionManager", {}).get("deploymentTxHash", "").lower():
+                                contract_name = "TransactionManager"
+                            event_name = f"Contract Deployed ({contract_name})"
+                            contract_friendly_name = contract_name
+                            details = f"{contract_name} Deployed"
+                        elif is_role_grant:
+                            event_name = "Role Granted"
+                            contract_friendly_name = "PropertyRegistry" if tx_to_lower == prop_reg_addr.lower() else ("OwnershipRegistry" if tx_to_lower == own_reg_addr.lower() else "TransactionManager")
+                            details = f"{contract_friendly_name} Role Granted"
+                        elif fn_name == "registerProperty" or (tx_to_lower == prop_reg_addr.lower() and tx_in.startswith("0x050888b8")):
+                            event_name = "Property Registered"
+                            contract_friendly_name = "PropertyRegistry"
+                            details = f"Property {prop_id} registered" if prop_id else "Property Registered"
+                        elif fn_name == "recordInitialOwnership" or (tx_to_lower == own_reg_addr.lower() and tx_in.startswith("0xaff4c199")):
+                            event_name = "Initial Owner Recorded"
+                            contract_friendly_name = "OwnershipRegistry"
+                            details = f"Initial owner recorded for {prop_id}" if prop_id else "Initial Owner Recorded"
+                        elif fn_name == "recordOwnershipTransfer" or (tx_to_lower == own_reg_addr.lower() and tx_in.startswith("0x98d1ef86")):
+                            event_name = "Ownership Transferred"
+                            contract_friendly_name = "OwnershipRegistry"
+                            details = f"Ownership conveyance recorded for {prop_id}" if prop_id else "Ownership Transferred"
+                        elif fn_name:
+                            event_name = f"Contract Call: {fn_name}"
+                            contract_friendly_name = "PropertyRegistry" if tx_to_lower == prop_reg_addr.lower() else ("OwnershipRegistry" if tx_to_lower == own_reg_addr.lower() else "TransactionManager")
+                            details = f"{contract_friendly_name}.{fn_name}"
+                        elif tx_to_lower == prop_reg_addr.lower():
+                            event_name = "Contract Call: PropertyRegistry"
+                            contract_friendly_name = "PropertyRegistry"
+                            details = "PropertyRegistry Call"
+                        elif tx_to_lower == own_reg_addr.lower():
+                            event_name = "Contract Call: OwnershipRegistry"
+                            contract_friendly_name = "OwnershipRegistry"
+                            details = "OwnershipRegistry Call"
+                        elif tx_to_lower == tx_mgr_addr.lower():
+                            event_name = "Contract Call: TransactionManager"
+                            contract_friendly_name = "TransactionManager"
+                            details = "TransactionManager Call"
+                        else:
+                            event_name = "Contract Call"
+                            details = "Smart Contract Call"
+    
+                        # Match property owner name if known
+                        owner_name = ""
+                        for rp in registered_properties_list:
+                            if rp["property_id"] == prop_id or (rp.get("property_uuid") and rp["property_uuid"] == prop_id):
                                 if not prop_title:
-                                    prop_title = tr.get("property_title", "")
-                                if not owner_wallet:
-                                    owner_wallet = tr.get("to_address", "")
-                                owner_name = tr.get("to_owner", "")
+                                    prop_title = rp.get("title", "")
+                                if not doc_hash and rp.get("document_hashes"):
+                                    doc_hash = rp["document_hashes"][0]
+                                if not owner_wallet and rp.get("owner_wallet"):
+                                    owner_wallet = rp["owner_wallet"]
+                                owner_name = rp.get("owner_name", "")
                                 break
-
-                    tx_item = {
-                        "hash": tx_h,
-                        "blockNumber": b_num,
-                        "from": tx_from,
-                        "to": tx_to or "Contract Deployment",
-                        "contractName": contract_friendly_name,
-                        "event": event_name,
-                        "functionName": fn_name,
-                        "propertyId": prop_id,
-                        "propertyTitle": prop_title,
-                        "ownerWallet": owner_wallet,
-                        "ownerName": owner_name,
-                        "documentHash": doc_hash,
-                        "details": details,
-                        "data": tx_in,
-                        "value": f"{w3.from_wei(tx.get('value', 0), 'ether')} ETH",
-                        "gasUsed": f"{gas_used_num:,} gas",
-                        "gasPrice": f"{w3.from_wei(tx.get('gasPrice', 0), 'gwei')} Gwei",
-                        "status": tx_status,
-                        "timestamp": b_time,
-                    }
-                    txs_list.append(tx_item)
-                    block_tx_objs.append(tx_item)
-
-                # Classify block type and friendly title
-                if b_num == 0:
-                    b_type = "Genesis Block"
-                    friendly_block_title = "Genesis Block"
-                else:
+    
+                        if not owner_name:
+                            for tr in transfer_list:
+                                if tr["property_id"] == prop_id:
+                                    if not prop_title:
+                                        prop_title = tr.get("property_title", "")
+                                    if not owner_wallet:
+                                        owner_wallet = tr.get("to_address", "")
+                                    owner_name = tr.get("to_owner", "")
+                                    break
+    
+                        tx_item = {
+                            "hash": tx_h,
+                            "blockNumber": b_num,
+                            "from": tx_from,
+                            "to": tx_to or "Contract Deployment",
+                            "contractName": contract_friendly_name,
+                            "event": event_name,
+                            "functionName": fn_name,
+                            "propertyId": prop_id,
+                            "propertyTitle": prop_title,
+                            "ownerWallet": owner_wallet,
+                            "ownerName": owner_name,
+                            "documentHash": doc_hash,
+                            "details": details,
+                            "data": tx_in,
+                            "value": f"{w3.from_wei(tx.get('value', 0), 'ether')} ETH",
+                            "gasUsed": f"{gas_used_num:,} gas",
+                            "gasPrice": f"{w3.from_wei(tx.get('gasPrice', 0), 'gwei')} Gwei",
+                            "status": tx_status,
+                            "timestamp": b_time,
+                        }
+                        txs_list.append(tx_item)
+                        block_tx_objs.append(tx_item)
+    
+                    # Classify block type and friendly title by transaction target and event
                     has_prop_reg = any(t["event"] == "Property Registered" for t in block_tx_objs)
                     has_initial_owner = any(t["event"] == "Initial Owner Recorded" for t in block_tx_objs)
                     has_transfer = any(t["event"] == "Ownership Transferred" for t in block_tx_objs)
-                    has_role = any(t["event"] == "Role Granted" for t in block_tx_objs)
-                    has_deploy = any("Contract Deployed" in t["event"] for t in block_tx_objs)
-
+    
+                    matching_transfer = next(
+                        (t for t in transfer_list if t.get("block_number") == b_num or (t.get("tx_hash") and t.get("tx_hash").lower() in [h.lower() for h in block_tx_hashes])),
+                        None
+                    )
+    
                     if has_prop_reg:
                         b_type = "Property Registered"
                         friendly_block_title = "Property Registered"
+                    elif has_transfer or matching_transfer:
+                        b_type = "Ownership Transfer"
+                        friendly_block_title = "Ownership Transfer"
                     elif has_initial_owner:
-                        b_type = "Initial Owner Recorded"
-                        friendly_block_title = "Initial Owner Recorded"
-                    elif has_transfer:
-                        b_type = "Ownership Transferred"
-                        friendly_block_title = "Ownership Transferred"
-                    elif has_role:
-                        b_type = "Role Authorization" if b_num <= 5 else "Role Granted"
-                        friendly_block_title = "Role Authorization" if b_num <= 5 else "Role Granted"
-                    elif has_deploy:
-                        deploy_tx = next((t for t in block_tx_objs if "Contract Deployed" in t["event"]), None)
-                        b_type = "Contract Deployment"
-                        friendly_block_title = "Contract Deployment" if b_num <= 5 else (deploy_tx["event"] if deploy_tx else "Contract Deployed")
+                        b_type = "Ownership (Initial & Conveyance)"
+                        friendly_block_title = "Ownership (Initial & Conveyance)"
                     else:
                         first_tx = block_tx_objs[0] if block_tx_objs else None
                         b_type = "Smart Contract Interaction"
                         friendly_block_title = first_tx["event"] if first_tx else "Smart Contract Interaction"
-
-                matching_transfer = next(
-                    (t for t in transfer_list if t.get("block_number") == b_num or (t.get("tx_hash") and t.get("tx_hash").lower() in [h.lower() for h in block_tx_hashes])),
-                    None
-                )
-                if matching_transfer and not has_initial_owner:
-                    b_type = "Ownership Transferred"
-                    friendly_block_title = "Ownership Transferred"
-
-                blocks_list.append({
-                    "blockNumber": b_num,
-                    "hash": b_hash,
-                    "parentHash": p_hash,
-                    "timestamp": b_time,
-                    "transactionsCount": tx_count,
-                    "gasUsed": gas_used_fmt,
-                    "gasLimit": gas_limit_fmt,
-                    "baseFeePerGas": base_fee_fmt,
-                    "miner": miner_val,
-                    "transactionsRoot": tx_root,
-                    "stateRoot": st_root,
-                    "receiptsRoot": rc_root,
-                    "blockType": b_type,
-                    "friendlyTitle": friendly_block_title,
-                    "transferDetails": matching_transfer,
-                    "transactions": block_tx_hashes,
-                })
-            except Exception as b_err:
-                logger.warning("Could not process block %s: %s", b_num, b_err)
+    
+                    blocks_list.append({
+                        "blockNumber": b_num,
+                        "hash": b_hash,
+                        "parentHash": p_hash,
+                        "timestamp": b_time,
+                        "transactionsCount": tx_count,
+                        "gasUsed": gas_used_fmt,
+                        "gasLimit": gas_limit_fmt,
+                        "baseFeePerGas": base_fee_fmt,
+                        "miner": miner_val,
+                        "transactionsRoot": tx_root,
+                        "stateRoot": st_root,
+                        "receiptsRoot": rc_root,
+                        "blockType": b_type,
+                        "friendlyTitle": friendly_block_title,
+                        "transferDetails": matching_transfer,
+                        "transactions": block_tx_hashes,
+                    })
+                except Exception as b_err:
+                    logger.warning("Could not process block %s: %s", b_num, b_err)
 
     # 5. Smart contracts status section
     contracts_section = [
@@ -798,7 +798,7 @@ def get_blockchain_overview(
             for op in failed_ops_db
         ]
     elif user_role == "PROPERTY_OWNER":
-        # Seller: own registered properties, own transfers, own transactions + foundational deployments
+        # Seller: own registered properties, own transfers, own transactions
         seller_prop_ids = {
             p["property_id"]
             for p in registered_properties_list
@@ -814,8 +814,7 @@ def get_blockchain_overview(
         ]
         scoped_txs = [
             tx for tx in txs_list
-            if tx["blockNumber"] <= 5
-            or (tx.get("propertyId") and tx["propertyId"] in seller_prop_ids)
+            if (tx.get("propertyId") and tx["propertyId"] in seller_prop_ids)
             or (tx["from"].lower() in user_wallet_addrs or tx["to"].lower() in user_wallet_addrs)
         ]
     elif user_role == "BUYER":
@@ -834,11 +833,9 @@ def get_blockchain_overview(
         buyer_prop_ids = {t["property_id"] for t in scoped_transfers if t.get("property_id")}
         scoped_txs = [
             tx for tx in txs_list
-            if tx["blockNumber"] <= 5
-            or (tx["from"].lower() in user_wallet_addrs or tx["to"].lower() in user_wallet_addrs)
+            if (tx["from"].lower() in user_wallet_addrs or tx["to"].lower() in user_wallet_addrs)
             or (tx.get("propertyId") and tx["propertyId"] in buyer_prop_ids)
-            or tx["event"] in {"Property Registered", "Contract Deployment"}
-            or tx["event"].startswith("Contract Deployed")
+            or tx["event"] in {"Property Registered", "Ownership Transfer", "Ownership (Initial & Conveyance)"}
         ]
     elif user_role in {"REGISTRAR", "VERIFIER"}:
         # Verifier: verified property registrations, verification-related txs
@@ -846,9 +843,7 @@ def get_blockchain_overview(
         scoped_transfers = transfer_list
         scoped_txs = [
             tx for tx in txs_list
-            if tx["blockNumber"] <= 5
-            or tx["event"] in {"Property Registered", "Contract Deployment"}
-            or tx["event"].startswith("Contract Deployed")
+            if tx["event"] in {"Property Registered", "Ownership Transfer", "Ownership (Initial & Conveyance)"}
         ]
     elif user_role == "LEGAL_AUTHORITY":
         # Legal Authority: authorized property registrations and conveyance transfers
@@ -858,17 +853,19 @@ def get_blockchain_overview(
 
     return {
         "userRole": user_role,
+        "setupEndBlock": setup_end_block,
         "network": {
             "name": "Local Hardhat Network",
             "chainId": 31337,
             "rpcUrl": os.getenv("BLOCKCHAIN_RPC_URL", "http://127.0.0.1:8545"),
             "status": "Connected" if is_connected else "Disconnected",
-            "latestBlock": latest_block_num,
-            "totalBlocks": latest_block_num + 1 if is_connected else 0,
-            "totalTransactions": total_tx_count,
+            "latestBlock": blocks_list[0]["blockNumber"] if blocks_list else 0,
+            "totalBlocks": len(blocks_list),
+            "totalTransactions": len(scoped_txs),
             "totalPropertyRegistrations": len(scoped_properties),
             "totalOwnershipTransfers": len(scoped_transfers),
             "deployedContractsCount": len(contracts_section),
+            "setupEndBlock": setup_end_block,
         },
         "blocks": blocks_list,
         "transactions": scoped_txs,

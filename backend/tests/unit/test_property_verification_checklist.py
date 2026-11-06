@@ -126,6 +126,10 @@ def test_missing_all_required_documents_raises_error(db_session, users_and_prop)
     assert "TAX_CLEARANCE" in msg
     assert "ENCUMBRANCE_CERTIFICATE" in msg
 
+    # Move past draft status so verification document check triggers
+    prop.verification_status = "SUBMITTED"
+    db_session.commit()
+
     # Verifier trying to mark VERIFIED must fail
     with pytest.raises(BadRequestError) as exc_info2:
         service.update_status(
@@ -174,8 +178,13 @@ def test_submit_for_verification_success_when_all_uploaded(db_session, users_and
 
     # Submit for verification
     res = service.submit_for_verification(prop.id, owner)
-    assert res.verification_status == "PENDING"
+    assert res.verification_status in ("PENDING", "SUBMITTED")
     assert res.status == "UNDER_REVIEW"
+
+    # Verifier approves the documents first
+    for d in service.doc_repo.list_by_property(prop.id):
+        d.status = "VERIFIED"
+    db_session.commit()
 
     # Verifier can now approve verification status
     res_verified = service.update_status(

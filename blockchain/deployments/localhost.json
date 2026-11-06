@@ -1,14 +1,15 @@
 {
   "network": "localhost",
   "chainId": 31337,
-  "deployedAt": "2026-11-06T01:49:35.735Z",
+  "setupEndBlock": 1,
+  "deployedAt": "2026-11-06T02:16:57.405Z",
   "deployer": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
   "contracts": {
     "PropertyRegistry": {
       "address": "0x5FbDB2315678afecb367f032d93F642f64180aa3",
-      "deploymentTxHash": "0xe8b4718d3b5c0fbafcc166e7b595a1fd9510cce9d33d033653319f23fb175bf7",
+      "deploymentTxHash": "0xa7c140b7328a99cfe2980e4cd0fd52bdba4644f2a3e3aff06dba96164580880b",
       "deploymentBlockNumber": 1,
-      "deployedAt": "2026-11-06T01:49:35.735Z",
+      "deployedAt": "2026-11-06T02:16:57.405Z",
       "abi": [
         {
           "type": "constructor",
@@ -490,9 +491,9 @@
     },
     "OwnershipRegistry": {
       "address": "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512",
-      "deploymentTxHash": "0x053e1788b02a88984c8037a5bea619464ac51be17986c7c031d92dbf5af292af",
-      "deploymentBlockNumber": 2,
-      "deployedAt": "2026-11-06T01:49:35.735Z",
+      "deploymentTxHash": "0x05547e7b1c4e80b414ea8ea3abe782194095241118fd63c05e248fe059ab1c1b",
+      "deploymentBlockNumber": 1,
+      "deployedAt": "2026-11-06T02:16:57.405Z",
       "abi": [
         {
           "type": "constructor",
@@ -960,10 +961,10 @@
       ]
     },
     "TransactionManager": {
-      "address": "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9",
-      "deploymentTxHash": "0xaa341509af983337f5927c79f6bea5a77d2fdee5862e5c66fb80294250177eac",
-      "deploymentBlockNumber": 4,
-      "deployedAt": "2026-11-06T01:49:35.735Z",
+      "address": "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0",
+      "deploymentTxHash": "0xc51dc4c5c7cce512ab1b6f12e3423cba3f437c582550706e55e30b3cd7912768",
+      "deploymentBlockNumber": 1,
+      "deployedAt": "2026-11-06T02:16:57.405Z",
       "abi": [
         {
           "type": "constructor",
