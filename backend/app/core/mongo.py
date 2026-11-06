@@ -321,7 +321,7 @@ def setup_sqlalchemy_mongo_listener() -> None:
                 except Exception:
                     pass
 
-        def _bg_replicate():
+        def _replicate():
             db = get_mongo_db()
             if db is None:
                 return
@@ -331,17 +331,20 @@ def setup_sqlalchemy_mongo_listener() -> None:
                     try:
                         db[col_name].replace_one({"_id": doc["_id"]}, doc, upsert=True)
                     except Exception as e:
-                        logger.debug("Mongo bg sync notice for %s: %s", model_name, e)
+                        logger.debug("Mongo sync notice for %s: %s", model_name, e)
             for model_name, ent_id in del_items:
                 col_name = COLLECTION_MAPPING.get(model_name)
                 if col_name and ent_id:
                     try:
                         db[col_name].delete_one({"_id": ent_id})
                     except Exception as e:
-                        logger.debug("Mongo bg delete notice for %s: %s", model_name, e)
+                        logger.debug("Mongo delete notice for %s: %s", model_name, e)
 
         if new_items or dirty_items or del_items:
-            _mongo_executor.submit(_bg_replicate)
+            try:
+                _replicate()
+            except Exception as e:
+                logger.warning("Synchronous MongoDB replication notice: %s", e)
 
     logger.info("Registered SQLAlchemy real-time MongoDB asynchronous replication listener.")
 

@@ -23,6 +23,11 @@ class PropertyRepository:
         self.db.add(prop)
         self.db.commit()
         self.db.refresh(prop)
+        try:
+            from app.core.mongo import sync_entity_to_mongo
+            sync_entity_to_mongo(prop)
+        except Exception as e:
+            logger.debug("Immediate MongoDB sync notice on create: %s", e)
         return prop
 
     def get_by_id(self, property_id: uuid.UUID) -> Optional[Property]:
@@ -88,17 +93,6 @@ class PropertyRepository:
         current_user: Optional[User] = None,
         verified_by_me: Optional[bool] = False,
     ) -> Tuple[List[Property], int]:
-        # Fallback safeguard: If cache is completely empty, hydrate from MongoDB Atlas
-        try:
-            if self.db.query(Property).count() == 0:
-                from app.core.database import get_session_factory
-                from app.core.mongo import hydrate_all_from_mongo
-                session_factory = get_session_factory()
-                with session_factory() as sync_session:
-                    hydrate_all_from_mongo(sync_session, clear_existing=False)
-        except Exception as sync_exc:
-            logger.warning("Property repo cache fallback notice: %s", sync_exc)
-
         stmt = select(Property).options(
             joinedload(Property.current_owner),
             joinedload(Property.creator),
@@ -221,6 +215,11 @@ class PropertyRepository:
     def update(self, prop: Property) -> Property:
         self.db.commit()
         self.db.refresh(prop)
+        try:
+            from app.core.mongo import sync_entity_to_mongo
+            sync_entity_to_mongo(prop)
+        except Exception as e:
+            logger.debug("Immediate MongoDB sync notice on update: %s", e)
         return prop
 
     def delete(self, property_id: uuid.UUID) -> bool:
