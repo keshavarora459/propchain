@@ -19,6 +19,21 @@ const DashboardPage = lazy(() =>
 const PropertiesPage = lazy(() =>
   import('@/pages/properties/PropertiesPage').then((m) => ({ default: m.PropertiesPage }))
 )
+const RegisterPropertyChoicePage = lazy(() =>
+  import('@/pages/properties/RegisterPropertyChoicePage').then((m) => ({
+    default: m.RegisterPropertyChoicePage,
+  }))
+)
+const RegisterEntirePropertyPage = lazy(() =>
+  import('@/pages/properties/RegisterEntirePropertyPage').then((m) => ({
+    default: m.RegisterEntirePropertyPage,
+  }))
+)
+const RegisterTokenizedPropertyPage = lazy(() =>
+  import('@/pages/properties/RegisterTokenizedPropertyPage').then((m) => ({
+    default: m.RegisterTokenizedPropertyPage,
+  }))
+)
 const PropertyDetailPage = lazy(() =>
   import('@/pages/properties/PropertyDetailPage').then((m) => ({ default: m.PropertyDetailPage }))
 )
@@ -70,6 +85,37 @@ export const AppRoutes: React.FC = () => {
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/properties" element={<PropertiesPage />} />
+
+          {/* Seller Listing Options & Dedicated Pages */}
+          <Route
+            path="/properties/register"
+            element={
+              <ProtectedRoute requiredRole={['ADMIN', 'PROPERTY_OWNER']}>
+                <RegisterPropertyChoicePage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/properties/register/entire"
+            element={
+              <ProtectedRoute requiredRole={['ADMIN', 'PROPERTY_OWNER']}>
+                <RegisterEntirePropertyPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/properties/register/tokenized"
+            element={
+              <ProtectedRoute requiredRole={['ADMIN', 'PROPERTY_OWNER']}>
+                <RegisterTokenizedPropertyPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route path="/properties/register-entire" element={<Navigate to="/properties/register/entire" replace />} />
+          <Route path="/properties/register-tokenized" element={<Navigate to="/properties/register/tokenized" replace />} />
+          <Route path="/properties/list-entire" element={<Navigate to="/properties/register/entire" replace />} />
+          <Route path="/properties/list-tokenized" element={<Navigate to="/properties/register/tokenized" replace />} />
+
           <Route path="/properties/:id" element={<PropertyDetailPage />} />
           <Route path="/ownership" element={<OwnershipRegistryPage />} />
           <Route path="/transactions" element={<TransactionsPage />} />

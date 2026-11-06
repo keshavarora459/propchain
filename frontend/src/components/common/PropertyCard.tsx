@@ -26,6 +26,11 @@ export const PropertyCard: React.FC<PropertyCardProps> = ({ property, onDeleted 
     rawStatus === 'REQUIRES_CORRECTION'
   const isSubmitted = rawStatus === 'SUBMITTED'
 
+  const isTokenized = Boolean(
+    property.property_category === 'TOKENIZED' ||
+    property.description?.includes('[TOKENIZED')
+  )
+
   const isOwner = Boolean(
     user?.id && (
       (property.current_owner_id && String(property.current_owner_id).toLowerCase() === String(user.id).toLowerCase()) ||
@@ -81,9 +86,20 @@ export const PropertyCard: React.FC<PropertyCardProps> = ({ property, onDeleted 
         </div>
 
         <div className="relative z-10">
-          <span className="text-xs font-semibold text-blue-400 uppercase tracking-wider">
-            {property.propertyType}
-          </span>
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs font-semibold text-blue-400 uppercase tracking-wider">
+              {property.propertyType}
+            </span>
+            {isTokenized ? (
+              <span className="text-[10px] font-semibold text-purple-200 bg-purple-900/70 border border-purple-400/30 px-1.5 py-0.2 rounded">
+                Tokenized
+              </span>
+            ) : (
+              <span className="text-[10px] font-semibold text-blue-200 bg-blue-900/70 border border-blue-400/30 px-1.5 py-0.2 rounded">
+                Entire Sale
+              </span>
+            )}
+          </div>
           <p className="text-xl font-bold text-white tracking-tight mt-0.5">
             {formatCurrency(property.valuation)}
           </p>
@@ -237,3 +253,4 @@ export const PropertyCard: React.FC<PropertyCardProps> = ({ property, onDeleted 
     </Card>
   )
 }
+export default PropertyCard

@@ -7,6 +7,7 @@ export interface HashDisplayProps {
   value?: string | null
   label?: string
   truncate?: boolean
+  fullHash?: boolean
   startLength?: number
   endLength?: number
   explorerLink?: boolean
@@ -19,6 +20,7 @@ export const HashDisplay: React.FC<HashDisplayProps> = ({
   value,
   label,
   truncate = true,
+  fullHash = false,
   startLength = 8,
   endLength = 6,
   explorerLink = false,
@@ -107,7 +109,7 @@ export const HashDisplay: React.FC<HashDisplayProps> = ({
     setIsExpanded(!isExpanded)
   }
 
-  const isTruncatable = truncate && value.length > startLength + endLength
+  const isTruncatable = !fullHash && truncate && value.length > startLength + endLength
   const displayedHash = isTruncatable
     ? truncateHash(value, startLength, endLength)
     : value
@@ -235,3 +237,4 @@ export const HashDisplay: React.FC<HashDisplayProps> = ({
     </div>
   )
 }
+export default HashDisplay

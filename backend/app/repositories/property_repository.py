@@ -7,9 +7,12 @@ from typing import List, Optional, Tuple
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session, joinedload
 
+from app.core.logging import get_logger
 from app.core.permissions import UserRole
 from app.models.property import Property
 from app.models.user import User
+
+logger = get_logger("repositories.property")
 
 
 class PropertyRepository:
@@ -85,20 +88,16 @@ class PropertyRepository:
         current_user: Optional[User] = None,
         verified_by_me: Optional[bool] = False,
     ) -> Tuple[List[Property], int]:
-        # Automatic safeguard: If cache is empty or out of sync with MongoDB Atlas, resync
+        # Fallback safeguard: If cache is completely empty, hydrate from MongoDB Atlas
         try:
-            from app.core.mongo import get_mongo_db, hydrate_all_from_mongo
-            mongo_db = get_mongo_db()
-            if mongo_db is not None:
-                mongo_count = mongo_db["properties"].count_documents({})
-                sql_count = self.db.query(Property).count()
-                if mongo_count != sql_count:
-                    hydrate_all_from_mongo(self.db, clear_existing=True)
-            elif self.db.query(Property).count() == 0:
+            if self.db.query(Property).count() == 0:
+                from app.core.database import get_session_factory
                 from app.core.mongo import hydrate_all_from_mongo
-                hydrate_all_from_mongo(self.db)
-        except Exception:
-            pass
+                session_factory = get_session_factory()
+                with session_factory() as sync_session:
+                    hydrate_all_from_mongo(sync_session, clear_existing=False)
+        except Exception as sync_exc:
+            logger.warning("Property repo cache fallback notice: %s", sync_exc)
 
         stmt = select(Property).options(
             joinedload(Property.current_owner),

@@ -389,9 +389,9 @@ def hydrate_all_from_mongo(session: Session, clear_existing: bool = False) -> Di
 
     # 1. Users (Deduplicate by email and ID, prioritizing most recently updated)
     u_count = 0
-    seen_user_ids = set()
-    seen_user_emails = {str(u[0]).lower() for u in session.query(User.email).all() if u[0]}
-    admin_fallback_id = None
+    seen_user_ids = {safe_uuid(u[0]) for u in session.query(User.id).all() if u[0]}
+    seen_user_emails = {str(u[0]).lower().strip() for u in session.query(User.email).all() if u[0]}
+    admin_fallback_id = session.query(User.id).filter(User.role == "ADMIN").scalar()
 
     for u_doc in db["users"].find().sort([("updated_at", -1), ("created_at", -1)]):
         try:
@@ -445,12 +445,21 @@ def hydrate_all_from_mongo(session: Session, clear_existing: bool = False) -> Di
                 o_id = c_id
             data["current_owner_id"] = o_id
 
+            v_id = safe_uuid(data.get("verified_by_id"))
+            if v_id and v_id not in seen_user_ids:
+                v_id = None
+            data["verified_by_id"] = v_id
+
             session.add(Property(**data))
             seen_prop_ids.add(p_id)
             p_count += 1
         except Exception as e:
             logger.warning("Could not hydrate property %s: %s", p_doc.get("_id"), e)
-    session.flush()
+    try:
+        session.flush()
+    except Exception as e:
+        session.rollback()
+        logger.warning("Failed to flush hydrated properties, rolled back: %s", e)
     hydrated["properties"] = p_count
 
     # 3. Documents
@@ -477,7 +486,11 @@ def hydrate_all_from_mongo(session: Session, clear_existing: bool = False) -> Di
             d_count += 1
         except Exception as e:
             logger.warning("Could not hydrate document %s: %s", d_doc.get("_id"), e)
-    session.flush()
+    try:
+        session.flush()
+    except Exception as e:
+        session.rollback()
+        logger.warning("Failed to flush hydrated documents, rolled back: %s", e)
     hydrated["documents"] = d_count
 
     # 4. Transactions
@@ -513,7 +526,11 @@ def hydrate_all_from_mongo(session: Session, clear_existing: bool = False) -> Di
             t_count += 1
         except Exception as e:
             logger.warning("Could not hydrate transaction %s: %s", t_doc.get("_id"), e)
-    session.flush()
+    try:
+        session.flush()
+    except Exception as e:
+        session.rollback()
+        logger.warning("Failed to flush hydrated transactions, rolled back: %s", e)
     hydrated["transactions"] = t_count
 
     # 5. Approvals
@@ -532,7 +549,7 @@ def hydrate_all_from_mongo(session: Session, clear_existing: bool = False) -> Di
             data["transaction_id"] = tx_id
 
             ap_id = safe_uuid(data.get("approver_user_id"))
-            if not ap_id or ap_id not in seen_user_ids:
+            if ap_id and ap_id not in seen_user_ids:
                 ap_id = default_user_id
             data["approver_user_id"] = ap_id
 
@@ -540,7 +557,11 @@ def hydrate_all_from_mongo(session: Session, clear_existing: bool = False) -> Di
             a_count += 1
         except Exception as e:
             logger.warning("Could not hydrate approval %s: %s", a_doc.get("_id"), e)
-    session.flush()
+    try:
+        session.flush()
+    except Exception as e:
+        session.rollback()
+        logger.warning("Failed to flush hydrated approvals, rolled back: %s", e)
     hydrated["approvals"] = a_count
 
     # 6. Ownership Events
@@ -575,7 +596,11 @@ def hydrate_all_from_mongo(session: Session, clear_existing: bool = False) -> Di
             o_count += 1
         except Exception as e:
             logger.warning("Could not hydrate ownership event %s: %s", o_doc.get("_id"), e)
-    session.flush()
+    try:
+        session.flush()
+    except Exception as e:
+        session.rollback()
+        logger.warning("Failed to flush hydrated ownership events, rolled back: %s", e)
     hydrated["ownership_events"] = o_count
 
     # 7. Wallets
@@ -595,7 +620,11 @@ def hydrate_all_from_mongo(session: Session, clear_existing: bool = False) -> Di
             w_count += 1
         except Exception as e:
             logger.warning("Could not hydrate wallet %s: %s", w_doc.get("_id"), e)
-    session.flush()
+    try:
+        session.flush()
+    except Exception as e:
+        session.rollback()
+        logger.warning("Failed to flush hydrated wallets, rolled back: %s", e)
     hydrated["wallets"] = w_count
 
     session.commit()

@@ -2,6 +2,7 @@
 Demo Users Seeding Script for PropChain Local Development.
 Provisions one user for each core platform role with a standard development password.
 """
+import os
 import sys
 from pathlib import Path
 
