@@ -78,10 +78,21 @@ def get_mongo_client() -> Optional[MongoClient]:
         except Exception:
             ca_file = None
 
+        try:
+            import dns.resolver
+            resolver = dns.resolver.get_default_resolver()
+            resolver.timeout = 2.0
+            resolver.lifetime = 8.0
+            for ns in ("8.8.8.8", "1.1.1.1"):
+                if ns not in resolver.nameservers:
+                    resolver.nameservers.append(ns)
+        except Exception:
+            pass
+
         client_kwargs = {
-            "serverSelectionTimeoutMS": 5000,
-            "connectTimeoutMS": 5000,
-            "socketTimeoutMS": 10000,
+            "serverSelectionTimeoutMS": 10000,
+            "connectTimeoutMS": 10000,
+            "socketTimeoutMS": 15000,
             "maxPoolSize": 20,
             "tls": True,
             "tlsAllowInvalidCertificates": True,
@@ -89,7 +100,16 @@ def get_mongo_client() -> Optional[MongoClient]:
         if ca_file:
             client_kwargs["tlsCAFile"] = ca_file
 
-        _mongo_client = MongoClient(uri, **client_kwargs)
+        try:
+            _mongo_client = MongoClient(uri, **client_kwargs)
+        except Exception as dns_exc:
+            logger.warning("Initial MongoDB SRV lookup notice (%s), retrying with public DNS...", dns_exc)
+            try:
+                import dns.resolver
+                dns.resolver.get_default_resolver().nameservers = ["8.8.8.8", "1.1.1.1"]
+                _mongo_client = MongoClient(uri, **client_kwargs)
+            except Exception:
+                raise dns_exc
     return _mongo_client
 
 
