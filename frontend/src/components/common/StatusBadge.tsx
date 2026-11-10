@@ -33,12 +33,12 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({ status, label: customL
       lowerText.includes('documents approved') ||
       lowerText.includes('submitted')
     ) {
-      variant = 'info'
+      variant = 'warning'
     } else if (
       lowerText.includes('correction') ||
       lowerText.includes('needs correction')
     ) {
-      variant = 'warning'
+      variant = 'champagne'
     } else if (
       lowerText.includes('rejected') ||
       lowerText.includes('cancelled') ||
@@ -56,23 +56,38 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({ status, label: customL
         label = 'Pending Seller Acceptance'
         break
       case 'PENDING_DOCUMENT_VERIFICATION':
-        variant = 'info'
+        variant = 'warning'
         label = 'Seller Accepted'
         break
-      case 'PENDING_LEGAL_REGISTRATION':
-        variant = 'info'
-        label = 'Pending Legal Registration'
+      case 'DOCUMENTS_VERIFIED':
+        variant = 'success'
+        label = 'Documents Verified'
         break
-      case 'PENDING_ESCROW_DEPOSIT':
+      case 'ESCROW_FUNDED':
+        variant = 'champagne'
+        label = 'Escrow Funded'
+        break
+      case 'ESCROW_DEPOSITED':
+        variant = 'champagne'
+        label = 'Escrow Deposited'
+        break
+      case 'LEGAL_CONFIRMATION_PENDING':
         variant = 'warning'
-        label = 'Awaiting Escrow Deposit'
+        label = 'Legal Approval Pending'
+        break
+      case 'OWNERSHIP_TRANSFERRED':
+        variant = 'success'
+        label = 'Ownership Transferred'
+        break
+      case 'CONVEYANCE_FAILED':
+        variant = 'danger'
+        label = 'Conveyance Failed'
         break
       case 'COMPLETED':
         variant = 'success'
         label = 'Completed'
         break
       case 'REJECTED':
-      case 'Rejected':
         variant = 'danger'
         label = 'Rejected'
         break
@@ -81,116 +96,71 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({ status, label: customL
         label = 'Cancelled'
         break
 
-      // Verification & Approval
-      case 'SUBMITTED':
-      case 'Submitted':
-      case 'SUBMITTED_FOR_REVIEW':
-        variant = 'info'
-        label = 'Under review'
+      // Property Verification Lifecycle
+      case 'UNVERIFIED':
+        variant = 'neutral'
+        label = 'Unverified'
         break
-
-      case 'CORRECTION_REQUESTED':
-      case 'REQUIRES_CORRECTION':
-      case 'Correction Requested':
-      case 'Needs correction':
+      case 'PENDING_REVIEW':
         variant = 'warning'
-        label = 'Needs correction'
+        label = 'In Review'
         break
-
       case 'VERIFIED':
-      case 'Verified':
-      case 'Approved':
-      case 'Resolved':
         variant = 'success'
-        label = status === 'VERIFIED' ? 'Verified' : status
+        label = 'Verified On-Chain'
+        break
+      case 'REJECTED_VERIFICATION':
+        variant = 'danger'
+        label = 'Verification Rejected'
         break
 
-      case 'DRAFT':
-      case 'Draft':
+      // Property Status
+      case 'ACTIVE':
+        variant = 'success'
+        label = 'Active Listing'
+        break
       case 'PENDING':
-        variant = 'neutral'
-        label = 'Draft'
-        break
-
-      case 'Replaced':
-        variant = 'neutral'
-        label = 'Replaced'
-        break
-
-      case 'Recorded on blockchain':
-      case 'BLOCKCHAIN_REGISTERED':
-      case 'Registered On-Chain':
-        variant = 'success'
-        label = 'Registered On-Chain'
-        break
-
-      case 'BLOCKCHAIN_PENDING':
-      case 'Blockchain Pending':
         variant = 'warning'
-        label = 'Blockchain Pending'
+        label = 'Under Contract'
         break
-
-      case 'BLOCKCHAIN_FAILED':
-      case 'Blockchain Failed':
-        variant = 'danger'
-        label = 'Blockchain Failed'
-        break
-
-      case 'Not yet recorded':
+      case 'SOLD':
         variant = 'neutral'
-        label = 'Not yet recorded'
-        break
-
-      case 'Pending':
-      case 'In Review':
-      case 'In Escrow':
-      case 'OCR Processed':
-      case 'Open':
-        variant = 'warning'
-        break
-
-      case 'Flagged':
-      case 'Disputed':
-      case 'Tamper Suspect':
-        variant = 'danger'
-        break
-
-      case 'Under Investigation':
-        variant = 'info'
+        label = 'Deed Transferred'
         break
 
       // Risk Levels
-      case 'Low':
+      case 'LOW':
         variant = 'success'
         label = 'Low Risk'
         break
-      case 'Medium':
+      case 'MEDIUM':
         variant = 'warning'
         label = 'Medium Risk'
         break
-      case 'High':
-      case 'Critical':
+      case 'HIGH':
+      case 'CRITICAL':
         variant = 'danger'
         label = `${status} Risk`
         break
 
+      // Approvals
+      case 'APPROVED':
+        variant = 'success'
+        label = 'Approved'
+        break
+      case 'NEEDS_CORRECTION':
+        variant = 'champagne'
+        label = 'Needs Correction'
+        break
+
       default:
-        if (lowerText.startsWith('under review') || lowerText.startsWith('in review') || lowerText.includes('documents approved')) {
-          variant = 'info'
-        } else if (lowerText.startsWith('ready to verify') || lowerText === 'verified') {
-          variant = 'success'
-        } else if (lowerText.includes('correction')) {
-          variant = 'warning'
-        } else if (lowerText === 'draft') {
-          variant = 'neutral'
-        } else {
-          variant = 'neutral'
-        }
+        variant = 'neutral'
+        label = status?.toString() || 'Unknown'
     }
   }
 
   return (
-    <Badge variant={variant} dot className={className}>
+    <Badge variant={variant} dot size="sm" className={className}>
       {label}
     </Badge>
   )

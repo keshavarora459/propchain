@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import {
   Users,
   Building2,
@@ -26,6 +26,7 @@ import { propertyService } from '@/services/propertyService'
 
 export const AdminDashboard: React.FC = () => {
   const { user } = useAuth()
+  const navigate = useNavigate()
 
   const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'roles' | 'properties' | 'transactions' | 'blockchain' | 'logs'>('overview')
   const [dashboardData, setDashboardData] = useState<any>(null)
@@ -106,63 +107,61 @@ export const AdminDashboard: React.FC = () => {
   const recentTransactions = dashboardData?.recent_transactions || []
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <PageHeader
-        title={`Enterprise Administration Console: ${user?.full_name || 'System Administrator'}`}
-        description="Comprehensive network oversight: manage user credentials, monitor real estate listings, inspect atomic escrow transactions, and audit consensus telemetry."
+        title={`Executive Governance & Network Oversight`}
+        description={`Console for ${user?.full_name || 'System Administrator'}. Comprehensive telemetry across institutional participants, verified luxury real estate, consensus contracts, and audit trails.`}
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
             <Button
               variant="outline"
               size="sm"
               onClick={handleSyncMongo}
               isLoading={isSyncingMongo}
-              leftIcon={<Database className="h-3.5 w-3.5 text-emerald-600" />}
-              className="border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+              leftIcon={<Database className="h-3.5 w-3.5 text-[#657565]" />}
+              className="border-[#D4CBBC] text-[#252B28] hover:bg-[#EAE4D9]/50"
             >
-              Sync with MongoDB Atlas
+              Sync Atlas
             </Button>
-            <Button variant="outline" size="sm" onClick={loadAdminData} leftIcon={<RefreshCw className="h-3.5 w-3.5" />}>
-              Refresh Telemetry
+            <Button variant="outline" size="sm" onClick={loadAdminData} leftIcon={<RefreshCw className="h-3.5 w-3.5 text-[#657565]" />}>
+              Refresh
             </Button>
-            <Link to="/admin/users">
-              <Button size="sm" leftIcon={<Users className="h-4 w-4" />}>
-                User & Role Management
-              </Button>
-            </Link>
+            <Button size="sm" onClick={() => navigate('/admin/users')} leftIcon={<Users className="h-4 w-4" />}>
+              Identity Registry
+            </Button>
           </div>
         }
       />
 
-      {/* Admin KPI Stat Cards */}
+      {/* Admin KPI Stat Cards - Luxury Theme */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
-          title="Registered Network Users"
+          title="Network Identities"
           value={(adminMetrics?.total_users_count ?? userList.length).toString()}
-          subtitle={`${adminMetrics?.active_users_count ?? userList.length} Active accounts across roles`}
-          icon={<Users className="h-5 w-5" />}
-          iconBg="bg-blue-50 text-blue-600"
+          subtitle={`${adminMetrics?.active_users_count ?? userList.length} Active accounts provisioned`}
+          icon={<Users className="h-5 w-5 text-[#657565]" />}
+          iconBg="bg-[#EAE4D9]/60"
         />
         <StatCard
-          title="Cataloged Properties"
+          title="Enrolled Residences"
           value={(dashboardData?.total_properties ?? propertyList.length).toString()}
-          subtitle={`${dashboardData?.verified_properties ?? 0} Verified properties`}
-          icon={<Building2 className="h-5 w-5" />}
-          iconBg="bg-indigo-50 text-indigo-600"
+          subtitle={`${dashboardData?.verified_properties ?? 0} Authenticated titles`}
+          icon={<Building2 className="h-5 w-5 text-[#B49A70]" />}
+          iconBg="bg-[#FAF8F3]"
         />
         <StatCard
           title="Platform Gross Valuation"
           value={formatCurrency(dashboardData?.total_valuation_usd ?? 0)}
-          subtitle="Consolidated land value in catalog"
-          icon={<FileBadge className="h-5 w-5" />}
-          iconBg="bg-emerald-50 text-emerald-600"
+          subtitle="Consolidated real estate capitalization"
+          icon={<FileBadge className="h-5 w-5 text-[#657565]" />}
+          iconBg="bg-[#EAE4D9]/60"
         />
         <StatCard
           title="Active Conveyances"
           value={(dashboardData?.active_transactions ?? 0).toString()}
-          subtitle={`${dashboardData?.completed_transactions ?? 0} Completed sales`}
-          icon={<ArrowLeftRight className="h-5 w-5" />}
-          iconBg="bg-purple-50 text-purple-600"
+          subtitle={`${dashboardData?.completed_transactions ?? 0} Transferred on blockchain`}
+          icon={<ArrowLeftRight className="h-5 w-5 text-[#B49A70]" />}
+          iconBg="bg-[#FAF8F3]"
         />
       </div>
 
@@ -170,12 +169,12 @@ export const AdminDashboard: React.FC = () => {
       <Tabs
         tabs={[
           { id: 'overview', label: 'Platform Overview' },
-          { id: 'users', label: 'User Management', count: userList.length },
-          { id: 'roles', label: 'Role & Permissions Matrix' },
-          { id: 'properties', label: 'Property Management', count: propertyList.length },
-          { id: 'transactions', label: 'Transaction Monitoring', count: recentTransactions.length },
-          { id: 'blockchain', label: 'Blockchain Monitoring', count: recentEvents.length },
-          { id: 'logs', label: 'Activity & Audit Logs', count: auditLogs.length },
+          { id: 'users', label: 'User Directory', count: userList.length },
+          { id: 'roles', label: 'RBAC Security Matrix' },
+          { id: 'properties', label: 'Real Estate Catalog', count: propertyList.length },
+          { id: 'transactions', label: 'Escrow Settlements', count: recentTransactions.length },
+          { id: 'blockchain', label: 'EVM Node Telemetry', count: recentEvents.length },
+          { id: 'logs', label: 'Audit Log Archive', count: auditLogs.length },
         ]}
         activeTab={activeTab}
         onChange={(id) => setActiveTab(id as any)}
@@ -197,16 +196,16 @@ export const AdminDashboard: React.FC = () => {
               </CardHeader>
               <CardContent className="p-0">
                 {recentTransactions.length === 0 ? (
-                  <div className="p-8 text-center text-xs text-slate-400">
-                    <Clock className="h-8 w-8 mx-auto text-slate-300 mb-2" />
-                    <p>No transactions registered yet.</p>
+                  <div className="p-10 text-center text-xs text-[#6B726B]">
+                    <Clock className="h-8 w-8 mx-auto text-[#D4CBBC] mb-2" />
+                    <p className="font-medium text-[#252B28]">No transactions recorded yet.</p>
                   </div>
                 ) : (
                   <Table>
                     <TableHeader>
                       <TableRow>
                         <TableHead>Transaction #</TableHead>
-                        <TableHead>Property</TableHead>
+                        <TableHead>Residence</TableHead>
                         <TableHead>Amount</TableHead>
                         <TableHead>Status</TableHead>
                       </TableRow>
@@ -214,9 +213,9 @@ export const AdminDashboard: React.FC = () => {
                     <TableBody>
                       {recentTransactions.slice(0, 5).map((t: any) => (
                         <TableRow key={t.id}>
-                          <TableCell className="font-mono text-xs font-semibold text-blue-600">{t.transaction_number}</TableCell>
-                          <TableCell className="font-medium text-slate-900 text-xs">{t.property_title}</TableCell>
-                          <TableCell className="font-mono text-xs font-bold">{formatCurrency(t.purchase_price)}</TableCell>
+                          <TableCell className="font-mono text-xs font-semibold text-[#657565]">{t.transaction_number}</TableCell>
+                          <TableCell className="font-semibold text-[#252B28] text-xs">{t.property_title}</TableCell>
+                          <TableCell className="font-mono text-xs font-semibold text-[#252B28]">{formatCurrency(t.purchase_price)}</TableCell>
                           <TableCell><StatusBadge status={t.status} /></TableCell>
                         </TableRow>
                       ))}
@@ -229,18 +228,16 @@ export const AdminDashboard: React.FC = () => {
             <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
-                  <CardTitle>Recent User Sign-ups & Logins</CardTitle>
-                  <Link to="/admin/users">
-                    <Button size="sm" variant="outline" className="text-xs">
-                      Directory
-                    </Button>
-                  </Link>
+                  <CardTitle>Recent Participant Activations</CardTitle>
+                  <Button size="sm" variant="outline" onClick={() => navigate('/admin/users')} className="text-xs">
+                    Directory
+                  </Button>
                 </div>
                 <CardDescription>Accounts provisioned across network roles.</CardDescription>
               </CardHeader>
               <CardContent className="p-0">
                 {userList.length === 0 ? (
-                  <div className="p-8 text-center text-xs text-slate-400">
+                  <div className="p-10 text-center text-xs text-[#6B726B]">
                     <p>No user accounts indexed.</p>
                   </div>
                 ) : (
@@ -256,10 +253,10 @@ export const AdminDashboard: React.FC = () => {
                     <TableBody>
                       {userList.slice(0, 5).map((u: any) => (
                         <TableRow key={u.id}>
-                          <TableCell className="font-medium text-slate-900 text-xs">{u.full_name}</TableCell>
-                          <TableCell className="font-mono text-xs text-slate-600">{u.email}</TableCell>
+                          <TableCell className="font-medium text-[#252B28] text-xs">{u.full_name}</TableCell>
+                          <TableCell className="font-mono text-xs text-[#6B726B]">{u.email}</TableCell>
                           <TableCell>
-                            <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-700">
+                            <span className="text-[10px] font-mono font-semibold px-2.5 py-0.5 rounded-full bg-[#EAE4D9] text-[#252B28] border border-[#D4CBBC]">
                               {getRoleLabel(u.role)}
                             </span>
                           </TableCell>
@@ -275,18 +272,18 @@ export const AdminDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* Tab 2: User Management */}
+      {/* Tab 2: User Directory */}
       {activeTab === 'users' && (
         <Card>
           <CardHeader>
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <CardTitle>Registered Network Accounts</CardTitle>
                 <CardDescription>Administrative view of authenticated identity accounts.</CardDescription>
               </div>
-              <Link to="/admin/users">
-                <Button size="sm">Open Full User Management Page</Button>
-              </Link>
+              <Button size="sm" onClick={() => navigate('/admin/users')}>
+                Open Full User Directory
+              </Button>
             </div>
           </CardHeader>
           <CardContent className="p-0">
@@ -304,21 +301,21 @@ export const AdminDashboard: React.FC = () => {
               <TableBody>
                 {userList.map((u: any) => (
                   <TableRow key={u.id}>
-                    <TableCell className="font-medium text-slate-900 text-xs">{u.full_name}</TableCell>
-                    <TableCell className="font-mono text-xs text-slate-600">{u.email}</TableCell>
+                    <TableCell className="font-medium text-[#252B28] text-xs">{u.full_name}</TableCell>
+                    <TableCell className="font-mono text-xs text-[#6B726B]">{u.email}</TableCell>
                     <TableCell>
-                      <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
+                      <span className="text-[10px] font-mono font-semibold px-2.5 py-0.5 rounded-full bg-[#EAE4D9] text-[#252B28] border border-[#D4CBBC]">
                         {getRoleLabel(u.role)}
                       </span>
                     </TableCell>
                     <TableCell><StatusBadge status={u.account_status} /></TableCell>
-                    <TableCell className="text-xs text-slate-500">{formatDate(u.created_at)}</TableCell>
+                    <TableCell className="text-xs text-[#6B726B]">{formatDate(u.created_at)}</TableCell>
                     <TableCell className="text-right">
                       {u.role !== 'ADMIN' && (
                         <button
                           type="button"
                           onClick={() => handleDeleteUserAdmin(u.id, u.email)}
-                          className="p-1 rounded text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                          className="p-1.5 rounded-full text-[#6B726B] hover:text-rose-700 hover:bg-rose-50 transition-colors cursor-pointer"
                           title="Delete user"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
@@ -341,66 +338,66 @@ export const AdminDashboard: React.FC = () => {
             <CardDescription>Functional permissions granted per authenticated role in accordance with PropChain governance.</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs text-left border-collapse border border-slate-200">
+            <div className="overflow-x-auto rounded-xl border border-[#E8E2D5]">
+              <table className="w-full text-xs text-left border-collapse">
                 <thead>
-                  <tr className="bg-slate-100 text-slate-700 font-semibold">
-                    <th className="p-3 border border-slate-200">Permission</th>
-                    <th className="p-3 border border-slate-200 text-center">Buyer</th>
-                    <th className="p-3 border border-slate-200 text-center">Seller</th>
-                    <th className="p-3 border border-slate-200 text-center">Registrar</th>
-                    <th className="p-3 border border-slate-200 text-center">Legal Authority</th>
-                    <th className="p-3 border border-slate-200 text-center">Admin</th>
+                  <tr className="bg-[#FAF8F3] text-[#252B28] font-semibold border-b border-[#E8E2D5]">
+                    <th className="p-3.5 font-medium">Permission Scope</th>
+                    <th className="p-3.5 text-center font-medium">Buyer</th>
+                    <th className="p-3.5 text-center font-medium">Seller</th>
+                    <th className="p-3.5 text-center font-medium">Registrar</th>
+                    <th className="p-3.5 text-center font-medium">Legal Authority</th>
+                    <th className="p-3.5 text-center font-medium">Admin</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-200">
+                <tbody className="divide-y divide-[#F4F1EA]">
                   <tr>
-                    <td className="p-3 font-medium">view_dashboard</td>
-                    <td className="p-3 text-center text-emerald-600 font-bold">✓</td>
-                    <td className="p-3 text-center text-emerald-600 font-bold">✓</td>
-                    <td className="p-3 text-center text-emerald-600 font-bold">✓</td>
-                    <td className="p-3 text-center text-emerald-600 font-bold">✓</td>
-                    <td className="p-3 text-center text-emerald-600 font-bold">✓</td>
+                    <td className="p-3.5 font-medium text-[#252B28]">view_dashboard</td>
+                    <td className="p-3.5 text-center text-[#657565] font-bold">✓</td>
+                    <td className="p-3.5 text-center text-[#657565] font-bold">✓</td>
+                    <td className="p-3.5 text-center text-[#657565] font-bold">✓</td>
+                    <td className="p-3.5 text-center text-[#657565] font-bold">✓</td>
+                    <td className="p-3.5 text-center text-[#657565] font-bold">✓</td>
                   </tr>
                   <tr>
-                    <td className="p-3 font-medium">register_property</td>
-                    <td className="p-3 text-center text-slate-300">—</td>
-                    <td className="p-3 text-center text-emerald-600 font-bold">✓</td>
-                    <td className="p-3 text-center text-slate-300">—</td>
-                    <td className="p-3 text-center text-slate-300">—</td>
-                    <td className="p-3 text-center text-emerald-600 font-bold">✓</td>
+                    <td className="p-3.5 font-medium text-[#252B28]">register_property</td>
+                    <td className="p-3.5 text-center text-[#D4CBBC]">—</td>
+                    <td className="p-3.5 text-center text-[#657565] font-bold">✓</td>
+                    <td className="p-3.5 text-center text-[#D4CBBC]">—</td>
+                    <td className="p-3.5 text-center text-[#D4CBBC]">—</td>
+                    <td className="p-3.5 text-center text-[#657565] font-bold">✓</td>
                   </tr>
                   <tr>
-                    <td className="p-3 font-medium">initiate_transaction</td>
-                    <td className="p-3 text-center text-emerald-600 font-bold">✓</td>
-                    <td className="p-3 text-center text-slate-300">—</td>
-                    <td className="p-3 text-center text-slate-300">—</td>
-                    <td className="p-3 text-center text-slate-300">—</td>
-                    <td className="p-3 text-center text-emerald-600 font-bold">✓</td>
+                    <td className="p-3.5 font-medium text-[#252B28]">initiate_transaction</td>
+                    <td className="p-3.5 text-center text-[#657565] font-bold">✓</td>
+                    <td className="p-3.5 text-center text-[#D4CBBC]">—</td>
+                    <td className="p-3.5 text-center text-[#D4CBBC]">—</td>
+                    <td className="p-3.5 text-center text-[#D4CBBC]">—</td>
+                    <td className="p-3.5 text-center text-[#657565] font-bold">✓</td>
                   </tr>
                   <tr>
-                    <td className="p-3 font-medium">verify_documents</td>
-                    <td className="p-3 text-center text-slate-300">—</td>
-                    <td className="p-3 text-center text-slate-300">—</td>
-                    <td className="p-3 text-center text-emerald-600 font-bold">✓</td>
-                    <td className="p-3 text-center text-slate-300">—</td>
-                    <td className="p-3 text-center text-emerald-600 font-bold">✓</td>
+                    <td className="p-3.5 font-medium text-[#252B28]">verify_documents</td>
+                    <td className="p-3.5 text-center text-[#D4CBBC]">—</td>
+                    <td className="p-3.5 text-center text-[#D4CBBC]">—</td>
+                    <td className="p-3.5 text-center text-[#657565] font-bold">✓</td>
+                    <td className="p-3.5 text-center text-[#D4CBBC]">—</td>
+                    <td className="p-3.5 text-center text-[#657565] font-bold">✓</td>
                   </tr>
                   <tr>
-                    <td className="p-3 font-medium">confirm_legal_registration</td>
-                    <td className="p-3 text-center text-slate-300">—</td>
-                    <td className="p-3 text-center text-slate-300">—</td>
-                    <td className="p-3 text-center text-slate-300">—</td>
-                    <td className="p-3 text-center text-purple-700 font-bold bg-purple-50">✓ (Exclusive)</td>
-                    <td className="p-3 text-center text-red-500 font-semibold bg-red-50">✕ (Restricted)</td>
+                    <td className="p-3.5 font-medium text-[#252B28]">confirm_legal_registration</td>
+                    <td className="p-3.5 text-center text-[#D4CBBC]">—</td>
+                    <td className="p-3.5 text-center text-[#D4CBBC]">—</td>
+                    <td className="p-3.5 text-center text-[#D4CBBC]">—</td>
+                    <td className="p-3.5 text-center text-[#657565] font-bold bg-[#657565]/10">✓ (Exclusive)</td>
+                    <td className="p-3.5 text-center text-rose-700 font-semibold bg-rose-50/50">✕ (Restricted)</td>
                   </tr>
                   <tr>
-                    <td className="p-3 font-medium">manage_users</td>
-                    <td className="p-3 text-center text-slate-300">—</td>
-                    <td className="p-3 text-center text-slate-300">—</td>
-                    <td className="p-3 text-center text-slate-300">—</td>
-                    <td className="p-3 text-center text-slate-300">—</td>
-                    <td className="p-3 text-center text-emerald-600 font-bold">✓</td>
+                    <td className="p-3.5 font-medium text-[#252B28]">manage_users</td>
+                    <td className="p-3.5 text-center text-[#D4CBBC]">—</td>
+                    <td className="p-3.5 text-center text-[#D4CBBC]">—</td>
+                    <td className="p-3.5 text-center text-[#D4CBBC]">—</td>
+                    <td className="p-3.5 text-center text-[#D4CBBC]">—</td>
+                    <td className="p-3.5 text-center text-[#657565] font-bold">✓</td>
                   </tr>
                 </tbody>
               </table>
@@ -413,16 +410,14 @@ export const AdminDashboard: React.FC = () => {
       {activeTab === 'properties' && (
         <Card>
           <CardHeader>
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <CardTitle>Network Properties Catalog</CardTitle>
-                <CardDescription>Administrative view of all registered properties.</CardDescription>
+                <CardDescription>Administrative view of all registered real estate assets.</CardDescription>
               </div>
-              <Link to="/properties">
-                <Button size="sm" variant="outline" className="text-xs">
-                  All Properties View
-                </Button>
-              </Link>
+              <Button size="sm" variant="outline" onClick={() => navigate('/properties')} className="text-xs">
+                All Properties View
+              </Button>
             </div>
           </CardHeader>
           <CardContent className="p-0">
@@ -430,7 +425,7 @@ export const AdminDashboard: React.FC = () => {
               <TableHeader>
                 <TableRow>
                   <TableHead>Parcel ID</TableHead>
-                  <TableHead>Property</TableHead>
+                  <TableHead>Residence</TableHead>
                   <TableHead>Type</TableHead>
                   <TableHead>Location</TableHead>
                   <TableHead>Valuation</TableHead>
@@ -442,22 +437,25 @@ export const AdminDashboard: React.FC = () => {
               <TableBody>
                 {propertyList.map((p) => (
                   <TableRow key={p.id}>
-                    <TableCell className="font-mono text-xs text-slate-700">{p.propertyId}</TableCell>
-                    <TableCell className="font-medium text-slate-900 text-xs">
-                      <Link to={`/properties/${p.id}`} className="hover:text-blue-600">
+                    <TableCell className="font-mono text-xs text-[#657565]">{p.propertyId}</TableCell>
+                    <TableCell className="font-semibold text-[#252B28] text-xs">
+                      <button
+                        onClick={() => navigate(`/properties/${p.id}`)}
+                        className="hover:text-[#657565] cursor-pointer text-left font-semibold"
+                      >
                         {getPropertyLabel(p)}
-                      </Link>
+                      </button>
                     </TableCell>
-                    <TableCell className="text-xs text-slate-600">{p.propertyType}</TableCell>
-                    <TableCell className="text-xs text-slate-600">{p.city}, {p.state}</TableCell>
-                    <TableCell className="font-mono text-xs font-bold">{formatCurrency(p.valuation)}</TableCell>
+                    <TableCell className="text-xs text-[#6B726B]">{p.propertyType}</TableCell>
+                    <TableCell className="text-xs text-[#6B726B]">{p.city}, {p.state}</TableCell>
+                    <TableCell className="font-mono text-xs font-semibold text-[#252B28]">{formatCurrency(p.valuation)}</TableCell>
                     <TableCell><StatusBadge status={p.status} /></TableCell>
                     <TableCell><StatusBadge status={p.verificationStatus} label={getVerificationLabel(p, user?.role)} /></TableCell>
                     <TableCell className="text-right">
                       <button
                         type="button"
                         onClick={() => handleDeletePropertyAdmin(p.id, getPropertyLabel(p))}
-                        className="p-1 rounded text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                        className="p-1.5 rounded-full text-[#6B726B] hover:text-rose-700 hover:bg-rose-50 transition-colors cursor-pointer"
                         title="Delete property"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
@@ -475,21 +473,19 @@ export const AdminDashboard: React.FC = () => {
       {activeTab === 'transactions' && (
         <Card>
           <CardHeader>
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <CardTitle>Global Transaction Monitoring Ledger</CardTitle>
                 <CardDescription>All purchase and escrow proposals moving through consensus settlement.</CardDescription>
               </div>
-              <Link to="/transactions">
-                <Button size="sm" variant="outline" className="text-xs">
-                  Escrow Dashboard
-                </Button>
-              </Link>
+              <Button size="sm" variant="outline" onClick={() => navigate('/transactions')} className="text-xs">
+                Escrow Dashboard
+              </Button>
             </div>
           </CardHeader>
           <CardContent className="p-0">
             {recentTransactions.length === 0 ? (
-              <div className="p-8 text-center text-xs text-slate-400">
+              <div className="p-10 text-center text-xs text-[#6B726B]">
                 <p>No transactions found.</p>
               </div>
             ) : (
@@ -497,7 +493,7 @@ export const AdminDashboard: React.FC = () => {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Transaction #</TableHead>
-                    <TableHead>Property</TableHead>
+                    <TableHead>Residence</TableHead>
                     <TableHead>Buyer</TableHead>
                     <TableHead>Seller</TableHead>
                     <TableHead>Purchase Price</TableHead>
@@ -508,13 +504,13 @@ export const AdminDashboard: React.FC = () => {
                 <TableBody>
                   {recentTransactions.map((tx: any) => (
                     <TableRow key={tx.id}>
-                      <TableCell className="font-mono text-xs font-semibold text-blue-600">{tx.transaction_number}</TableCell>
-                      <TableCell className="font-medium text-slate-900 text-xs">{getPropertyLabel(tx)}</TableCell>
-                      <TableCell className="text-xs text-slate-600">{tx.buyer_name}</TableCell>
-                      <TableCell className="text-xs text-slate-600">{tx.seller_name}</TableCell>
-                      <TableCell className="font-mono text-xs font-bold">{formatCurrency(tx.purchase_price)}</TableCell>
+                      <TableCell className="font-mono text-xs font-semibold text-[#657565]">{tx.transaction_number}</TableCell>
+                      <TableCell className="font-semibold text-[#252B28] text-xs">{getPropertyLabel(tx)}</TableCell>
+                      <TableCell className="text-xs text-[#6B726B] font-normal">{tx.buyer_name}</TableCell>
+                      <TableCell className="text-xs text-[#6B726B] font-normal">{tx.seller_name}</TableCell>
+                      <TableCell className="font-mono text-xs font-semibold text-[#252B28]">{formatCurrency(tx.purchase_price)}</TableCell>
                       <TableCell><StatusBadge status={tx.status} /></TableCell>
-                      <TableCell className="font-mono text-xs text-blue-600">
+                      <TableCell className="font-mono text-xs text-[#6B726B]">
                         {tx.blockchain_tx_hash ? truncateHash(tx.blockchain_tx_hash) : 'Pending'}
                       </TableCell>
                     </TableRow>
@@ -530,22 +526,22 @@ export const AdminDashboard: React.FC = () => {
       {activeTab === 'blockchain' && (
         <Card>
           <CardHeader>
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <CardTitle className="flex items-center gap-2">
-                  <Cpu className="h-5 w-5 text-indigo-600" />
+                  <Cpu className="h-5 w-5 text-[#657565]" />
                   EVM Blockchain Network Monitoring
                 </CardTitle>
                 <CardDescription>Hardhat node 31337 blocks, gas metrics, and smart contract event emissions.</CardDescription>
               </div>
-              <Link to="/blockchain-explorer">
-                <Button size="sm">Open Full Ledger Explorer</Button>
-              </Link>
+              <Button size="sm" onClick={() => navigate('/blockchain-explorer')}>
+                Open Full Ledger Explorer
+              </Button>
             </div>
           </CardHeader>
           <CardContent className="p-0">
             {recentEvents.length === 0 ? (
-              <div className="p-8 text-center text-xs text-slate-400">
+              <div className="p-10 text-center text-xs text-[#6B726B]">
                 <p>No events recorded.</p>
               </div>
             ) : (
@@ -553,7 +549,7 @@ export const AdminDashboard: React.FC = () => {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Event Type</TableHead>
-                    <TableHead>Property</TableHead>
+                    <TableHead>Residence</TableHead>
                     <TableHead>Transaction Hash</TableHead>
                     <TableHead>Block Height</TableHead>
                     <TableHead>Timestamp</TableHead>
@@ -563,14 +559,14 @@ export const AdminDashboard: React.FC = () => {
                   {recentEvents.map((ev: any) => (
                     <TableRow key={ev.id}>
                       <TableCell>
-                        <span className="font-mono font-semibold text-[11px] px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200">
+                        <span className="font-mono font-semibold text-[10px] px-2.5 py-0.5 rounded-full bg-[#EAE4D9] text-[#252B28] border border-[#D4CBBC]">
                           {ev.event_type}
                         </span>
                       </TableCell>
-                      <TableCell className="text-xs font-medium text-slate-900">{getPropertyLabel(ev)}</TableCell>
-                      <TableCell className="font-mono text-xs text-blue-600">{truncateHash(ev.tx_hash)}</TableCell>
-                      <TableCell className="font-mono text-xs text-slate-600">#{ev.block_number || 1}</TableCell>
-                      <TableCell className="text-xs text-slate-500">{formatDate(ev.created_at)}</TableCell>
+                      <TableCell className="text-xs font-semibold text-[#252B28]">{getPropertyLabel(ev)}</TableCell>
+                      <TableCell className="font-mono text-xs text-[#657565]">{truncateHash(ev.tx_hash)}</TableCell>
+                      <TableCell className="font-mono text-xs text-[#6B726B]">#{ev.block_number || 1}</TableCell>
+                      <TableCell className="text-xs text-[#6B726B]">{formatDate(ev.created_at)}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -589,8 +585,8 @@ export const AdminDashboard: React.FC = () => {
           </CardHeader>
           <CardContent className="p-0">
             {auditLogs.length === 0 ? (
-              <div className="p-8 text-center text-xs text-slate-400">
-                <Clock className="h-8 w-8 mx-auto text-slate-300 mb-2" />
+              <div className="p-10 text-center text-xs text-[#6B726B]">
+                <Clock className="h-8 w-8 mx-auto text-[#D4CBBC] mb-2" />
                 <p>No security audit log entries recorded.</p>
               </div>
             ) : (
@@ -607,13 +603,13 @@ export const AdminDashboard: React.FC = () => {
                   {auditLogs.map((log: any) => (
                     <TableRow key={log.id}>
                       <TableCell>
-                        <span className="font-mono text-xs font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                        <span className="font-mono text-xs font-semibold text-[#8F764F] bg-[#B49A70]/15 px-2 py-0.5 rounded-full border border-[#B49A70]/30">
                           {log.activity_type}
                         </span>
                       </TableCell>
-                      <TableCell className="text-xs text-slate-800">{log.description}</TableCell>
-                      <TableCell className="font-mono text-xs text-slate-500">{log.ip_address || '127.0.0.1'}</TableCell>
-                      <TableCell className="text-xs text-slate-500">{formatDate(log.created_at)}</TableCell>
+                      <TableCell className="text-xs text-[#252B28]">{log.description}</TableCell>
+                      <TableCell className="font-mono text-xs text-[#6B726B]">{log.ip_address || '127.0.0.1'}</TableCell>
+                      <TableCell className="text-xs text-[#6B726B]">{formatDate(log.created_at)}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

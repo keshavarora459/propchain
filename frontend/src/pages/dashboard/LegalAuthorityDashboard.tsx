@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import {
   Scale,
   BookOpen,
@@ -36,6 +36,7 @@ interface LegalConfirmationFormData {
 
 export const LegalAuthorityDashboard: React.FC = () => {
   const { user } = useAuth()
+  const navigate = useNavigate()
 
   const [activeTab, setActiveTab] = useState<'overview' | 'pending' | 'documents' | 'history' | 'completed'>('overview')
   const [dashboardData, setDashboardData] = useState<any>(null)
@@ -156,87 +157,94 @@ export const LegalAuthorityDashboard: React.FC = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <PageHeader
-        title={`Government Land Registry: ${user?.full_name || 'Chief Registrar'}`}
-        description="Statutory legal title registration, deed and book/volume recordation, and official governmental conveyance confirmation."
+        title={`Legal & Statutory Registry Chamber`}
+        description={`Welcome, ${user?.full_name || 'Chief Registrar'}. Official authority oversight for statutory land deed enrollments, book & volume registry, and on-chain title re-assignments.`}
         actions={
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={loadLegalData} leftIcon={<RefreshCw className="h-3.5 w-3.5" />}>
+          <div className="flex items-center gap-2.5">
+            <Button variant="outline" size="sm" onClick={loadLegalData} leftIcon={<RefreshCw className="h-3.5 w-3.5 text-[#657565]" />}>
               Refresh Records
             </Button>
-            <Link to="/ownership">
-              <Button size="sm" leftIcon={<BookOpen className="h-4 w-4" />}>
-                Statutory Ownership Registry
-              </Button>
-            </Link>
+            <Button size="sm" onClick={() => navigate('/ownership')} leftIcon={<BookOpen className="h-4 w-4" />}>
+              Statutory Registry
+            </Button>
           </div>
         }
       />
 
       {feedbackMessage && (
         <div
-          className={`rounded-xl border p-3.5 text-xs flex items-center justify-between ${
+          className={`rounded-2xl border p-4 text-xs flex items-center justify-between shadow-xs ${
             feedbackMessage.type === 'success'
-              ? 'border-emerald-500/30 bg-emerald-950/20 text-emerald-300'
-              : 'border-red-500/30 bg-red-950/20 text-red-300'
+              ? 'border-[#657565]/30 bg-[#FAF8F3] text-[#252B28]'
+              : 'border-rose-300 bg-rose-50 text-rose-800'
           }`}
         >
-          <span>{feedbackMessage.text}</span>
-          <button onClick={() => setFeedbackMessage(null)} className="font-bold ml-2">×</button>
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="h-4 w-4 text-[#657565] shrink-0" />
+            <span className="font-medium">{feedbackMessage.text}</span>
+          </div>
+          <button onClick={() => setFeedbackMessage(null)} className="font-bold ml-2 text-[#6B726B] hover:text-[#252B28]">×</button>
         </div>
       )}
 
-      {/* Statutory Authority Notice */}
-      <div className="rounded-lg border border-purple-200 bg-purple-50/70 p-3.5 text-xs text-purple-900 flex items-center justify-between">
-        <p>
-          <strong className="font-semibold">Statutory Authority:</strong> Only Legal Authority accounts can execute legal registration confirmation. Admin and third-party roles cannot bypass this constitutional requirement.
-        </p>
-        <span className="hidden sm:inline-block font-mono text-[11px] bg-purple-100 text-purple-800 px-2 py-0.5 rounded font-medium">
-          Official Registrar
+      {/* Statutory Authority Notice - Luxury Styling */}
+      <div className="rounded-2xl border border-[#D4CBBC] bg-[#EAE4D9]/40 p-4 sm:p-5 text-xs text-[#252B28] flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+        <div className="flex items-start gap-3">
+          <Scale className="h-5 w-5 text-[#657565] shrink-0 mt-0.5" />
+          <div>
+            <p className="font-semibold text-sm text-[#252B28]">Statutory Constitutional Authority</p>
+            <p className="text-[#6B726B] font-normal mt-0.5 leading-relaxed">
+              Only authenticated Legal Authority signatories can execute binding deed registration. Third-party actors and standard administrators cannot bypass official registry recordation.
+            </p>
+          </div>
+        </div>
+        <span className="shrink-0 font-mono text-[11px] bg-white border border-[#D4CBBC] text-[#252B28] px-3 py-1 rounded-full font-medium self-start sm:self-auto">
+          Authorized Land Registry Office
         </span>
       </div>
 
-      {/* Key Metric Stat Cards */}
+      {/* Key Metric Stat Cards - Luxury Theme */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
-          title="Pending Legal Registrations"
+          title="Pending Deed Inscriptions"
           value={pendingRequests.length.toString()}
-          subtitle={pendingRequests.length > 0 ? 'Requires deed entry' : 'Queue cleared'}
-          icon={<Scale className="h-5 w-5" />}
-          iconBg="bg-purple-50 text-purple-600"
+          subtitle={pendingRequests.length > 0 ? 'Requires statutory deed entry' : 'Chamber queue cleared'}
+          icon={<Scale className="h-5 w-5 text-[#657565]" />}
+          iconBg="bg-[#EAE4D9]/60"
         />
         <StatCard
-          title="Completed Registrations"
+          title="Recorded Land Deeds"
           value={(legalMetrics?.completed_registrations_count ?? confirmationHistory.length).toString()}
-          subtitle="Formally confirmed in state land archive"
-          icon={<CheckSquare className="h-5 w-5" />}
-          iconBg="bg-emerald-50 text-emerald-600"
+          subtitle="Formally enrolled in state archives"
+          icon={<CheckSquare className="h-5 w-5 text-[#B49A70]" />}
+          iconBg="bg-[#FAF8F3]"
         />
         <StatCard
-          title="Active Conveyance Pipeline"
+          title="Conveyance Settlements"
           value={(dashboardData?.active_transactions ?? 0).toString()}
-          subtitle="Atomic smart contract settlements"
-          icon={<ArrowLeftRight className="h-5 w-5" />}
-          iconBg="bg-blue-50 text-blue-600"
+          subtitle="Atomic smart escrow transfers"
+          icon={<ArrowLeftRight className="h-5 w-5 text-[#657565]" />}
+          iconBg="bg-[#EAE4D9]/60"
         />
         <StatCard
-          title="Platform Properties"
+          title="Cataloged Estates"
           value={(dashboardData?.total_properties ?? 0).toString()}
-          subtitle={`${dashboardData?.verified_properties ?? 0} Verified properties`}
-          icon={<Building2 className="h-5 w-5" />}
-          iconBg="bg-slate-100 text-slate-700"
+          subtitle={`${dashboardData?.verified_properties ?? 0} Authenticated titles`}
+          icon={<Building2 className="h-5 w-5 text-[#B49A70]" />}
+          iconBg="bg-[#FAF8F3]"
         />
       </div>
 
       {/* Tabs */}
       <Tabs
         tabs={[
-          { id: 'overview', label: 'Legal Overview' },
-          { id: 'pending', label: 'Pending Legal Registrations', count: pendingRequests.length },
-          { id: 'documents', label: 'Verified Property Documents' },
-          { id: 'history', label: 'Legal Confirmation History', count: confirmationHistory.length },
-          { id: 'completed', label: 'Completed Registrations' },
+          { id: 'overview', label: 'Chamber Overview' },
+          { id: 'pending', label: 'Pending Legal Inscriptions', count: pendingRequests.length },
+          { id: 'documents', label: 'Verified Title Deeds' },
+          { id: 'history', label: 'Statutory Confirmation Log', count: confirmationHistory.length },
+          { id: 'completed', label: 'Concluded Conveyances' },
         ]}
         activeTab={activeTab}
         onChange={(id) => setActiveTab(id as any)}
@@ -247,31 +255,31 @@ export const LegalAuthorityDashboard: React.FC = () => {
         <div className="space-y-6">
           <Card>
             <CardHeader>
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                   <CardTitle>Transactions Awaiting Statutory Land Registry Confirmation</CardTitle>
                   <CardDescription>
-                    These transactions have passed seller acceptance and verifier document audits. Legal confirmation with Book & Volume entry executes final on-chain title re-assignment.
+                    These transactions have cleared seller approval and verifier document audits. Legal confirmation with Book & Volume entry executes final on-chain title re-assignment.
                   </CardDescription>
                 </div>
-                <Button size="sm" variant="outline" onClick={() => setActiveTab('pending')} className="text-xs">
-                  View Queue ({pendingRequests.length})
+                <Button size="sm" variant="outline" onClick={() => setActiveTab('pending')} className="text-xs shrink-0">
+                  Inspect Queue ({pendingRequests.length})
                 </Button>
               </div>
             </CardHeader>
             <CardContent className="p-0">
               {pendingRequests.length === 0 ? (
-                <div className="p-12 text-center text-xs text-slate-400">
-                  <CheckCircle2 className="h-8 w-8 mx-auto text-emerald-500 mb-2" />
-                  <p className="text-sm font-semibold text-slate-700">No pending legal registration requests</p>
-                  <p className="mt-1">All verified conveyance transactions have been confirmed.</p>
+                <div className="p-12 text-center text-xs text-[#6B726B]">
+                  <CheckCircle2 className="h-10 w-10 mx-auto text-[#657565] mb-2" />
+                  <p className="text-sm font-semibold text-[#252B28]">No pending legal registration requests</p>
+                  <p className="mt-1 font-normal">All verified conveyance transactions have been confirmed into the ledger.</p>
                 </div>
               ) : (
                 <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead>Transaction #</TableHead>
-                      <TableHead>Property</TableHead>
+                      <TableHead>Residence</TableHead>
                       <TableHead>Buyer</TableHead>
                       <TableHead>Seller</TableHead>
                       <TableHead>Consideration</TableHead>
@@ -282,11 +290,11 @@ export const LegalAuthorityDashboard: React.FC = () => {
                   <TableBody>
                     {pendingRequests.map((txn: any) => (
                       <TableRow key={txn.id}>
-                        <TableCell className="font-mono text-xs font-semibold text-blue-600">{txn.transaction_number}</TableCell>
-                        <TableCell className="font-medium text-slate-900 text-xs">{getPropertyLabel(txn)}</TableCell>
-                        <TableCell className="text-xs text-slate-600">{txn.buyer_name}</TableCell>
-                        <TableCell className="text-xs text-slate-600">{txn.seller_name}</TableCell>
-                        <TableCell className="font-mono text-xs font-bold text-slate-900">{formatCurrency(txn.purchase_price)}</TableCell>
+                        <TableCell className="font-mono text-xs font-semibold text-[#657565]">{txn.transaction_number}</TableCell>
+                        <TableCell className="font-semibold text-[#252B28] text-xs">{getPropertyLabel(txn)}</TableCell>
+                        <TableCell className="text-xs text-[#6B726B] font-normal">{txn.buyer_name}</TableCell>
+                        <TableCell className="text-xs text-[#6B726B] font-normal">{txn.seller_name}</TableCell>
+                        <TableCell className="font-mono text-xs font-semibold text-[#252B28]">{formatCurrency(txn.purchase_price)}</TableCell>
                         <TableCell>
                           <StatusBadge status={txn.status} />
                           {txn.blockchain_error && (
@@ -302,12 +310,12 @@ export const LegalAuthorityDashboard: React.FC = () => {
                               isLoading={retryingTxnId === txn.id}
                               disabled={retryingTxnId === txn.id}
                               onClick={() => handleRetryConveyance(txn.id)}
-                              className="bg-amber-600 hover:bg-amber-500 text-white text-xs h-8 px-3"
+                              className="bg-[#B49A70] hover:bg-[#8F764F] text-white text-xs h-8 px-3"
                             >
                               Retry blockchain transfer
                             </Button>
                           ) : txn.status === 'COMPLETED' ? (
-                            <div className="text-right text-[11px] font-mono text-emerald-700">
+                            <div className="text-right text-[11px] font-mono text-[#657565]">
                               <span className="font-semibold block">Completed ✓</span>
                               <span>Block #{txn.blockchain_block_number ?? 'N/A'}</span>
                               {txn.blockchain_tx_hash && (
@@ -318,12 +326,12 @@ export const LegalAuthorityDashboard: React.FC = () => {
                             <Button
                               size="sm"
                               onClick={() => handleOpenConfirmModal(txn)}
-                              className="bg-purple-600 hover:bg-purple-500 text-white text-xs h-8 px-3"
+                              className="bg-[#657565] hover:bg-[#526152] text-white text-xs h-8 px-3"
                             >
                               Enter Deed & Confirm
                             </Button>
                           ) : (
-                            <span className="text-xs text-slate-400 font-medium">Awaiting Verifier Approval</span>
+                            <span className="text-xs text-[#6B726B] font-medium">Awaiting Verifier Approval</span>
                           )}
                         </TableCell>
                       </TableRow>
@@ -336,7 +344,7 @@ export const LegalAuthorityDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* Tab 2: Pending Legal Registrations */}
+      {/* Tab 2: Pending Legal Inscriptions */}
       {activeTab === 'pending' && (
         <Card>
           <CardHeader>
@@ -345,20 +353,20 @@ export const LegalAuthorityDashboard: React.FC = () => {
           </CardHeader>
           <CardContent className="p-0">
             {pendingRequests.length === 0 ? (
-              <div className="p-12 text-center text-xs text-slate-400">
-                <CheckCircle2 className="h-8 w-8 mx-auto text-emerald-500 mb-2" />
-                <p className="text-sm font-semibold text-slate-700">No requests in queue</p>
-                <p className="mt-1">When transactions reach the legal confirmation milestone, they will appear here.</p>
+              <div className="p-12 text-center text-xs text-[#6B726B]">
+                <CheckCircle2 className="h-10 w-10 mx-auto text-[#657565] mb-2" />
+                <p className="text-sm font-semibold text-[#252B28]">No requests in chamber queue</p>
+                <p className="mt-1 font-normal">When transactions reach the legal confirmation milestone, they will populate here.</p>
               </div>
             ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Transaction #</TableHead>
-                    <TableHead>Property</TableHead>
+                    <TableHead>Residence</TableHead>
                     <TableHead>Buyer</TableHead>
                     <TableHead>Seller</TableHead>
-                    <TableHead>Escrow Price</TableHead>
+                    <TableHead>Escrow Consideration</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="text-right">Official Recordation</TableHead>
                   </TableRow>
@@ -366,11 +374,11 @@ export const LegalAuthorityDashboard: React.FC = () => {
                 <TableBody>
                   {pendingRequests.map((txn: any) => (
                     <TableRow key={txn.id}>
-                      <TableCell className="font-mono text-xs font-semibold text-blue-600">{txn.transaction_number}</TableCell>
-                      <TableCell className="font-medium text-slate-900 text-xs">{getPropertyLabel(txn)}</TableCell>
-                      <TableCell className="text-xs text-slate-600">{txn.buyer_name}</TableCell>
-                      <TableCell className="text-xs text-slate-600">{txn.seller_name}</TableCell>
-                      <TableCell className="font-mono text-xs font-bold">{formatCurrency(txn.purchase_price)}</TableCell>
+                      <TableCell className="font-mono text-xs font-semibold text-[#657565]">{txn.transaction_number}</TableCell>
+                      <TableCell className="font-semibold text-[#252B28] text-xs">{getPropertyLabel(txn)}</TableCell>
+                      <TableCell className="text-xs text-[#6B726B] font-normal">{txn.buyer_name}</TableCell>
+                      <TableCell className="text-xs text-[#6B726B] font-normal">{txn.seller_name}</TableCell>
+                      <TableCell className="font-mono text-xs font-semibold text-[#252B28]">{formatCurrency(txn.purchase_price)}</TableCell>
                       <TableCell>
                         <StatusBadge status={txn.status} />
                         {txn.blockchain_error && (
@@ -386,12 +394,12 @@ export const LegalAuthorityDashboard: React.FC = () => {
                             isLoading={retryingTxnId === txn.id}
                             disabled={retryingTxnId === txn.id}
                             onClick={() => handleRetryConveyance(txn.id)}
-                            className="bg-amber-600 hover:bg-amber-500 text-white text-xs h-8 px-3"
+                            className="bg-[#B49A70] hover:bg-[#8F764F] text-white text-xs h-8 px-3"
                           >
                             Retry blockchain transfer
                           </Button>
                         ) : txn.status === 'COMPLETED' ? (
-                          <div className="text-right text-[11px] font-mono text-emerald-700">
+                          <div className="text-right text-[11px] font-mono text-[#657565]">
                             <span className="font-semibold block">Completed ✓</span>
                             <span>Block #{txn.blockchain_block_number ?? 'N/A'}</span>
                             {txn.blockchain_tx_hash && (
@@ -402,12 +410,12 @@ export const LegalAuthorityDashboard: React.FC = () => {
                           <Button
                             size="sm"
                             onClick={() => handleOpenConfirmModal(txn)}
-                            className="bg-purple-600 hover:bg-purple-500 text-white text-xs h-8 px-3"
+                            className="bg-[#657565] hover:bg-[#526152] text-white text-xs h-8 px-3"
                           >
                             Record Deed & Confirm
                           </Button>
                         ) : (
-                          <span className="text-xs text-slate-400 font-medium">Awaiting Verifier Approval</span>
+                          <span className="text-xs text-[#6B726B] font-medium">Awaiting Verifier Approval</span>
                         )}
                       </TableCell>
                     </TableRow>
@@ -419,41 +427,39 @@ export const LegalAuthorityDashboard: React.FC = () => {
         </Card>
       )}
 
-      {/* Tab 3: Verified Property Documents */}
+      {/* Tab 3: Verified Title Deeds */}
       {activeTab === 'documents' && (
         <Card>
           <CardHeader>
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <CardTitle>Verified Property Documents Archive</CardTitle>
                 <CardDescription>Deeds, surveys, and encumbrance certificates certified by title verifiers ready for official registry recordation.</CardDescription>
               </div>
-              <Link to="/documents">
-                <Button size="sm" variant="outline" className="text-xs">
-                  Full Document Explorer
-                </Button>
-              </Link>
+              <Button size="sm" variant="outline" onClick={() => navigate('/documents')} className="text-xs">
+                Full Document Explorer
+              </Button>
             </div>
           </CardHeader>
           <CardContent className="space-y-4 text-xs">
-            <p className="text-slate-600 leading-relaxed">
+            <p className="text-[#6B726B] font-light leading-relaxed">
               All title documents are checked against SHA-256 cryptographic digests before reaching the Legal Authority. Each deed record includes the exact chain of title from initial grant to current conveyance.
             </p>
-            <div className="p-4 rounded-xl border border-slate-200 bg-slate-50 space-y-2">
+            <div className="p-5 rounded-2xl border border-[#E8E2D5] bg-[#FAF8F3] space-y-2.5">
               <div className="flex justify-between">
-                <span className="text-slate-500">Document Cryptographic Protocol</span>
-                <span className="font-mono font-semibold text-slate-900">SHA-256 & Argon2id Encrypted Storage</span>
+                <span className="text-[#6B726B]">Document Cryptographic Protocol</span>
+                <span className="font-mono font-semibold text-[#252B28]">SHA-256 & Argon2id Encrypted Storage</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-500">Legal Standard Compliance</span>
-                <span className="font-semibold text-purple-700">Uniform Real Property Electronic Recording Act (URPERA)</span>
+                <span className="text-[#6B726B]">Legal Standard Compliance</span>
+                <span className="font-semibold text-[#657565]">Uniform Real Property Electronic Recording Act (URPERA)</span>
               </div>
             </div>
           </CardContent>
         </Card>
       )}
 
-      {/* Tab 4: Legal Confirmation History */}
+      {/* Tab 4: Statutory Confirmation History */}
       {activeTab === 'history' && (
         <Card>
           <CardHeader>
@@ -462,7 +468,7 @@ export const LegalAuthorityDashboard: React.FC = () => {
           </CardHeader>
           <CardContent className="p-0">
             {confirmationHistory.length === 0 ? (
-              <div className="p-12 text-center text-xs text-slate-400">
+              <div className="p-12 text-center text-xs text-[#6B726B]">
                 <p>No legal confirmations recorded yet.</p>
               </div>
             ) : (
@@ -479,11 +485,11 @@ export const LegalAuthorityDashboard: React.FC = () => {
                 <TableBody>
                   {confirmationHistory.map((item: any) => (
                     <TableRow key={item.id}>
-                      <TableCell className="font-mono text-xs font-semibold text-purple-700">{item.registration_reference}</TableCell>
-                      <TableCell className="text-xs text-slate-800">{item.registry_jurisdiction}</TableCell>
-                      <TableCell className="text-xs text-slate-600">{item.registration_date}</TableCell>
+                      <TableCell className="font-mono text-xs font-semibold text-[#657565]">{item.registration_reference}</TableCell>
+                      <TableCell className="text-xs text-[#252B28]">{item.registry_jurisdiction}</TableCell>
+                      <TableCell className="text-xs text-[#6B726B]">{item.registration_date}</TableCell>
                       <TableCell><StatusBadge status={item.status} /></TableCell>
-                      <TableCell className="text-xs text-slate-500">{formatDate(item.created_at)}</TableCell>
+                      <TableCell className="text-xs text-[#6B726B]">{formatDate(item.created_at)}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -493,27 +499,27 @@ export const LegalAuthorityDashboard: React.FC = () => {
         </Card>
       )}
 
-      {/* Tab 5: Completed Registrations */}
+      {/* Tab 5: Concluded Conveyances */}
       {activeTab === 'completed' && (
         <Card>
           <CardHeader>
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <CardTitle>Formally Concluded Land Registrations</CardTitle>
                 <CardDescription>Deeds permanently transferred on consensus blockchain with state legal validity.</CardDescription>
               </div>
-              <Link to="/ownership">
-                <Button size="sm" variant="outline" className="text-xs">
-                  Inspect Ownership Ledger
-                </Button>
-              </Link>
+              <Button size="sm" variant="outline" onClick={() => navigate('/ownership')} className="text-xs">
+                Inspect Ownership Ledger
+              </Button>
             </div>
           </CardHeader>
-          <CardContent className="p-6 text-center text-xs text-slate-500">
-            <p>Every legally confirmed transaction permanently transfers smart contract ownership on EVM contract {CONTRACT_ADDRESSES.PROPERTY_REGISTRY}.</p>
-            <Link to="/ownership" className="inline-block mt-3">
-              <Button size="sm">Go to Ownership Registry</Button>
-            </Link>
+          <CardContent className="p-8 text-center text-xs text-[#6B726B]">
+            <p className="max-w-md mx-auto leading-relaxed font-light">
+              Every legally confirmed transaction permanently transfers smart contract ownership on EVM contract <span className="font-mono text-[#252B28] font-semibold">{CONTRACT_ADDRESSES.PROPERTY_REGISTRY}</span>.
+            </p>
+            <Button size="sm" onClick={() => navigate('/ownership')} className="mt-4">
+              Go to Ownership Registry
+            </Button>
           </CardContent>
         </Card>
       )}
@@ -534,19 +540,19 @@ export const LegalAuthorityDashboard: React.FC = () => {
               compact
             />
 
-            <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg text-purple-900">
+            <div className="p-4 bg-[#FAF8F3] border border-[#E8E2D5] rounded-xl text-[#252B28]">
               <p className="font-semibold text-xs">Conveyance Transaction:</p>
-              <p className="font-mono text-[11px] mt-0.5">
+              <p className="font-mono text-[11px] mt-0.5 text-[#657565]">
                 {selectedTxn?.transaction_number} — {getPropertyLabel(selectedTxn)}
               </p>
-              <p className="text-[11px] text-purple-700 mt-0.5">
-                Buyer: <strong>{selectedTxn?.buyer_name}</strong> | Seller: <strong>{selectedTxn?.seller_name}</strong>
+              <p className="text-[11px] text-[#6B726B] mt-1">
+                Buyer: <strong className="text-[#252B28]">{selectedTxn?.buyer_name}</strong> | Seller: <strong className="text-[#252B28]">{selectedTxn?.seller_name}</strong>
               </p>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
-                <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                <label className="block text-[11px] font-semibold text-[#252B28] mb-1">
                   Deed Number *
                 </label>
                 <Input
@@ -558,7 +564,7 @@ export const LegalAuthorityDashboard: React.FC = () => {
                 />
               </div>
               <div>
-                <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                <label className="block text-[11px] font-semibold text-[#252B28] mb-1">
                   Book Number *
                 </label>
                 <Input
@@ -570,7 +576,7 @@ export const LegalAuthorityDashboard: React.FC = () => {
                 />
               </div>
               <div>
-                <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                <label className="block text-[11px] font-semibold text-[#252B28] mb-1">
                   Volume Number *
                 </label>
                 <Input
@@ -584,7 +590,7 @@ export const LegalAuthorityDashboard: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+              <label className="block text-[11px] font-semibold text-[#252B28] mb-1">
                 Land Registry Jurisdiction *
               </label>
               <Input
@@ -597,7 +603,7 @@ export const LegalAuthorityDashboard: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+              <label className="block text-[11px] font-semibold text-[#252B28] mb-1">
                 Official Registration Date *
               </label>
               <Input
@@ -610,18 +616,18 @@ export const LegalAuthorityDashboard: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+              <label className="block text-[11px] font-semibold text-[#252B28] mb-1">
                 Official Registrar Endorsement Notes
               </label>
               <textarea
                 rows={2}
                 value={formData.comments}
                 onChange={(e) => setFormData({ ...formData, comments: e.target.value })}
-                className="w-full rounded-lg border border-slate-200 bg-white p-2.5 text-xs text-slate-900 focus:border-purple-600 focus:outline-none"
+                className="w-full rounded-xl border border-[#E8E2D5] bg-white p-3 text-xs text-[#252B28] focus:border-[#657565] focus:outline-none"
               />
             </div>
 
-            <div className="pt-2 flex items-center justify-end gap-2 border-t border-slate-100">
+            <div className="pt-3 flex items-center justify-end gap-2 border-t border-[#F4F1EA]">
               <Button
                 type="button"
                 variant="outline"
@@ -634,7 +640,7 @@ export const LegalAuthorityDashboard: React.FC = () => {
                 type="submit"
                 size="sm"
                 disabled={isSubmitting}
-                className="bg-purple-600 hover:bg-purple-500 text-white"
+                className="bg-[#657565] hover:bg-[#526152] text-white"
               >
                 {isSubmitting ? 'Confirming & Executing On-Chain...' : 'Confirm Statutory Registration'}
               </Button>
