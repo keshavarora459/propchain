@@ -2,7 +2,7 @@ import React from 'react'
 import { cn } from '@/lib/utils'
 
 export interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
-  variant?: 'success' | 'warning' | 'danger' | 'info' | 'neutral' | 'outline'
+  variant?: 'success' | 'warning' | 'danger' | 'info' | 'neutral' | 'outline' | 'champagne'
   size?: 'sm' | 'md'
   dot?: boolean
 }
@@ -15,28 +15,30 @@ export const Badge: React.FC<BadgeProps> = ({
   children,
   ...props
 }) => {
-  const baseStyles = 'inline-flex items-center font-medium rounded-full'
+  const baseStyles = 'inline-flex items-center font-medium rounded-full tracking-wide'
 
   const variantStyles = {
-    success: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
-    warning: 'bg-amber-50 text-amber-700 border border-amber-200',
-    danger: 'bg-rose-50 text-rose-700 border border-rose-200',
-    info: 'bg-blue-50 text-blue-700 border border-blue-200',
-    neutral: 'bg-slate-100 text-slate-700 border border-slate-200',
-    outline: 'border border-slate-300 text-slate-600 bg-transparent',
+    success: 'bg-[#657565]/15 text-[#3F4B3F] border border-[#657565]/30',
+    warning: 'bg-[#B49A70]/15 text-[#8F764F] border border-[#B49A70]/30',
+    danger: 'bg-rose-50 text-rose-800 border border-rose-200',
+    info: 'bg-[#EAE4D9] text-[#252B28] border border-[#D4CBBC]',
+    champagne: 'bg-[#B49A70]/20 text-[#8F764F] border border-[#B49A70]/40',
+    neutral: 'bg-[#F4F1EA] text-[#252B28] border border-[#EAE4D9]',
+    outline: 'border border-[#D4CBBC] text-[#6B726B] bg-transparent',
   }
 
   const dotColors = {
-    success: 'bg-emerald-500',
-    warning: 'bg-amber-500',
-    danger: 'bg-rose-500',
-    info: 'bg-blue-500',
-    neutral: 'bg-slate-400',
-    outline: 'bg-slate-400',
+    success: 'bg-[#657565]',
+    warning: 'bg-[#B49A70]',
+    danger: 'bg-rose-600',
+    info: 'bg-[#252B28]',
+    champagne: 'bg-[#B49A70]',
+    neutral: 'bg-[#6B726B]',
+    outline: 'bg-[#B49A70]',
   }
 
   const sizeStyles = {
-    sm: 'px-2 py-0.5 text-xs gap-1',
+    sm: 'px-2 py-0.5 text-[11px] gap-1',
     md: 'px-2.5 py-0.5 text-xs gap-1.5',
   }
 
@@ -47,4 +49,3 @@ export const Badge: React.FC<BadgeProps> = ({
     </span>
   )
 }
-

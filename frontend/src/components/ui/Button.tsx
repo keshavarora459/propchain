@@ -25,20 +25,20 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     ref
   ) => {
     const baseStyles =
-      'inline-flex items-center justify-center font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer'
+      'inline-flex items-center justify-center font-medium rounded-full transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer active:translate-y-px hover:shadow-xs'
 
     const variantStyles = {
-      primary: 'bg-slate-900 text-white hover:bg-slate-800 focus:ring-slate-900 shadow-sm',
-      secondary: 'bg-slate-100 text-slate-800 hover:bg-slate-200 focus:ring-slate-500',
-      outline: 'border border-slate-300 text-slate-700 bg-white hover:bg-slate-50 focus:ring-slate-500 shadow-sm',
-      ghost: 'text-slate-700 hover:bg-slate-100 focus:ring-slate-500',
-      danger: 'bg-rose-600 text-white hover:bg-rose-700 focus:ring-rose-500 shadow-sm',
+      primary: 'bg-[#657565] text-white hover:bg-[#526152] hover:shadow-[0_2px_8px_rgba(101,117,101,0.25)] focus:ring-[#657565]',
+      secondary: 'bg-[#EAE4D9] text-[#252B28] hover:bg-[#dfd7c9] hover:border-[#D4CBBC] focus:ring-[#B49A70]',
+      outline: 'border border-[#D4CBBC] text-[#252B28] bg-white/90 hover:bg-[#FAF8F3] hover:border-[#657565] hover:text-[#252B28] focus:ring-[#657565]',
+      ghost: 'text-[#252B28] hover:bg-[#EAE4D9]/60 hover:text-[#252B28] focus:ring-[#657565]',
+      danger: 'bg-rose-700 text-white hover:bg-rose-800 hover:shadow-[0_2px_8px_rgba(190,18,60,0.25)] focus:ring-rose-500',
     }
 
     const sizeStyles = {
-      sm: 'px-2.5 py-1.5 text-xs gap-1.5',
-      md: 'px-4 py-2 text-sm gap-2',
-      lg: 'px-5 py-2.5 text-base gap-2.5',
+      sm: 'px-3 py-1.5 text-xs gap-1.5 tracking-wide',
+      md: 'px-4 py-2 text-sm gap-2 tracking-wide',
+      lg: 'px-6 py-2.5 text-base gap-2.5 tracking-wide',
     }
 
     return (
@@ -69,13 +69,12 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
             />
           </svg>
         )}
-        {!isLoading && leftIcon}
+        {!isLoading && leftIcon && <span className="shrink-0">{leftIcon}</span>}
         {children}
-        {!isLoading && rightIcon}
+        {rightIcon && <span className="shrink-0">{rightIcon}</span>}
       </button>
     )
   }
 )
 
 Button.displayName = 'Button'
-

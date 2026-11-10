@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import {
   Building2,
   Bookmark,
@@ -15,6 +15,7 @@ import {
   CheckCircle2,
   Clock,
   RefreshCw,
+  Compass,
 } from 'lucide-react'
 import { PageHeader } from '@/components/common/PageHeader'
 import { StatCard } from '@/components/common/StatCard'
@@ -33,6 +34,7 @@ import { propertyService } from '@/services/propertyService'
 
 export const BuyerDashboard: React.FC = () => {
   const { user } = useAuth()
+  const navigate = useNavigate()
   const { account, isConnected, connectWallet, chainId } = useWallet()
 
   const [activeTab, setActiveTab] = useState<'browse' | 'saved' | 'offers' | 'transactions' | 'properties' | 'wallet' | 'blockchain'>('browse')
@@ -103,66 +105,64 @@ export const BuyerDashboard: React.FC = () => {
   )
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <PageHeader
-        title={`Welcome back, ${user?.full_name || 'Buyer'}`}
-        description="Buyer Portal: Browse authenticated properties, track active bids, manage title deeds, and monitor your wallet."
+        title={`Acquisition & Estate Portfolio`}
+        description={`Welcome back, ${user?.full_name || 'Buyer'}. Discover authenticated luxury residences, manage confidential purchase proposals, and monitor digital deeds.`}
         actions={
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={loadBuyerData} leftIcon={<RefreshCw className="h-3.5 w-3.5" />}>
+          <div className="flex items-center gap-2.5">
+            <Button variant="outline" size="sm" onClick={loadBuyerData} leftIcon={<RefreshCw className="h-3.5 w-3.5 text-[#657565]" />}>
               Refresh
             </Button>
-            <Link to="/properties">
-              <Button size="sm" leftIcon={<Search className="h-4 w-4" />}>
-                Explore All Properties
-              </Button>
-            </Link>
+            <Button size="sm" onClick={() => navigate('/properties')} leftIcon={<Compass className="h-4 w-4" />}>
+              Explore Residences
+            </Button>
           </div>
         }
       />
 
-      {/* Buyer Quick Stat Cards */}
+      {/* Buyer Quick Stat Cards - Luxury Theme */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
-          title="Verified Available Properties"
+          title="Curated Residences"
           value={browseProperties.length.toString()}
-          subtitle="Deed & title verified by county registrars"
-          icon={<Building2 className="h-5 w-5" />}
-          iconBg="bg-blue-50 text-blue-600"
+          subtitle="Deed & title validated on blockchain"
+          icon={<Building2 className="h-5 w-5 text-[#657565]" />}
+          iconBg="bg-[#EAE4D9]/60"
         />
         <StatCard
-          title="My Active Offers"
+          title="Active Proposals"
           value={(buyerMetrics?.active_offers_count ?? myOffers.length).toString()}
-          subtitle={myOffers.length > 0 ? 'Pending seller action' : 'No active bids'}
-          icon={<ArrowLeftRight className="h-5 w-5" />}
-          iconBg="bg-amber-50 text-amber-600"
+          subtitle={myOffers.length > 0 ? 'Awaiting titleholder response' : 'No pending offers'}
+          icon={<ArrowLeftRight className="h-5 w-5 text-[#B49A70]" />}
+          iconBg="bg-[#FAF8F3]"
         />
         <StatCard
-          title="Acquired Properties"
+          title="Acquired Estates"
           value={(buyerMetrics?.owned_properties_count ?? myOwnedProperties.length).toString()}
-          subtitle="Deeds registered in your name"
-          icon={<FileBadge className="h-5 w-5" />}
-          iconBg="bg-emerald-50 text-emerald-600"
+          subtitle="Deeds inscribed to your identity"
+          icon={<FileBadge className="h-5 w-5 text-[#657565]" />}
+          iconBg="bg-[#EAE4D9]/60"
         />
         <StatCard
-          title="Saved Favorites"
+          title="Private Wishlist"
           value={savedPropertyIds.length.toString()}
-          subtitle="Quick access to properties of interest"
-          icon={<BookmarkCheck className="h-5 w-5" />}
-          iconBg="bg-indigo-50 text-indigo-600"
+          subtitle="Bookmarked for acquisition review"
+          icon={<BookmarkCheck className="h-5 w-5 text-[#B49A70]" />}
+          iconBg="bg-[#FAF8F3]"
         />
       </div>
 
       {/* Tab Navigation */}
       <Tabs
         tabs={[
-          { id: 'browse', label: 'Browse Properties', count: browseProperties.length },
-          { id: 'saved', label: 'Saved Properties', count: savedPropertyIds.length },
-          { id: 'offers', label: 'My Offers', count: myOffers.length },
-          { id: 'transactions', label: 'My Transactions', count: myTransactions.length },
-          { id: 'properties', label: 'My Properties', count: myOwnedProperties.length },
-          { id: 'wallet', label: 'My Wallet' },
-          { id: 'blockchain', label: 'Blockchain Records' },
+          { id: 'browse', label: 'Curated Residences', count: browseProperties.length },
+          { id: 'saved', label: 'Saved Collection', count: savedPropertyIds.length },
+          { id: 'offers', label: 'My Proposals', count: myOffers.length },
+          { id: 'transactions', label: 'Escrow Transactions', count: myTransactions.length },
+          { id: 'properties', label: 'Acquired Deeds', count: myOwnedProperties.length },
+          { id: 'wallet', label: 'Web3 Settlement Wallet' },
+          { id: 'blockchain', label: 'Consensus Proofs' },
         ]}
         activeTab={activeTab}
         onChange={(id) => setActiveTab(id as any)}
@@ -170,81 +170,89 @@ export const BuyerDashboard: React.FC = () => {
 
       {/* Tab 1: Browse Properties */}
       {activeTab === 'browse' && (
-        <div className="space-y-4">
-          <div className="flex flex-col sm:flex-row gap-3 justify-between items-center bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
+        <div className="space-y-6">
+          <div className="flex flex-col sm:flex-row gap-3 justify-between items-center bg-white p-4 sm:p-5 rounded-2xl border border-[#E8E2D5] shadow-xs">
             <div className="w-full sm:w-96">
               <Input
-                placeholder="Search verified properties by title, city, type..."
+                placeholder="Search by title, coastal district, villa..."
                 value={searchFilter}
                 onChange={(e) => setSearchFilter(e.target.value)}
-                leftIcon={<Search className="h-4 w-4" />}
-                className="bg-slate-50"
+                leftIcon={<Search className="h-4 w-4 text-[#B49A70]" />}
+                className="bg-[#FAF8F3] border-[#E8E2D5]"
               />
             </div>
-            <div className="text-xs text-slate-500 font-mono">
-              Showing {filteredBrowse.length} verified & active properties
+            <div className="text-xs text-[#6B726B] font-medium flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-[#657565]" />
+              Showing {filteredBrowse.length} certified luxury residences
             </div>
           </div>
 
           {filteredBrowse.length === 0 ? (
             <Card className="p-12 text-center">
-              <Building2 className="h-10 w-10 text-slate-300 mx-auto mb-2" />
-              <p className="text-sm font-semibold text-slate-700">No properties found</p>
-              <p className="text-xs text-slate-400 mt-1">Try adjusting your search criteria or check back soon.</p>
+              <Building2 className="h-10 w-10 text-[#D4CBBC] mx-auto mb-2" />
+              <p className="text-sm font-semibold text-[#252B28]">No properties matching criteria</p>
+              <p className="text-xs text-[#6B726B] font-normal mt-1">Adjust search parameters or explore newly validated listings.</p>
             </Card>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
               {filteredBrowse.map((prop) => {
                 const isSaved = savedPropertyIds.includes(prop.id) || savedPropertyIds.includes(prop.propertyId)
                 return (
-                  <Card key={prop.id} className="overflow-hidden hover:shadow-md transition-shadow">
-                    <div className="p-4 space-y-3">
+                  <Card key={prop.id} className="overflow-hidden group hover:border-[#B49A70]/70 hover:-translate-y-0.5 hover:shadow-[0_6px_20px_rgba(37,43,40,0.06)] transition-all duration-200">
+                    <div className="p-4 sm:p-5 space-y-3.5">
                       <div className="flex items-start justify-between gap-2">
                         <div>
-                          <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
+                          <span className="text-[10px] font-medium tracking-wider uppercase px-2.5 py-0.5 rounded-full bg-[#EAE4D9] text-[#252B28] border border-[#D4CBBC]">
                             {prop.propertyType}
                           </span>
-                          <h4 className="font-semibold text-slate-900 mt-1 text-sm line-clamp-1">{getPropertyLabel(prop)}</h4>
-                          <p className="text-xs text-slate-500">{prop.city}, {prop.state}</p>
+                          <h4 className="font-semibold text-[#252B28] mt-1.5 text-base line-clamp-1 group-hover:text-[#657565] transition-colors">
+                            {getPropertyLabel(prop)}
+                          </h4>
+                          <p className="text-xs text-[#6B726B] font-normal">{prop.city}, {prop.state || 'District'}</p>
                         </div>
                         <button
                           onClick={() => toggleSaveProperty(prop.id)}
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-amber-500 hover:bg-slate-100 transition-colors"
+                          className="p-1.5 rounded-full text-[#6B726B] hover:text-[#B49A70] hover:bg-[#FAF8F3] transition-colors cursor-pointer"
                           title={isSaved ? 'Remove from saved' : 'Save property'}
                         >
                           {isSaved ? (
-                            <BookmarkCheck className="h-5 w-5 text-amber-500 fill-amber-500" />
+                            <BookmarkCheck className="h-4.5 w-4.5 text-[#B49A70] fill-[#B49A70]" />
                           ) : (
-                            <Bookmark className="h-5 w-5" />
+                            <Bookmark className="h-4.5 w-4.5" />
                           )}
                         </button>
                       </div>
 
-                      <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
+                      <div className="pt-2.5 border-t border-[#F4F1EA] flex items-center justify-between">
                         <div>
-                          <p className="text-[10px] uppercase tracking-wider text-slate-400 font-medium">Valuation</p>
-                          <p className="text-sm font-bold font-mono text-slate-900">{formatCurrency(prop.valuation)}</p>
+                          <p className="text-[10px] uppercase tracking-wider text-[#6B726B] font-semibold">Valuation</p>
+                          <p className="text-base font-bold text-[#252B28]">{formatCurrency(prop.valuation)}</p>
                         </div>
                         <StatusBadge status={prop.verificationStatus} label={getVerificationLabel(prop, user?.role)} />
                       </div>
 
-                      <div className="pt-2 flex items-center gap-2">
-                        <Link to={`/properties/${prop.id}`} className="flex-1">
-                          <Button variant="outline" size="sm" className="w-full text-xs">
-                            View Deed Details
-                          </Button>
-                        </Link>
+                      <div className="pt-1.5 flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => navigate(`/properties/${prop.id}`)}
+                          className="flex-1 text-xs"
+                        >
+                          View Details
+                        </Button>
                         {!(
                           user?.id && (
                             String(prop.current_owner_id || '').toLowerCase() === String(user.id).toLowerCase() ||
                             String(prop.creator_user_id || '').toLowerCase() === String(user.id).toLowerCase()
                           )
                         ) && (
-                          <Link to={`/transactions?propertyId=${prop.id}&initiate=true`} className="flex-1">
-                            <Button size="sm" className="w-full text-xs">
-                              Make Offer
-                            </Button>
-                          </Link>
+                          <Button
+                            size="sm"
+                            onClick={() => navigate(`/transactions?propertyId=${prop.id}&initiate=true`)}
+                            className="flex-1 text-xs"
+                          >
+                            Make Offer
+                          </Button>
                         )}
                       </div>
                     </div>
@@ -261,48 +269,53 @@ export const BuyerDashboard: React.FC = () => {
         <div className="space-y-4">
           {savedPropsList.length === 0 ? (
             <Card className="p-12 text-center">
-              <Bookmark className="h-10 w-10 text-slate-300 mx-auto mb-2" />
-              <p className="text-sm font-semibold text-slate-700">No saved properties yet</p>
-              <p className="text-xs text-slate-400 mt-1">Browse active properties and click the bookmark icon to save them here for quick review.</p>
+              <Bookmark className="h-10 w-10 text-[#D4CBBC] mx-auto mb-2" />
+              <p className="text-sm font-semibold text-[#252B28]">No saved properties in collection</p>
+              <p className="text-xs text-[#6B726B] font-normal mt-1">Browse active residences and bookmark items to build your prospective portfolio.</p>
               <Button size="sm" onClick={() => setActiveTab('browse')} className="mt-4">
-                Browse Properties
+                Explore Available Residences
               </Button>
             </Card>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
               {savedPropsList.map((prop) => (
-                <Card key={prop.id} className="p-4 space-y-3">
+                <Card key={prop.id} className="p-4 sm:p-5 space-y-3.5 hover:border-[#B49A70]/70 hover:-translate-y-0.5 hover:shadow-[0_6px_20px_rgba(37,43,40,0.06)] transition-all duration-200">
                   <div className="flex items-start justify-between">
                     <div>
-                      <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
+                      <span className="text-[10px] font-medium tracking-wider uppercase px-2.5 py-0.5 rounded-full bg-[#EAE4D9] text-[#252B28] border border-[#D4CBBC]">
                         {prop.propertyType}
                       </span>
-                      <h4 className="font-semibold text-slate-900 mt-1 text-sm">{getPropertyLabel(prop)}</h4>
-                      <p className="text-xs text-slate-500">{prop.city}, {prop.state}</p>
+                      <h4 className="font-semibold text-[#252B28] mt-1.5 text-base">{getPropertyLabel(prop)}</h4>
+                      <p className="text-xs text-[#6B726B] font-normal">{prop.city}, {prop.state}</p>
                     </div>
                     <button
                       onClick={() => toggleSaveProperty(prop.id)}
-                      className="text-amber-500 p-1"
+                      className="text-[#B49A70] p-1.5 cursor-pointer hover:opacity-80 transition-opacity"
                       title="Remove bookmark"
                     >
-                      <BookmarkCheck className="h-5 w-5 fill-amber-500" />
+                      <BookmarkCheck className="h-4.5 w-4.5 fill-[#B49A70]" />
                     </button>
                   </div>
-                  <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
-                    <span className="text-sm font-bold font-mono text-slate-900">{formatCurrency(prop.valuation)}</span>
+                  <div className="pt-2.5 border-t border-[#F4F1EA] flex items-center justify-between">
+                    <span className="text-base font-bold text-[#252B28]">{formatCurrency(prop.valuation)}</span>
                     <StatusBadge status={prop.verificationStatus} />
                   </div>
                   <div className="flex items-center gap-2 pt-2">
-                    <Link to={`/properties/${prop.id}`} className="flex-1">
-                      <Button variant="outline" size="sm" className="w-full text-xs">
-                        View Details
-                      </Button>
-                    </Link>
-                    <Link to={`/transactions?propertyId=${prop.id}&initiate=true`} className="flex-1">
-                      <Button size="sm" className="w-full text-xs">
-                        Make Offer
-                      </Button>
-                    </Link>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => navigate(`/properties/${prop.id}`)}
+                      className="flex-1 text-xs"
+                    >
+                      View Details
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={() => navigate(`/transactions?propertyId=${prop.id}&initiate=true`)}
+                      className="flex-1 text-xs"
+                    >
+                      Make Offer
+                    </Button>
                   </div>
                 </Card>
               ))}
@@ -315,15 +328,15 @@ export const BuyerDashboard: React.FC = () => {
       {activeTab === 'offers' && (
         <Card>
           <CardHeader>
-            <CardTitle>My Active Purchase Offers</CardTitle>
+            <CardTitle>My Active Purchase Proposals</CardTitle>
             <CardDescription>Offers you have submitted that are currently under review or awaiting seller acceptance.</CardDescription>
           </CardHeader>
           <CardContent className="p-0">
             {myOffers.length === 0 ? (
-              <div className="p-12 text-center text-xs text-slate-400">
-                <Clock className="h-8 w-8 mx-auto text-slate-300 mb-2" />
-                <p className="text-sm font-medium text-slate-700">No active purchase offers</p>
-                <p className="mt-1">When you make an offer on a verified property, it will be tracked here in real time.</p>
+              <div className="p-12 text-center text-xs text-[#6B726B]">
+                <Clock className="h-8 w-8 mx-auto text-[#D4CBBC] mb-2" />
+                <p className="text-sm font-semibold text-[#252B28]">No active purchase offers</p>
+                <p className="mt-1 font-normal">When you make an offer on a verified property, it will be tracked here in real time.</p>
                 <Button size="sm" onClick={() => setActiveTab('browse')} className="mt-4">
                   Browse Properties to Buy
                 </Button>
@@ -333,7 +346,7 @@ export const BuyerDashboard: React.FC = () => {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Transaction #</TableHead>
-                    <TableHead>Property</TableHead>
+                    <TableHead>Residence</TableHead>
                     <TableHead>Seller</TableHead>
                     <TableHead>Offer Amount</TableHead>
                     <TableHead>Status</TableHead>
@@ -344,18 +357,21 @@ export const BuyerDashboard: React.FC = () => {
                 <TableBody>
                   {myOffers.map((offer: any) => (
                     <TableRow key={offer.id}>
-                      <TableCell className="font-mono text-xs font-semibold text-blue-600">{offer.transaction_number}</TableCell>
-                      <TableCell className="font-medium text-slate-900 text-xs">{getPropertyLabel(offer)}</TableCell>
-                      <TableCell className="text-xs text-slate-600">{offer.seller_name}</TableCell>
-                      <TableCell className="font-mono text-xs font-bold text-slate-900">{formatCurrency(offer.amount)}</TableCell>
+                      <TableCell className="font-mono text-xs font-semibold text-[#657565]">{offer.transaction_number}</TableCell>
+                      <TableCell className="font-semibold text-[#252B28] text-xs">{getPropertyLabel(offer)}</TableCell>
+                      <TableCell className="text-xs text-[#6B726B] font-normal">{offer.seller_name}</TableCell>
+                      <TableCell className="font-mono text-xs font-semibold text-[#252B28]">{formatCurrency(offer.amount)}</TableCell>
                       <TableCell><StatusBadge status={offer.status} /></TableCell>
-                      <TableCell className="text-xs text-slate-500">{formatDate(offer.created_at)}</TableCell>
+                      <TableCell className="text-xs text-[#6B726B]">{formatDate(offer.created_at)}</TableCell>
                       <TableCell className="text-right">
-                        <Link to="/transactions">
-                          <Button size="sm" variant="outline" className="text-xs">
-                            View Deal
-                          </Button>
-                        </Link>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => navigate('/transactions')}
+                          className="text-xs h-8 px-3"
+                        >
+                          View Deal
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -375,17 +391,17 @@ export const BuyerDashboard: React.FC = () => {
           </CardHeader>
           <CardContent className="p-0">
             {myTransactions.length === 0 ? (
-              <div className="p-12 text-center text-xs text-slate-400">
-                <ArrowLeftRight className="h-8 w-8 mx-auto text-slate-300 mb-2" />
-                <p className="text-sm font-medium text-slate-700">No transaction records found</p>
-                <p className="mt-1">You have not initiated any property purchase transactions yet.</p>
+              <div className="p-12 text-center text-xs text-[#6B726B]">
+                <ArrowLeftRight className="h-8 w-8 mx-auto text-[#D4CBBC] mb-2" />
+                <p className="text-sm font-semibold text-[#252B28]">No transaction records found</p>
+                <p className="mt-1 font-normal">You have not initiated any property purchase transactions yet.</p>
               </div>
             ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Transaction #</TableHead>
-                    <TableHead>Property</TableHead>
+                    <TableHead>Residence</TableHead>
                     <TableHead>Amount</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Blockchain TX</TableHead>
@@ -395,20 +411,23 @@ export const BuyerDashboard: React.FC = () => {
                 <TableBody>
                   {myTransactions.map((tx: any) => (
                     <TableRow key={tx.id}>
-                      <TableCell className="font-mono text-xs font-semibold text-blue-600">{tx.transaction_number}</TableCell>
-                      <TableCell className="font-medium text-slate-900 text-xs">{getPropertyLabel(tx)}</TableCell>
-                      <TableCell className="font-mono text-xs font-bold text-slate-900">{formatCurrency(tx.amount)}</TableCell>
+                      <TableCell className="font-mono text-xs font-semibold text-[#657565]">{tx.transaction_number}</TableCell>
+                      <TableCell className="font-semibold text-[#252B28] text-xs">{getPropertyLabel(tx)}</TableCell>
+                      <TableCell className="font-mono text-xs font-semibold text-[#252B28]">{formatCurrency(tx.amount)}</TableCell>
                       <TableCell><StatusBadge status={tx.status} /></TableCell>
-                      <TableCell className="font-mono text-xs text-slate-500">
+                      <TableCell className="font-mono text-xs text-[#6B726B]">
                         {tx.blockchain_tx_hash ? (
-                          <Link to="/blockchain-explorer" className="text-blue-600 hover:underline">
+                          <button
+                            onClick={() => navigate('/blockchain-explorer')}
+                            className="text-[#657565] hover:underline cursor-pointer"
+                          >
                             {truncateHash(tx.blockchain_tx_hash)}
-                          </Link>
+                          </button>
                         ) : (
-                          <span className="text-slate-400">Pending Settlement</span>
+                          <span className="text-[#6B726B]">Pending Settlement</span>
                         )}
                       </TableCell>
-                      <TableCell className="text-xs text-slate-500">{formatDate(tx.created_at)}</TableCell>
+                      <TableCell className="text-xs text-[#6B726B]">{formatDate(tx.created_at)}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -418,41 +437,44 @@ export const BuyerDashboard: React.FC = () => {
         </Card>
       )}
 
-      {/* Tab 5: My Properties */}
+      {/* Tab 5: Acquired Deeds */}
       {activeTab === 'properties' && (
         <div className="space-y-4">
           {myOwnedProperties.length === 0 ? (
             <Card className="p-12 text-center">
-              <ShieldCheck className="h-10 w-10 text-slate-300 mx-auto mb-2" />
-              <p className="text-sm font-semibold text-slate-700">No acquired properties yet</p>
-              <p className="text-xs text-slate-400 mt-1">Once your purchase transaction completes statutory legal confirmation, legal title deeds will appear here.</p>
+              <ShieldCheck className="h-10 w-10 text-[#D4CBBC] mx-auto mb-2" />
+              <p className="text-sm font-semibold text-[#252B28]">No acquired residences yet</p>
+              <p className="text-xs text-[#6B726B] font-normal mt-1">Once your purchase transaction completes statutory legal confirmation, legal title deeds will appear here.</p>
               <Button size="sm" onClick={() => setActiveTab('browse')} className="mt-4">
-                Explore Properties to Acquire
+                Explore Residences to Acquire
               </Button>
             </Card>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
               {myOwnedProperties.map((p: any) => (
-                <Card key={p.id} className="p-4 space-y-3 border-emerald-200/80 bg-emerald-50/20">
+                <Card key={p.id} className="p-5 space-y-4 border-[#657565]/30 bg-[#FAF8F3]/60">
                   <div className="flex items-start justify-between">
                     <div>
-                      <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-300">
+                      <span className="text-[10px] font-mono font-medium px-2.5 py-0.5 rounded-full bg-[#657565]/15 text-[#3F4B3F] border border-[#657565]/30">
                         Title Registered
                       </span>
-                      <h4 className="font-semibold text-slate-900 mt-1 text-sm">{getPropertyLabel(p)}</h4>
-                      <p className="text-xs text-slate-500">{p.city}, {p.state}</p>
+                      <h4 className="font-semibold text-[#252B28] mt-2 text-base">{getPropertyLabel(p)}</h4>
+                      <p className="text-xs text-[#6B726B] font-normal">{p.city}, {p.state}</p>
                     </div>
-                    <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                    <CheckCircle2 className="h-5 w-5 text-[#657565]" />
                   </div>
-                  <div className="pt-2 border-t border-slate-200 flex items-center justify-between text-xs">
-                    <span className="font-mono text-slate-500">Parcel ID: {p.property_number}</span>
-                    <span className="font-mono font-bold text-slate-900">{formatCurrency(p.valuation)}</span>
+                  <div className="pt-3 border-t border-[#E8E2D5] flex items-center justify-between text-xs">
+                    <span className="font-mono text-[#6B726B]">Parcel: {p.property_number}</span>
+                    <span className="font-bold text-[#252B28]">{formatCurrency(p.valuation)}</span>
                   </div>
-                  <Link to={`/properties/${p.id}`}>
-                    <Button variant="outline" size="sm" className="w-full text-xs mt-2">
-                      View Official Title & Documents
-                    </Button>
-                  </Link>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => navigate(`/properties/${p.id}`)}
+                    className="w-full text-xs mt-2"
+                  >
+                    View Official Title & Deeds
+                  </Button>
                 </Card>
               ))}
             </div>
@@ -460,37 +482,37 @@ export const BuyerDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* Tab 6: My Wallet */}
+      {/* Tab 6: Web3 Wallet */}
       {activeTab === 'wallet' && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Wallet className="h-5 w-5 text-blue-600" />
+                <Wallet className="h-5 w-5 text-[#657565]" />
                 Web3 Settlement Wallet
               </CardTitle>
               <CardDescription>Your connected Ethereum wallet used for escrow funding and title token custody.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+              <div className="rounded-2xl border border-[#E8E2D5] bg-[#FAF8F3] p-4 space-y-3">
                 <div className="flex items-center justify-between text-xs">
-                  <span className="text-slate-500">Connection Status</span>
-                  <span className={`inline-flex items-center gap-1.5 font-semibold ${isConnected ? 'text-emerald-600' : 'text-amber-600'}`}>
-                    <span className={`h-2 w-2 rounded-full ${isConnected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
+                  <span className="text-[#6B726B]">Connection Status</span>
+                  <span className={`inline-flex items-center gap-1.5 font-semibold ${isConnected ? 'text-[#657565]' : 'text-[#B49A70]'}`}>
+                    <span className={`h-2 w-2 rounded-full ${isConnected ? 'bg-[#657565] animate-pulse' : 'bg-[#B49A70]'}`} />
                     {isConnected ? 'Connected to EVM' : 'Disconnected'}
                   </span>
                 </div>
                 <div className="flex items-center justify-between text-xs">
-                  <span className="text-slate-500">Connected Address</span>
-                  <span className="font-mono text-slate-900 font-semibold">{account ? truncateHash(account) : 'Not Connected'}</span>
+                  <span className="text-[#6B726B]">Connected Address</span>
+                  <span className="font-mono text-[#252B28] font-semibold">{account ? truncateHash(account) : 'Not Connected'}</span>
                 </div>
                 <div className="flex items-center justify-between text-xs">
-                  <span className="text-slate-500">Network ID</span>
-                  <span className="font-mono text-slate-900">{chainId ? `Chain ID ${chainId} (Hardhat Node)` : 'Local Node (31337)'}</span>
+                  <span className="text-[#6B726B]">Network ID</span>
+                  <span className="font-mono text-[#252B28]">{chainId ? `Chain ID ${chainId} (Hardhat Node)` : 'Local Node (31337)'}</span>
                 </div>
                 <div className="flex items-center justify-between text-xs">
-                  <span className="text-slate-500">Available Balance</span>
-                  <span className="font-mono font-bold text-slate-900 text-sm">100.0000 ETH (Testnet)</span>
+                  <span className="text-[#6B726B]">Available Balance</span>
+                  <span className="font-mono font-semibold text-[#252B28] text-sm">100.0000 ETH (Testnet)</span>
                 </div>
               </div>
 
@@ -499,7 +521,7 @@ export const BuyerDashboard: React.FC = () => {
                   Connect Wallet
                 </Button>
               ) : (
-                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-xs text-emerald-800">
+                <div className="p-3 bg-[#657565]/10 border border-[#657565]/30 rounded-xl text-xs text-[#252B28]">
                   ✓ Your wallet is fully synchronized and authorized to transact on the PropChain consensus network.
                 </div>
               )}
@@ -508,64 +530,70 @@ export const BuyerDashboard: React.FC = () => {
 
           <Card>
             <CardHeader>
-              <CardTitle>Profile & Buyer Settings</CardTitle>
+              <CardTitle>Profile & Preferences</CardTitle>
               <CardDescription>Manage account credentials, KYC verification status, and communication preferences.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4 text-xs">
               <div className="space-y-2">
-                <div className="flex justify-between py-2 border-b border-slate-100">
-                  <span className="text-slate-500">Full Name</span>
-                  <span className="font-semibold text-slate-900">{user?.full_name}</span>
+                <div className="flex justify-between py-2 border-b border-[#F4F1EA]">
+                  <span className="text-[#6B726B]">Full Name</span>
+                  <span className="font-semibold text-[#252B28]">{user?.full_name}</span>
                 </div>
-                <div className="flex justify-between py-2 border-b border-slate-100">
-                  <span className="text-slate-500">Email Address</span>
-                  <span className="font-mono text-slate-900">{user?.email}</span>
+                <div className="flex justify-between py-2 border-b border-[#F4F1EA]">
+                  <span className="text-[#6B726B]">Email Address</span>
+                  <span className="font-mono text-[#252B28]">{user?.email}</span>
                 </div>
-                <div className="flex justify-between py-2 border-b border-slate-100">
-                  <span className="text-slate-500">Assigned Network Role</span>
-                  <span className="font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                <div className="flex justify-between py-2 border-b border-[#F4F1EA]">
+                  <span className="text-[#6B726B]">Assigned Role</span>
+                  <span className="font-semibold text-[#657565] bg-[#657565]/10 px-2 py-0.5 rounded-full border border-[#657565]/20">
                     {getRoleLabel(user?.role) || 'Buyer'}
                   </span>
                 </div>
-                <div className="flex justify-between py-2 border-b border-slate-100">
-                  <span className="text-slate-500">Account Status</span>
-                  <span className="font-semibold text-emerald-600">{user?.account_status || 'ACTIVE'}</span>
+                <div className="flex justify-between py-2 border-b border-[#F4F1EA]">
+                  <span className="text-[#6B726B]">Account Status</span>
+                  <span className="font-semibold text-[#657565]">{user?.account_status || 'ACTIVE'}</span>
                 </div>
               </div>
-              <Link to="/settings" className="block pt-2">
-                <Button variant="outline" size="sm" className="w-full gap-1.5">
-                  <Settings className="h-3.5 w-3.5" />
-                  Edit Profile & Preferences
-                </Button>
-              </Link>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => navigate('/settings')}
+                className="w-full gap-2 mt-2"
+              >
+                <Settings className="h-3.5 w-3.5 text-[#657565]" />
+                Edit Profile & Preferences
+              </Button>
             </CardContent>
           </Card>
         </div>
       )}
 
-      {/* Tab 7: Blockchain Records */}
+      {/* Tab 7: Blockchain Proofs */}
       {activeTab === 'blockchain' && (
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle className="flex items-center gap-2">
-                  <Cpu className="h-5 w-5 text-indigo-600" />
+                  <Cpu className="h-5 w-5 text-[#657565]" />
                   Consensus Ledger & Ownership Deeds
                 </CardTitle>
                 <CardDescription>Immutable on-chain verification events and transaction digests logged on EVM node 31337.</CardDescription>
               </div>
-              <Link to="/blockchain-explorer">
-                <Button size="sm" variant="outline" className="gap-1 text-xs">
-                  Full Blockchain Explorer <ExternalLink className="h-3.5 w-3.5" />
-                </Button>
-              </Link>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => navigate('/blockchain-explorer')}
+                className="gap-1.5 text-xs"
+              >
+                Full Explorer <ExternalLink className="h-3.5 w-3.5 text-[#B49A70]" />
+              </Button>
             </div>
           </CardHeader>
           <CardContent className="p-0">
             {(!dashboardData?.recent_events || dashboardData.recent_events.length === 0) ? (
-              <div className="p-8 text-center text-xs text-slate-400">
-                <Cpu className="h-8 w-8 mx-auto text-slate-300 mb-2" />
+              <div className="p-10 text-center text-xs text-[#6B726B]">
+                <Cpu className="h-8 w-8 mx-auto text-[#D4CBBC] mb-2" />
                 <p>No recent blockchain events recorded yet.</p>
               </div>
             ) : (
@@ -573,9 +601,9 @@ export const BuyerDashboard: React.FC = () => {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Event</TableHead>
-                    <TableHead>Property</TableHead>
+                    <TableHead>Residence</TableHead>
                     <TableHead>Transaction Hash</TableHead>
-                    <TableHead>Block</TableHead>
+                    <TableHead>Block Height</TableHead>
                     <TableHead>Timestamp</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -583,14 +611,14 @@ export const BuyerDashboard: React.FC = () => {
                   {dashboardData.recent_events.map((ev: any) => (
                     <TableRow key={ev.id}>
                       <TableCell>
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-mono font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-[#EAE4D9] text-[#252B28] border border-[#D4CBBC]">
                           {ev.event_type}
                         </span>
                       </TableCell>
-                      <TableCell className="text-xs font-medium text-slate-900">{getPropertyLabel(ev)}</TableCell>
-                      <TableCell className="font-mono text-xs text-blue-600">{truncateHash(ev.tx_hash)}</TableCell>
-                      <TableCell className="font-mono text-xs text-slate-600">#{ev.block_number || 1}</TableCell>
-                      <TableCell className="text-xs text-slate-500">{formatDate(ev.created_at)}</TableCell>
+                      <TableCell className="text-xs font-semibold text-[#252B28]">{getPropertyLabel(ev)}</TableCell>
+                      <TableCell className="font-mono text-xs text-[#657565]">{truncateHash(ev.tx_hash)}</TableCell>
+                      <TableCell className="font-mono text-xs text-[#6B726B]">#{ev.block_number || 1}</TableCell>
+                      <TableCell className="text-xs text-[#6B726B]">{formatDate(ev.created_at)}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

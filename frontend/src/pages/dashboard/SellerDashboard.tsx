@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import {
   Building2,
   Plus,
@@ -13,6 +13,8 @@ import {
   RefreshCw,
   ExternalLink,
   ShieldCheck,
+  CheckCircle2,
+  ChevronRight,
 } from 'lucide-react'
 import { PageHeader } from '@/components/common/PageHeader'
 import { StatCard } from '@/components/common/StatCard'
@@ -54,18 +56,11 @@ export const SellerDashboard: React.FC = () => {
     loadSellerData()
   }, [])
 
-
   const sellerMetrics = dashboardData?.seller_metrics
   const myProperties: SellerProperty[] = sellerMetrics?.my_properties || []
   const receivedOffers: SellerOffer[] = sellerMetrics?.received_offers || []
   const myDocuments: SellerDocument[] = sellerMetrics?.my_documents || []
-
-
-
-
-
   const blockchainEvents = (dashboardData?.seller_metrics as any)?.blockchain_events || (dashboardData as any)?.recent_events || []
-
 
   const pendingOffers = receivedOffers.filter((o: SellerOffer) =>
     o.status === 'INITIATED' || o.status === 'PENDING_SELLER_ACCEPTANCE' || o.status === 'OFFER_MADE'
@@ -104,72 +99,106 @@ export const SellerDashboard: React.FC = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <PageHeader
-        title={`Seller Console: ${user?.full_name || 'Seller'}`}
-        description="Manage listed properties, evaluate incoming buyer purchase offers, upload title deeds, and track escrow settlements."
+        title={`Seller Portfolio Console`}
+        description={`Welcome back, ${user?.full_name || 'Estate Owner'}. Manage your luxury listings, evaluate purchase offers, and oversee smart escrow settlements.`}
         actions={
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={loadSellerData} leftIcon={<RefreshCw className="h-3.5 w-3.5" />}>
+          <div className="flex items-center gap-2.5">
+            <Button variant="outline" size="sm" onClick={loadSellerData} leftIcon={<RefreshCw className="h-3.5 w-3.5 text-[#657565]" />}>
               Refresh
             </Button>
             <Button size="sm" onClick={() => setIsRegisterModalOpen(true)} leftIcon={<Plus className="h-4 w-4" />}>
-              Register Property
+              List New Residence
             </Button>
           </div>
         }
       />
 
       {actionMessage && (
-        <div className="rounded-xl border border-blue-500/30 bg-blue-950/20 p-3 text-xs text-blue-300 flex items-center justify-between">
-          <span>{actionMessage}</span>
-          <button onClick={() => setActionMessage(null)} className="text-blue-400 hover:text-white font-bold ml-2">×</button>
+        <div className="rounded-2xl border border-[#657565]/30 bg-[#FAF8F3] p-4 text-xs text-[#252B28] flex items-center justify-between shadow-xs">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="h-4 w-4 text-[#657565] shrink-0" />
+            <span className="font-medium">{actionMessage}</span>
+          </div>
+          <button onClick={() => setActionMessage(null)} className="text-[#6B726B] hover:text-[#252B28] font-bold ml-2">×</button>
         </div>
       )}
 
-      {/* Seller Key Stat Cards */}
+      {/* Seller Key Stat Cards - Luxury Theme */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
-          title="My Listed Properties"
+          title="Portfolio Holdings"
           value={(sellerMetrics?.listed_properties_count ?? myProperties.length).toString()}
-          subtitle={`${sellerMetrics?.verified_properties_count ?? 0} Verified on-chain`}
-          icon={<Building2 className="h-5 w-5" />}
-          iconBg="bg-blue-50 text-blue-600"
+          subtitle={`${sellerMetrics?.verified_properties_count ?? 0} Anchored on-chain`}
+          icon={<Building2 className="h-5 w-5 text-[#657565]" />}
+          iconBg="bg-[#EAE4D9]/60"
         />
         <StatCard
           title="Portfolio Valuation"
           value={formatCurrency(sellerMetrics?.portfolio_valuation_usd ?? 0)}
-          subtitle="Total assessed market valuation"
-          icon={<FileBadge className="h-5 w-5" />}
-          iconBg="bg-emerald-50 text-emerald-600"
+          subtitle="Total appraised asset equity"
+          icon={<FileBadge className="h-5 w-5 text-[#B49A70]" />}
+          iconBg="bg-[#FAF8F3]"
         />
         <StatCard
-          title="Received Offers"
+          title="Incoming Offers"
           value={pendingOffers.length.toString()}
-          subtitle={pendingOffers.length > 0 ? 'Purchase proposals awaiting action' : 'All offers answered'}
-          icon={<ArrowLeftRight className="h-5 w-5" />}
-          iconBg="bg-amber-50 text-amber-600"
+          subtitle={pendingOffers.length > 0 ? 'Buyer bids awaiting signature' : 'All inquiries answered'}
+          icon={<ArrowLeftRight className="h-5 w-5 text-[#657565]" />}
+          iconBg="bg-[#EAE4D9]/60"
         />
         <StatCard
-          title="Active Conveyance Deals"
-          value={(sellerMetrics?.active_sales_count ?? 0).toString()}
-          subtitle={`${sellerMetrics?.completed_sales_count ?? 0} Completed sales`}
-          icon={<FileText className="h-5 w-5" />}
-          iconBg="bg-purple-50 text-purple-600"
+          title="Settled Conveyances"
+          value={(sellerMetrics?.completed_sales_count ?? 0).toString()}
+          subtitle={`${sellerMetrics?.active_sales_count ?? 0} In smart escrow pipeline`}
+          icon={<ShieldCheck className="h-5 w-5 text-[#B49A70]" />}
+          iconBg="bg-[#FAF8F3]"
         />
       </div>
+
+      {/* Hero Showcase Highlight Strip (Luxury real estate aesthetic) */}
+      {myProperties.length > 0 && (
+        <div className="rounded-2xl border border-[#E8E2D5] bg-gradient-to-r from-[#252B28] via-[#2A312E] to-[#252B28] text-white p-6 sm:p-7 shadow-sm">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <span className="text-[10px] tracking-[0.2em] uppercase font-semibold text-[#B49A70]">Featured Collection</span>
+              <h2 className="text-xl sm:text-2xl font-editorial tracking-tight text-[#FAF8F3]">
+                {getPropertyLabel(myProperties[0])}
+              </h2>
+              <p className="text-xs text-[#FAF8F3]/80 font-normal max-w-xl">
+                {myProperties[0].city}, {myProperties[0].state || 'EVM Registry'} • Assessed at <span className="font-mono text-[#B49A70] font-semibold">{formatCurrency(myProperties[0].valuation)}</span>
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-[#FAF8F3]/10 border border-[#FAF8F3]/20 text-[#FAF8F3]">
+                Parcel: {myProperties[0].property_number}
+              </span>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => setActiveTab('properties')}
+                rightIcon={<ChevronRight className="h-3.5 w-3.5" />}
+                className="bg-[#EAE4D9] text-[#252B28] hover:bg-white text-xs border-0"
+              >
+                Inspect Portfolio
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Tabs */}
       <Tabs
         tabs={[
-          { id: 'overview', label: 'Seller Overview' },
-          { id: 'properties', label: 'My Listed Properties', count: myProperties.length },
-          { id: 'documents', label: 'Document Uploads', count: myDocuments.length },
-          { id: 'verification', label: 'Verification Status' },
+          { id: 'overview', label: 'Portfolio Overview' },
+          { id: 'properties', label: 'Listed Residences', count: myProperties.length },
+          { id: 'documents', label: 'Deeds & Documents', count: myDocuments.length },
+          { id: 'verification', label: 'Title Verification Pipeline' },
           { id: 'offers', label: 'Received Offers', count: pendingOffers.length },
-          { id: 'transactions', label: 'My Transactions', count: receivedOffers.length },
-          { id: 'transfer', label: 'Ownership Transfer Status' },
-          { id: 'blockchain', label: 'Wallet & Blockchain' },
+          { id: 'transactions', label: 'Settlement Escrow', count: receivedOffers.length },
+          { id: 'transfer', label: 'Deed Re-assignment' },
+          { id: 'blockchain', label: 'Cryptographic Ledger' },
         ]}
         activeTab={activeTab}
         onChange={(id) => setActiveTab(id as any)}
@@ -182,24 +211,25 @@ export const SellerDashboard: React.FC = () => {
             <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
-                  <CardTitle>Recent Incoming Offers</CardTitle>
+                  <CardTitle>Recent Purchase Offers</CardTitle>
                   <Button size="sm" variant="outline" onClick={() => setActiveTab('offers')} className="text-xs">
                     View All ({receivedOffers.length})
                   </Button>
                 </div>
-                <CardDescription>Bids placed by buyers on your registered properties.</CardDescription>
+                <CardDescription>Bids placed by verified buyers on your registered residences.</CardDescription>
               </CardHeader>
               <CardContent className="p-0">
                 {receivedOffers.length === 0 ? (
-                  <div className="p-8 text-center text-xs text-slate-400">
-                    <Clock className="h-8 w-8 mx-auto text-slate-300 mb-2" />
-                    <p>No offers received yet. Make sure your properties are verified so buyers can submit bids.</p>
+                  <div className="p-10 text-center text-xs text-[#6B726B]">
+                    <Clock className="h-8 w-8 mx-auto text-[#D4CBBC] mb-2" />
+                    <p className="font-medium text-[#252B28]">No active buyer offers currently.</p>
+                    <p className="mt-1 font-light">As soon as buyers submit escrow deposits, proposals will populate here.</p>
                   </div>
                 ) : (
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Property</TableHead>
+                        <TableHead>Residence</TableHead>
                         <TableHead>Buyer</TableHead>
                         <TableHead>Offer Amount</TableHead>
                         <TableHead>Status</TableHead>
@@ -208,9 +238,9 @@ export const SellerDashboard: React.FC = () => {
                     <TableBody>
                       {receivedOffers.slice(0, 4).map((offer: SellerOffer) => (
                         <TableRow key={offer.id}>
-                          <TableCell className="font-medium text-slate-900 text-xs">{getPropertyLabel(offer)}</TableCell>
-                          <TableCell className="text-xs text-slate-600">{offer.buyer_name}</TableCell>
-                          <TableCell className="font-mono text-xs font-bold text-slate-900">{formatCurrency(offer.amount)}</TableCell>
+                          <TableCell className="font-semibold text-[#252B28] text-xs">{getPropertyLabel(offer)}</TableCell>
+                          <TableCell className="text-xs text-[#6B726B] font-normal">{offer.buyer_name}</TableCell>
+                          <TableCell className="font-mono text-xs font-semibold text-[#252B28]">{formatCurrency(offer.amount)}</TableCell>
                           <TableCell><StatusBadge status={offer.status} /></TableCell>
                         </TableRow>
                       ))}
@@ -223,20 +253,20 @@ export const SellerDashboard: React.FC = () => {
             <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
-                  <CardTitle>My Listed Properties</CardTitle>
+                  <CardTitle>Registered Residences</CardTitle>
                   <Button size="sm" variant="outline" onClick={() => setActiveTab('properties')} className="text-xs">
                     Manage Properties
                   </Button>
                 </div>
-                <CardDescription>Properties currently registered under your ownership profile.</CardDescription>
+                <CardDescription>Real estate assets currently held under your ownership profile.</CardDescription>
               </CardHeader>
               <CardContent className="p-0">
                 {myProperties.length === 0 ? (
-                  <div className="p-8 text-center text-xs text-slate-400">
-                    <Building2 className="h-8 w-8 mx-auto text-slate-300 mb-2" />
-                    <p>You have not registered any properties yet.</p>
+                  <div className="p-10 text-center text-xs text-[#6B726B]">
+                    <Building2 className="h-8 w-8 mx-auto text-[#D4CBBC] mb-2" />
+                    <p className="font-medium text-[#252B28]">No properties listed in your vault.</p>
                     <Button size="sm" onClick={() => setIsRegisterModalOpen(true)} className="mt-3">
-                      Register First Property
+                      List First Property
                     </Button>
                   </div>
                 ) : (
@@ -246,16 +276,16 @@ export const SellerDashboard: React.FC = () => {
                         <TableHead>Title</TableHead>
                         <TableHead>Location</TableHead>
                         <TableHead>Valuation</TableHead>
-                        <TableHead>Verification</TableHead>
+                        <TableHead>Status</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {myProperties.slice(0, 4).map((p: SellerProperty) => (
-                        <TableRow key={p.id}>
-                          <TableCell className="font-medium text-slate-900 text-xs">{getPropertyLabel(p)}</TableCell>
-                          <TableCell className="text-xs text-slate-500">{p.city}, {p.state}</TableCell>
-                          <TableCell className="font-mono text-xs font-bold">{formatCurrency(p.valuation)}</TableCell>
-                          <TableCell><StatusBadge status={p.verification_status} label={getVerificationLabel(p, user?.role)} /></TableCell>
+                      {myProperties.slice(0, 4).map((prop: SellerProperty) => (
+                        <TableRow key={prop.id}>
+                          <TableCell className="font-semibold text-[#252B28] text-xs">{getPropertyLabel(prop)}</TableCell>
+                          <TableCell className="text-xs text-[#6B726B] font-normal">{prop.city}, {prop.state || 'Primary'}</TableCell>
+                          <TableCell className="font-mono text-xs font-semibold text-[#252B28]">{formatCurrency(prop.valuation)}</TableCell>
+                          <TableCell><StatusBadge status={prop.verification_status} label={getVerificationLabel(prop, user?.role)} /></TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -267,108 +297,96 @@ export const SellerDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* Tab 2: My Listed Properties */}
+      {/* Tab 2: Listed Properties */}
       {activeTab === 'properties' && (
-        <div className="space-y-4">
-          <div className="flex justify-between items-center bg-white p-4 rounded-xl border border-slate-200">
-            <span className="text-xs font-mono text-slate-500">
-              {myProperties.length} total properties registered by your account
-            </span>
-            <Button size="sm" onClick={() => setIsRegisterModalOpen(true)} leftIcon={<Plus className="h-4 w-4" />}>
-              Add New Property
-            </Button>
-          </div>
-
-          {myProperties.length === 0 ? (
-            <Card className="p-12 text-center">
-              <Building2 className="h-10 w-10 text-slate-300 mx-auto mb-2" />
-              <p className="text-sm font-semibold text-slate-700">No properties listed yet</p>
-              <p className="text-xs text-slate-400 mt-1">Register a property to begin title verification and receive buyer bids.</p>
-              <Button size="sm" onClick={() => setIsRegisterModalOpen(true)} className="mt-4">
+        <Card>
+          <CardHeader>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <CardTitle>Real Estate Vault</CardTitle>
+                <CardDescription>All parcels registered with title deed references, land valuations and verification states.</CardDescription>
+              </div>
+              <Button size="sm" onClick={() => setIsRegisterModalOpen(true)} leftIcon={<Plus className="h-4 w-4" />}>
                 Register Property
               </Button>
-            </Card>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-              {myProperties.map((p: SellerProperty) => (
-                <Card key={p.id} className="p-4 space-y-3">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded bg-slate-100 text-slate-700">
-                        {p.property_type}
-                      </span>
-                      <h4 className="font-semibold text-slate-900 mt-1 text-sm">{getPropertyLabel(p)}</h4>
-                      <p className="text-xs text-slate-500">{p.city}, {p.state}</p>
-                    </div>
-                    <StatusBadge status={p.verification_status} label={getVerificationLabel(p, user?.role)} />
-                  </div>
-                  <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
-                    <span className="text-slate-500">Property No.:</span>
-                    <span className="font-mono text-slate-500">{p.property_number}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-slate-500">Valuation:</span>
-                    <span className="font-mono font-bold text-slate-900">{formatCurrency(p.valuation)}</span>
-                  </div>
-                  {(p.verification_status || '').toUpperCase() === 'VERIFIED' && (
-                    <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center gap-1.5 text-[11px] text-emerald-700 font-medium">
-                      <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-                      <span>Recorded on blockchain {p.blockchain_block_number ? `(Block #${p.blockchain_block_number})` : ''}</span>
-                      {(p.blockchain_tx_hash || (p as any).anchor_tx_hash) && (
-                        <HashDisplay
-                          value={p.blockchain_tx_hash || (p as any).anchor_tx_hash}
-                          explorerLink
-                          className="bg-transparent border-0 px-0 py-0 text-emerald-800"
-                        />
-                      )}
-                    </div>
-                  )}
-                  <div className="pt-2 flex items-center gap-2">
-                    <Link to={`/properties/${p.id}`} className="flex-1">
-                      <Button variant="outline" size="sm" className="w-full text-xs">
-                        View Deed
-                      </Button>
-                    </Link>
-                    <Link to="/documents" className="flex-1">
-                      <Button size="sm" variant="secondary" className="w-full text-xs gap-1">
-                        <UploadCloud className="h-3 w-3" /> Upload Deeds
-                      </Button>
-                    </Link>
-                  </div>
-                </Card>
-              ))}
             </div>
-          )}
-        </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            {myProperties.length === 0 ? (
+              <div className="p-12 text-center text-xs text-[#6B726B]">
+                <Building2 className="h-10 w-10 mx-auto text-[#D4CBBC] mb-2" />
+                <p className="text-sm font-medium text-[#252B28]">No properties in portfolio</p>
+                <p className="mt-1 font-light">Register a property and attach deeds to begin cryptographic verification.</p>
+                <Button size="sm" onClick={() => setIsRegisterModalOpen(true)} className="mt-4">
+                  Register New Property
+                </Button>
+              </div>
+            ) : (
+              <Table className="min-w-[700px]">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Parcel ID</TableHead>
+                    <TableHead>Residence</TableHead>
+                    <TableHead>City / Region</TableHead>
+                    <TableHead>Valuation</TableHead>
+                    <TableHead>Verification</TableHead>
+                    <TableHead>On-Chain Token</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {myProperties.map((p: SellerProperty) => (
+                    <TableRow key={p.id}>
+                      <TableCell className="font-mono text-xs font-medium text-[#657565]">{p.property_number}</TableCell>
+                      <TableCell className="font-semibold text-[#252B28] text-xs">{getPropertyLabel(p)}</TableCell>
+                      <TableCell className="text-xs text-[#6B726B] font-normal">{p.city}</TableCell>
+                      <TableCell className="font-mono text-xs font-semibold text-[#252B28]">{formatCurrency(p.valuation)}</TableCell>
+                      <TableCell><StatusBadge status={p.verification_status} label={getVerificationLabel(p, user?.role)} /></TableCell>
+                      <TableCell>
+                        <HashDisplay value={p.blockchain_property_id} explorerLink pendingText="Pending Tokenization" />
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => navigate(`/properties/${p.id}`)}
+                          className="text-xs h-8 px-3"
+                        >
+                          View Details
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
       )}
 
-      {/* Tab 3: Document Uploads */}
+      {/* Tab 3: Deeds & Documents */}
       {activeTab === 'documents' && (
         <Card>
           <CardHeader>
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <CardTitle>Uploaded Title Documents & Deeds</CardTitle>
-                <CardDescription>Deed certificates, survey plans, and encumbrance certificates uploaded for title clearance.</CardDescription>
+                <CardDescription>Deed certificates, cadastral maps, and tax clearances uploaded for title clearance.</CardDescription>
               </div>
-              <Link to="/documents">
-                <Button size="sm" leftIcon={<UploadCloud className="h-4 w-4" />}>
-                  Upload Documents Portal
-                </Button>
-              </Link>
+              <Button size="sm" onClick={() => navigate('/documents')} leftIcon={<UploadCloud className="h-4 w-4" />}>
+                Upload Documents Portal
+              </Button>
             </div>
           </CardHeader>
           <CardContent className="p-0">
             {myDocuments.length === 0 ? (
-              <div className="p-12 text-center text-xs text-slate-400">
-                <FileText className="h-8 w-8 mx-auto text-slate-300 mb-2" />
-                <p className="text-sm font-medium text-slate-700">No documents uploaded yet</p>
-                <p className="mt-1">Upload scanned deed files and survey maps so verifiers can approve your property.</p>
-                <Link to="/documents">
-                  <Button size="sm" className="mt-4">
-                    Open Document Uploader
-                  </Button>
-                </Link>
+              <div className="p-12 text-center text-xs text-[#6B726B]">
+                <FileText className="h-8 w-8 mx-auto text-[#D4CBBC] mb-2" />
+                <p className="text-sm font-medium text-[#252B28]">No documents uploaded yet</p>
+                <p className="mt-1 font-light">Upload scanned deed files and survey maps so verifiers can approve your property.</p>
+                <Button size="sm" onClick={() => navigate('/documents')} className="mt-4">
+                  Open Document Uploader
+                </Button>
               </div>
             ) : (
               <Table className="min-w-[700px]">
@@ -384,20 +402,20 @@ export const SellerDashboard: React.FC = () => {
                 <TableBody>
                   {myDocuments.map((doc: SellerDocument) => (
                     <TableRow key={doc.id}>
-                      <TableCell className="font-medium text-slate-900 text-xs">
+                      <TableCell className="font-medium text-[#252B28] text-xs">
                         <div>{doc.title || doc.file_name}</div>
                         {doc.review_notes && (doc.status === 'REJECTED' || doc.status === 'REQUIRES_CORRECTION' || doc.status === 'CORRECTION_REQUESTED') && (
-                          <div className="mt-1 text-[11px] text-amber-700 bg-amber-50 p-1.5 rounded border border-amber-200">
+                          <div className="mt-1 text-[11px] text-amber-800 bg-[#EAE4D9]/50 p-2 rounded-lg border border-[#D4CBBC]">
                             <strong>Review Note:</strong> {doc.review_notes}
                           </div>
                         )}
                       </TableCell>
-                      <TableCell className="text-xs text-slate-600 whitespace-nowrap">{doc.document_type}</TableCell>
+                      <TableCell className="text-xs text-[#6B726B] whitespace-nowrap">{doc.document_type}</TableCell>
                       <TableCell className="whitespace-nowrap"><StatusBadge status={doc.status} /></TableCell>
                       <TableCell className="min-w-[180px] whitespace-nowrap">
                         <HashDisplay value={doc.document_hash} explorerLink label="SHA-256" />
                       </TableCell>
-                      <TableCell className="text-xs text-slate-500 whitespace-nowrap">{doc.created_at ? formatDate(doc.created_at) : 'N/A'}</TableCell>
+                      <TableCell className="text-xs text-[#6B726B] whitespace-nowrap">{doc.created_at ? formatDate(doc.created_at) : 'N/A'}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -407,44 +425,44 @@ export const SellerDashboard: React.FC = () => {
         </Card>
       )}
 
-      {/* Tab 4: Property Verification Status */}
+      {/* Tab 4: Verification Pipeline */}
       {activeTab === 'verification' && (
         <Card>
           <CardHeader>
             <CardTitle>Property Verification Pipeline</CardTitle>
-            <CardDescription>Current verification and cryptographic anchoring status of your listed properties.</CardDescription>
+            <CardDescription>Current verification milestones and cryptographic anchoring status of your listed residences.</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
               {myProperties.map((p: SellerProperty) => (
-                <div key={p.id} className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 space-y-3">
+                <div key={p.id} className="p-5 rounded-2xl border border-[#E8E2D5] bg-[#FAF8F3]/60 space-y-3">
                   <div className="flex items-center justify-between">
                     <div>
-                      <h4 className="font-semibold text-slate-900 text-sm">{getPropertyLabel(p)}</h4>
-                      <p className="text-xs text-slate-400 font-mono">Parcel ID: {p.property_number}</p>
+                      <h4 className="font-semibold text-[#252B28] text-base">{getPropertyLabel(p)}</h4>
+                      <p className="text-xs text-[#6B726B] font-mono mt-0.5">Parcel ID: {p.property_number}</p>
                     </div>
                     <StatusBadge status={p.verification_status} label={getVerificationLabel(p, user?.role)} />
                   </div>
 
                   {p.blockchain_property_id && (
-                    <div className="flex items-center gap-2 text-xs">
-                      <span className="text-slate-500">Blockchain Asset Token:</span>
+                    <div className="flex items-center gap-2 text-xs pt-1">
+                      <span className="text-[#6B726B]">Blockchain Asset Token:</span>
                       <HashDisplay value={p.blockchain_property_id} explorerLink />
                     </div>
                   )}
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-slate-200 text-xs">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3 border-t border-[#E8E2D5] text-xs">
                     <div className="flex items-center gap-2">
-                      <span className={`h-2.5 w-2.5 rounded-full ${p.verification_status === 'VERIFIED' ? 'bg-emerald-500' : 'bg-amber-400 animate-pulse'}`} />
-                      <span>1. Title Verifier Review: <strong>{p.verification_status === 'VERIFIED' ? 'Complete' : 'In Progress'}</strong></span>
+                      <span className={`h-2.5 w-2.5 rounded-full ${p.verification_status === 'VERIFIED' ? 'bg-[#657565]' : 'bg-[#B49A70] animate-pulse'}`} />
+                      <span className="text-[#252B28]">1. Title Verifier Review: <strong>{p.verification_status === 'VERIFIED' ? 'Complete' : 'In Progress'}</strong></span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className={`h-2.5 w-2.5 rounded-full ${p.verification_status === 'VERIFIED' ? 'bg-emerald-500' : 'bg-slate-300'}`} />
-                      <span>2. Cryptographic Hash Digest: <strong>{p.verification_status === 'VERIFIED' ? 'Anchored' : 'Pending'}</strong></span>
+                      <span className={`h-2.5 w-2.5 rounded-full ${p.verification_status === 'VERIFIED' ? 'bg-[#657565]' : 'bg-[#D4CBBC]'}`} />
+                      <span className="text-[#252B28]">2. Cryptographic Digest: <strong>{p.verification_status === 'VERIFIED' ? 'Anchored' : 'Pending'}</strong></span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className={`h-2.5 w-2.5 rounded-full ${p.status === 'ACTIVE' ? 'bg-emerald-500' : 'bg-slate-300'}`} />
-                      <span>3. Active Marketplace Bidding: <strong>{p.status === 'ACTIVE' && p.verification_status === 'VERIFIED' ? 'Eligible' : 'Locked'}</strong></span>
+                      <span className={`h-2.5 w-2.5 rounded-full ${p.status === 'ACTIVE' ? 'bg-[#657565]' : 'bg-[#D4CBBC]'}`} />
+                      <span className="text-[#252B28]">3. Marketplace Bidding: <strong>{p.status === 'ACTIVE' && p.verification_status === 'VERIFIED' ? 'Eligible' : 'Locked'}</strong></span>
                     </div>
                   </div>
                 </div>
@@ -458,22 +476,22 @@ export const SellerDashboard: React.FC = () => {
       {activeTab === 'offers' && (
         <Card>
           <CardHeader>
-            <CardTitle>Incoming Buyer Offers</CardTitle>
-            <CardDescription>Review and accept or reject purchase offers submitted by authenticated buyers.</CardDescription>
+            <CardTitle>Incoming Purchase Proposals</CardTitle>
+            <CardDescription>Review and accept or decline bids submitted by authenticated buyers.</CardDescription>
           </CardHeader>
           <CardContent className="p-0">
             {receivedOffers.length === 0 ? (
-              <div className="p-12 text-center text-xs text-slate-400">
-                <ArrowLeftRight className="h-8 w-8 mx-auto text-slate-300 mb-2" />
-                <p className="text-sm font-medium text-slate-700">No buyer offers received yet</p>
-                <p className="mt-1">When buyers initiate purchase proposals on your verified properties, you can review and accept them here.</p>
+              <div className="p-12 text-center text-xs text-[#6B726B]">
+                <ArrowLeftRight className="h-8 w-8 mx-auto text-[#D4CBBC] mb-2" />
+                <p className="text-sm font-medium text-[#252B28]">No buyer offers received yet</p>
+                <p className="mt-1 font-light">When buyers initiate purchase proposals on your verified properties, you can review and accept them here.</p>
               </div>
             ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Transaction #</TableHead>
-                    <TableHead>Property</TableHead>
+                    <TableHead>Residence</TableHead>
                     <TableHead>Buyer</TableHead>
                     <TableHead>Proposed Amount</TableHead>
                     <TableHead>Status</TableHead>
@@ -487,20 +505,20 @@ export const SellerDashboard: React.FC = () => {
                     const inProgress = actionInProgress === offer.id
                     return (
                       <TableRow key={offer.id}>
-                        <TableCell className="font-mono text-xs font-semibold text-blue-600">{offer.transaction_number}</TableCell>
-                        <TableCell className="font-medium text-slate-900 text-xs">{getPropertyLabel(offer)}</TableCell>
-                        <TableCell className="text-xs text-slate-600">{offer.buyer_name}</TableCell>
-                        <TableCell className="font-mono text-xs font-bold text-slate-900">{formatCurrency(offer.amount)}</TableCell>
+                        <TableCell className="font-mono text-xs font-semibold text-[#657565]">{offer.transaction_number}</TableCell>
+                        <TableCell className="font-semibold text-[#252B28] text-xs">{getPropertyLabel(offer)}</TableCell>
+                        <TableCell className="text-xs text-[#6B726B] font-normal">{offer.buyer_name}</TableCell>
+                        <TableCell className="font-mono text-xs font-semibold text-[#252B28]">{formatCurrency(offer.amount)}</TableCell>
                         <TableCell><StatusBadge status={offer.status} /></TableCell>
-                        <TableCell className="text-xs text-slate-500">{offer.created_at ? formatDate(offer.created_at) : 'N/A'}</TableCell>
+                        <TableCell className="text-xs text-[#6B726B]">{offer.created_at ? formatDate(offer.created_at) : 'N/A'}</TableCell>
                         <TableCell className="text-right">
                           {isPending ? (
-                            <div className="flex items-center justify-end gap-1.5">
+                            <div className="flex items-center justify-end gap-2">
                               <Button
                                 size="sm"
                                 disabled={inProgress}
                                 onClick={() => handleAcceptOffer(offer.id)}
-                                className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs h-8 px-2.5"
+                                className="bg-[#657565] hover:bg-[#526152] text-white text-xs h-8 px-3"
                               >
                                 {inProgress ? 'Processing...' : 'Accept'}
                               </Button>
@@ -509,13 +527,13 @@ export const SellerDashboard: React.FC = () => {
                                 variant="outline"
                                 disabled={inProgress}
                                 onClick={() => handleRejectOffer(offer.id)}
-                                className="text-red-600 hover:bg-red-50 text-xs h-8 px-2.5"
+                                className="text-rose-700 hover:bg-rose-50 text-xs h-8 px-3"
                               >
-                                Reject
+                                Decline
                               </Button>
                             </div>
                           ) : (
-                            <span className="text-xs text-slate-400 font-medium">Actioned</span>
+                            <span className="text-xs text-[#6B726B] font-medium">Actioned</span>
                           )}
                         </TableCell>
                       </TableRow>
@@ -528,16 +546,16 @@ export const SellerDashboard: React.FC = () => {
         </Card>
       )}
 
-      {/* Tab 6: My Transactions */}
+      {/* Tab 6: Transactions & Escrow */}
       {activeTab === 'transactions' && (
         <Card>
           <CardHeader>
             <CardTitle>Sales Transactions & Escrow Pipeline</CardTitle>
-            <CardDescription>Lifecycle tracking of all sales agreements involving your properties.</CardDescription>
+            <CardDescription>Lifecycle tracking of all sales agreements involving your residences.</CardDescription>
           </CardHeader>
           <CardContent className="p-0">
             {receivedOffers.length === 0 ? (
-              <div className="p-12 text-center text-xs text-slate-400">
+              <div className="p-12 text-center text-xs text-[#6B726B]">
                 <p>No transactions recorded yet.</p>
               </div>
             ) : (
@@ -545,7 +563,7 @@ export const SellerDashboard: React.FC = () => {
                 <TableHeader>
                   <TableRow>
                     <TableHead className="whitespace-nowrap">Transaction #</TableHead>
-                    <TableHead>Property</TableHead>
+                    <TableHead>Residence</TableHead>
                     <TableHead>Buyer</TableHead>
                     <TableHead className="whitespace-nowrap">Amount</TableHead>
                     <TableHead className="whitespace-nowrap">Status</TableHead>
@@ -555,10 +573,10 @@ export const SellerDashboard: React.FC = () => {
                 <TableBody>
                   {receivedOffers.map((tx: SellerOffer) => (
                     <TableRow key={tx.id}>
-                      <TableCell className="font-mono text-xs font-semibold text-blue-600 whitespace-nowrap">{tx.transaction_number}</TableCell>
-                      <TableCell className="font-medium text-slate-900 text-xs">{getPropertyLabel(tx)}</TableCell>
-                      <TableCell className="text-xs text-slate-600">{tx.buyer_name}</TableCell>
-                      <TableCell className="font-mono text-xs font-bold whitespace-nowrap">{formatCurrency(tx.amount)}</TableCell>
+                      <TableCell className="font-mono text-xs font-semibold text-[#657565] whitespace-nowrap">{tx.transaction_number}</TableCell>
+                      <TableCell className="font-semibold text-[#252B28] text-xs">{getPropertyLabel(tx)}</TableCell>
+                      <TableCell className="text-xs text-[#6B726B] font-normal">{tx.buyer_name}</TableCell>
+                      <TableCell className="font-mono text-xs font-semibold whitespace-nowrap">{formatCurrency(tx.amount)}</TableCell>
                       <TableCell className="whitespace-nowrap"><StatusBadge status={tx.status} /></TableCell>
                       <TableCell className="min-w-[180px] whitespace-nowrap">
                         <HashDisplay value={tx.blockchain_tx_hash} explorerLink pendingText="Pending Settlement" />
@@ -572,7 +590,7 @@ export const SellerDashboard: React.FC = () => {
         </Card>
       )}
 
-      {/* Tab 7: Ownership Transfer Status */}
+      {/* Tab 7: Deed Re-assignment */}
       {activeTab === 'transfer' && (
         <Card>
           <CardHeader>
@@ -581,44 +599,43 @@ export const SellerDashboard: React.FC = () => {
           </CardHeader>
           <CardContent>
             {receivedOffers.length === 0 ? (
-              <div className="p-12 text-center text-xs text-slate-400">
+              <div className="p-12 text-center text-xs text-[#6B726B]">
                 <p>No transactions undergoing ownership conveyance at this time.</p>
               </div>
             ) : (
               <div className="space-y-6">
                 {receivedOffers.map((tx: SellerOffer) => (
-                  <div key={tx.id} className="p-5 rounded-xl border border-slate-200 bg-white space-y-4 shadow-xs">
+                  <div key={tx.id} className="p-6 rounded-2xl border border-[#E8E2D5] bg-white space-y-4 shadow-xs">
                     <div className="flex items-center justify-between">
                       <div>
-                        <span className="font-mono text-xs font-bold text-blue-600">{tx.transaction_number}</span>
-                        <h4 className="font-semibold text-slate-900 text-sm">{getPropertyLabel(tx)}</h4>
+                        <span className="font-mono text-xs font-bold text-[#657565]">{tx.transaction_number}</span>
+                        <h4 className="font-semibold text-[#252B28] text-base">{getPropertyLabel(tx)}</h4>
                       </div>
                       <StatusBadge status={tx.status} />
                     </div>
 
-                    {/* Standardized 6-Step Conveyance Timeline */}
                     <TransactionLifecycleTimeline
                       status={tx.status}
                       blockchainTxHash={tx.blockchain_tx_hash}
                     />
 
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-3 border-t border-slate-100 text-xs">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-4 border-t border-[#F4F1EA] text-xs">
                       <div>
-                        <span className="text-slate-400 block text-[11px]">New Owner / Buyer</span>
-                        <strong className="text-slate-800">{tx.buyer_name}</strong>
+                        <span className="text-[#6B726B] block text-[11px]">New Owner / Buyer</span>
+                        <strong className="text-[#252B28] font-medium">{tx.buyer_name}</strong>
                       </div>
                       <div>
-                        <span className="text-slate-400 block text-[11px]">Escrow Amount</span>
-                        <strong className="font-mono text-slate-800">{formatCurrency(tx.amount)}</strong>
+                        <span className="text-[#6B726B] block text-[11px]">Escrow Amount</span>
+                        <strong className="font-mono text-[#252B28] font-semibold">{formatCurrency(tx.amount)}</strong>
                       </div>
                       <div>
-                        <span className="text-slate-400 block text-[11px]">Conveyance State</span>
-                        <strong className={tx.status === 'COMPLETED' ? 'text-emerald-600' : 'text-blue-600'}>
+                        <span className="text-[#6B726B] block text-[11px]">Conveyance State</span>
+                        <strong className={tx.status === 'COMPLETED' ? 'text-[#657565]' : 'text-[#B49A70]'}>
                           {tx.status === 'COMPLETED' ? 'Title Transferred ✓' : 'Settlement Active'}
                         </strong>
                       </div>
                       <div>
-                        <span className="text-slate-400 block text-[11px]">On-Chain Transfer Proof</span>
+                        <span className="text-[#6B726B] block text-[11px]">On-Chain Transfer Proof</span>
                         <div className="pt-0.5">
                           <HashDisplay
                             value={tx.blockchain_tx_hash}
@@ -637,34 +654,34 @@ export const SellerDashboard: React.FC = () => {
         </Card>
       )}
 
-      {/* Tab 8: Wallet & Blockchain */}
+      {/* Tab 8: Cryptographic Ledger */}
       {activeTab === 'blockchain' && (
         <div className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <Wallet className="h-5 w-5 text-emerald-600" />
+                  <Wallet className="h-5 w-5 text-[#657565]" />
                   Seller Escrow Payout Wallet
                 </CardTitle>
                 <CardDescription>Address authorized to receive released purchase funds upon transaction settlement.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3 text-xs">
-                <div className="p-4 rounded-xl border border-slate-200 bg-slate-50 space-y-2">
+                <div className="p-4 rounded-xl border border-[#E8E2D5] bg-[#FAF8F3] space-y-2">
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Payout Network</span>
-                    <span className="font-mono font-semibold text-slate-900">EVM Hardhat Node (31337)</span>
+                    <span className="text-[#6B726B]">Payout Network</span>
+                    <span className="font-mono font-semibold text-[#252B28]">EVM Hardhat Node (31337)</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Settlement Currency</span>
-                    <span className="font-semibold text-slate-900">USDC / Native ETH</span>
+                    <span className="text-[#6B726B]">Settlement Currency</span>
+                    <span className="font-semibold text-[#252B28]">USDC / Native ETH</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Escrow Security</span>
-                    <span className="text-emerald-600 font-semibold">Multi-sig Consensus Guaranteed</span>
+                    <span className="text-[#6B726B]">Escrow Security</span>
+                    <span className="text-[#657565] font-semibold">Consensus Guaranteed</span>
                   </div>
                 </div>
-                <p className="text-slate-500 leading-relaxed">
+                <p className="text-[#6B726B] leading-relaxed font-light">
                   When the Legal Authority registers the deed, the smart contract automatically settles buyer escrow and transfers funds directly to your wallet.
                 </p>
               </CardContent>
@@ -673,49 +690,54 @@ export const SellerDashboard: React.FC = () => {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <Cpu className="h-5 w-5 text-indigo-600" />
+                  <Cpu className="h-5 w-5 text-[#B49A70]" />
                   Consensus Events Ledger
                 </CardTitle>
                 <CardDescription>On-chain ownership records anchored for your real estate holdings.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3 text-xs">
-                <p className="text-slate-600">
-                  All property tokens and title hashes registered by your account are permanently etched onto the local EVM blockchain.
+                <p className="text-[#6B726B] font-light leading-relaxed">
+                  All property tokens and title hashes registered by your account are permanently etched onto the EVM blockchain.
                 </p>
-                <Link to="/blockchain-explorer">
-                  <Button variant="outline" size="sm" className="w-full gap-1.5 mt-2">
-                    <Cpu className="h-4 w-4" />
-                    Open Decentralized Ledger Explorer
-                  </Button>
-                </Link>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => navigate('/blockchain-explorer')}
+                  className="w-full gap-2 mt-2"
+                >
+                  <Cpu className="h-4 w-4 text-[#657565]" />
+                  Open Decentralized Ledger Explorer
+                </Button>
               </CardContent>
             </Card>
           </div>
 
-          {/* On-Chain Consensus Events Table */}
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
                   <CardTitle className="flex items-center gap-2">
-                    <Cpu className="h-5 w-5 text-indigo-600" />
+                    <Cpu className="h-5 w-5 text-[#657565]" />
                     Consensus Ledger & Ownership Deeds
                   </CardTitle>
                   <CardDescription>
                     Immutable on-chain verification events and transaction digests logged on EVM node 31337.
                   </CardDescription>
                 </div>
-                <Link to="/blockchain-explorer">
-                  <Button size="sm" variant="outline" className="gap-1 text-xs">
-                    Full Blockchain Explorer <ExternalLink className="h-3.5 w-3.5" />
-                  </Button>
-                </Link>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => navigate('/blockchain-explorer')}
+                  className="gap-1.5 text-xs"
+                >
+                  Full Explorer <ExternalLink className="h-3.5 w-3.5 text-[#B49A70]" />
+                </Button>
               </div>
             </CardHeader>
             <CardContent className="p-0">
               {blockchainEvents.length === 0 ? (
-                <div className="p-8 text-center text-xs text-slate-400">
-                  <Cpu className="h-8 w-8 mx-auto text-slate-300 mb-2" />
+                <div className="p-10 text-center text-xs text-[#6B726B]">
+                  <Cpu className="h-8 w-8 mx-auto text-[#D4CBBC] mb-2" />
                   <p>No recent blockchain events recorded yet.</p>
                 </div>
               ) : (
@@ -723,7 +745,7 @@ export const SellerDashboard: React.FC = () => {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Event</TableHead>
-                      <TableHead>Property</TableHead>
+                      <TableHead>Residence</TableHead>
                       <TableHead>Transaction Hash</TableHead>
                       <TableHead>Block Height</TableHead>
                       <TableHead>Timestamp</TableHead>
@@ -733,20 +755,20 @@ export const SellerDashboard: React.FC = () => {
                     {blockchainEvents.map((ev: any) => (
                       <TableRow key={ev.id}>
                         <TableCell>
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-mono font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-[#EAE4D9] text-[#252B28] border border-[#D4CBBC]">
                             {ev.event_type}
                           </span>
                         </TableCell>
-                        <TableCell className="text-xs font-medium text-slate-900">
+                        <TableCell className="text-xs font-semibold text-[#252B28]">
                           {ev.property_title || ev.property_number || 'Parcel'}
                         </TableCell>
-                        <TableCell className="font-mono text-xs text-blue-600">
+                        <TableCell className="font-mono text-xs text-[#657565]">
                           {truncateHash(ev.tx_hash)}
                         </TableCell>
-                        <TableCell className="font-mono text-xs text-slate-600">
+                        <TableCell className="font-mono text-xs text-[#6B726B]">
                           #{ev.block_number || 1}
                         </TableCell>
-                        <TableCell className="text-xs text-slate-500">
+                        <TableCell className="text-xs text-[#6B726B]">
                           {formatDate(ev.created_at)}
                         </TableCell>
                       </TableRow>
