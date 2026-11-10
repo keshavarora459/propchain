@@ -25,7 +25,16 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@
 import { Button } from '@/components/ui/Button'
 import { Tabs } from '@/components/ui/Tabs'
 import { RegisterPropertyModal } from '@/pages/properties/RegisterPropertyModal'
-import { formatCurrency, formatDate, getPropertyLabel, getVerificationLabel, truncateHash } from '@/lib/utils'
+import {
+  formatCurrency,
+  formatDate,
+  getPropertyLabel,
+  getVerificationLabel,
+  truncateHash,
+  getPropertyTokenomics,
+  formatOfferAllocation,
+  cn,
+} from '@/lib/utils'
 import { HashDisplay } from '@/components/common/HashDisplay'
 import type { SellerDashboardData, SellerProperty, SellerOffer, SellerDocument } from '@/types/seller'
 import { useAuth } from '@/hooks/useAuth'
@@ -236,14 +245,28 @@ export const SellerDashboard: React.FC = () => {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {receivedOffers.slice(0, 4).map((offer: SellerOffer) => (
+                      {receivedOffers.slice(0, 4).map((offer: SellerOffer) => {
+                        const allocation = formatOfferAllocation(offer)
+                        return (
                         <TableRow key={offer.id}>
-                          <TableCell className="font-semibold text-[#252B28] text-xs">{getPropertyLabel(offer)}</TableCell>
+                          <TableCell>
+                            <p className="font-semibold text-[#252B28] text-xs">{getPropertyLabel(offer)}</p>
+                            <span
+                              className={cn(
+                                'inline-flex items-center mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold border',
+                                allocation.isFractional
+                                  ? 'bg-purple-50 text-purple-800 border-purple-200'
+                                  : 'bg-[#FAF8F3] text-[#6B726B] border-[#E8E2D5]'
+                              )}
+                            >
+                              {allocation.badgeLabel}
+                            </span>
+                          </TableCell>
                           <TableCell className="text-xs text-[#6B726B] font-normal">{offer.buyer_name}</TableCell>
                           <TableCell className="font-mono text-xs font-semibold text-[#252B28]">{formatCurrency(offer.amount)}</TableCell>
                           <TableCell><StatusBadge status={offer.status} /></TableCell>
                         </TableRow>
-                      ))}
+                      )})}
                     </TableBody>
                   </Table>
                 )}
@@ -335,10 +358,23 @@ export const SellerDashboard: React.FC = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {myProperties.map((p: SellerProperty) => (
+                  {myProperties.map((p: SellerProperty) => {
+                    const tok = getPropertyTokenomics(p)
+                    return (
                     <TableRow key={p.id}>
                       <TableCell className="font-mono text-xs font-medium text-[#657565]">{p.property_number}</TableCell>
-                      <TableCell className="font-semibold text-[#252B28] text-xs">{getPropertyLabel(p)}</TableCell>
+                      <TableCell>
+                        <p className="font-semibold text-[#252B28] text-xs">{getPropertyLabel(p)}</p>
+                        {tok.isTokenized ? (
+                          <span className="inline-flex items-center mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-purple-50 text-purple-800 border border-purple-200">
+                            Tokenized • {tok.availableTokens.toLocaleString()}/{tok.totalTokens.toLocaleString()} {tok.tokenSymbol} left
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-[#FAF8F3] text-[#6B726B] border border-[#E8E2D5]">
+                            Entire Property • 100% Deed
+                          </span>
+                        )}
+                      </TableCell>
                       <TableCell className="text-xs text-[#6B726B] font-normal">{p.city}</TableCell>
                       <TableCell className="font-mono text-xs font-semibold text-[#252B28]">{formatCurrency(p.valuation)}</TableCell>
                       <TableCell><StatusBadge status={p.verification_status} label={getVerificationLabel(p, user?.role)} /></TableCell>
@@ -356,7 +392,7 @@ export const SellerDashboard: React.FC = () => {
                         </Button>
                       </TableCell>
                     </TableRow>
-                  ))}
+                  )})}
                 </TableBody>
               </Table>
             )}
@@ -503,10 +539,23 @@ export const SellerDashboard: React.FC = () => {
                   {receivedOffers.map((offer: SellerOffer) => {
                     const isPending = offer.status === 'INITIATED' || offer.status === 'PENDING_SELLER_ACCEPTANCE' || offer.status === 'OFFER_MADE'
                     const inProgress = actionInProgress === offer.id
+                    const allocation = formatOfferAllocation(offer)
                     return (
                       <TableRow key={offer.id}>
                         <TableCell className="font-mono text-xs font-semibold text-[#657565]">{offer.transaction_number}</TableCell>
-                        <TableCell className="font-semibold text-[#252B28] text-xs">{getPropertyLabel(offer)}</TableCell>
+                        <TableCell>
+                          <p className="font-semibold text-[#252B28] text-xs">{getPropertyLabel(offer)}</p>
+                          <span
+                            className={cn(
+                              'inline-flex items-center mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold border',
+                              allocation.isFractional
+                                ? 'bg-purple-50 text-purple-800 border-purple-200'
+                                : 'bg-[#FAF8F3] text-[#6B726B] border-[#E8E2D5]'
+                            )}
+                          >
+                            {allocation.badgeLabel}
+                          </span>
+                        </TableCell>
                         <TableCell className="text-xs text-[#6B726B] font-normal">{offer.buyer_name}</TableCell>
                         <TableCell className="font-mono text-xs font-semibold text-[#252B28]">{formatCurrency(offer.amount)}</TableCell>
                         <TableCell><StatusBadge status={offer.status} /></TableCell>
@@ -571,10 +620,24 @@ export const SellerDashboard: React.FC = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {receivedOffers.map((tx: SellerOffer) => (
+                  {receivedOffers.map((tx: SellerOffer) => {
+                    const allocation = formatOfferAllocation(tx)
+                    return (
                     <TableRow key={tx.id}>
                       <TableCell className="font-mono text-xs font-semibold text-[#657565] whitespace-nowrap">{tx.transaction_number}</TableCell>
-                      <TableCell className="font-semibold text-[#252B28] text-xs">{getPropertyLabel(tx)}</TableCell>
+                      <TableCell>
+                        <p className="font-semibold text-[#252B28] text-xs">{getPropertyLabel(tx)}</p>
+                        <span
+                          className={cn(
+                            'inline-flex items-center mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold border',
+                            allocation.isFractional
+                              ? 'bg-purple-50 text-purple-800 border-purple-200'
+                              : 'bg-[#FAF8F3] text-[#6B726B] border-[#E8E2D5]'
+                          )}
+                        >
+                          {allocation.badgeLabel}
+                        </span>
+                      </TableCell>
                       <TableCell className="text-xs text-[#6B726B] font-normal">{tx.buyer_name}</TableCell>
                       <TableCell className="font-mono text-xs font-semibold whitespace-nowrap">{formatCurrency(tx.amount)}</TableCell>
                       <TableCell className="whitespace-nowrap"><StatusBadge status={tx.status} /></TableCell>
@@ -582,7 +645,7 @@ export const SellerDashboard: React.FC = () => {
                         <HashDisplay value={tx.blockchain_tx_hash} explorerLink pendingText="Pending Settlement" />
                       </TableCell>
                     </TableRow>
-                  ))}
+                  )})}
                 </TableBody>
               </Table>
             )}
@@ -604,12 +667,26 @@ export const SellerDashboard: React.FC = () => {
               </div>
             ) : (
               <div className="space-y-6">
-                {receivedOffers.map((tx: SellerOffer) => (
+                {receivedOffers.map((tx: SellerOffer) => {
+                  const allocation = formatOfferAllocation(tx)
+                  return (
                   <div key={tx.id} className="p-6 rounded-2xl border border-[#E8E2D5] bg-white space-y-4 shadow-xs">
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between gap-2">
                       <div>
-                        <span className="font-mono text-xs font-bold text-[#657565]">{tx.transaction_number}</span>
-                        <h4 className="font-semibold text-[#252B28] text-base">{getPropertyLabel(tx)}</h4>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-mono text-xs font-bold text-[#657565]">{tx.transaction_number}</span>
+                          <span
+                            className={cn(
+                              'inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold border',
+                              allocation.isFractional
+                                ? 'bg-purple-50 text-purple-800 border-purple-200'
+                                : 'bg-[#FAF8F3] text-[#6B726B] border-[#E8E2D5]'
+                            )}
+                          >
+                            {allocation.badgeLabel}
+                          </span>
+                        </div>
+                        <h4 className="font-semibold text-[#252B28] text-base mt-0.5">{getPropertyLabel(tx)}</h4>
                       </div>
                       <StatusBadge status={tx.status} />
                     </div>
@@ -647,7 +724,7 @@ export const SellerDashboard: React.FC = () => {
                       </div>
                     </div>
                   </div>
-                ))}
+                )})}
               </div>
             )}
           </CardContent>

@@ -11,6 +11,15 @@ export interface SellerProperty {
   blockchain_property_id?: string | null
   blockchain_block_number?: number | null
   blockchain_tx_hash?: string | null
+  is_tokenized?: boolean
+  token_symbol?: string | null
+  total_tokens?: number | null
+  token_price?: number | null
+  min_tokens_per_buyer?: number | null
+  projected_apy?: number | null
+  tokens_sold?: number
+  tokens_pending?: number
+  available_tokens?: number | null
 }
 
 export interface SellerOffer {
@@ -21,9 +30,15 @@ export interface SellerOffer {
   buyer_name: string
   purchase_price: number
   amount: number
+  currency?: string
   status: string
   blockchain_tx_hash?: string | null
   created_at: string | null
+  purchase_mode?: string
+  token_quantity?: number | null
+  token_symbol?: string | null
+  ownership_percentage?: number | null
+  property_is_tokenized?: boolean
 }
 
 export interface SellerDocument {

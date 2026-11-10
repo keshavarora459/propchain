@@ -12,10 +12,12 @@ import {
   AlertCircle,
   ShieldCheck,
   Trash2,
+  RefreshCw,
 } from 'lucide-react'
 import { useSearchParams, Link, useNavigate } from 'react-router-dom'
 import { PageHeader } from '@/components/common/PageHeader'
 import { PropertyCard } from '@/components/common/PropertyCard'
+import { PropertyEmblem } from '@/components/common/PropertyEmblem'
 import { SearchFilterBar } from '@/components/common/SearchFilterBar'
 import { EmptyState } from '@/components/common/EmptyState'
 import { Pagination } from '@/components/common/Pagination'
@@ -24,7 +26,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@
 import { Button } from '@/components/ui/Button'
 import { RegisterPropertyModal } from './RegisterPropertyModal'
 import { PROPERTY_TYPES, VERIFICATION_STATUSES } from '@/constants/options'
-import { formatCurrency, getPropertyLabel, getVerificationLabel, cn } from '@/lib/utils'
+import { formatCurrency, getPropertyLabel, getVerificationLabel, getPropertyTokenomics, cn } from '@/lib/utils'
 import type { Property } from '@/types/property'
 import { propertyService } from '@/services/propertyService'
 import { useAuth } from '@/hooks/useAuth'
@@ -243,6 +245,15 @@ export const PropertiesPage: React.FC = () => {
         description={pageDescription}
         actions={
           <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={loadProperties}
+              leftIcon={<RefreshCw className={cn('h-3.5 w-3.5 text-[#657565]', isLoading && 'animate-spin')} />}
+              title="Sync latest properties from MongoDB"
+            >
+              Refresh
+            </Button>
             <div className="hidden sm:flex items-center rounded-lg border border-slate-200 bg-white p-1">
               <button
                 onClick={() => setViewMode('grid')}
@@ -598,6 +609,8 @@ export const PropertiesPage: React.FC = () => {
                 const isSubmitted = rawStatus === 'SUBMITTED'
                 const isVerified = rawStatus === 'VERIFIED'
                 const ownerOfProp = isPropOwner(prop)
+                const tok = getPropertyTokenomics(prop)
+                const isTokenSoldOut = tok.isTokenized && tok.availableTokens <= 0
 
                 return (
                   <TableRow key={prop.id || prop.propertyId}>
@@ -605,10 +618,29 @@ export const PropertiesPage: React.FC = () => {
                       {prop.propertyId}
                     </TableCell>
                     <TableCell>
-                      <p className="font-semibold text-slate-900">{getPropertyLabel(prop)}</p>
-                      <p className="text-xs text-slate-500">
-                        {prop.address}, {prop.city}, {prop.state}
-                      </p>
+                      <div className="flex items-center gap-3">
+                        <PropertyEmblem
+                          propertyType={prop.propertyType}
+                          isTokenized={tok.isTokenized}
+                          size={38}
+                        />
+                        <div className="min-w-0">
+                          <p className="font-semibold text-slate-900">{getPropertyLabel(prop)}</p>
+                          <p className="text-xs text-slate-500">
+                            {prop.address}, {prop.city}, {prop.state}
+                          </p>
+                          {tok.isTokenized ? (
+                            <span className="inline-flex items-center mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-purple-50 text-purple-800 border border-purple-200">
+                              Tokenized ({tok.tokenSymbol}) • {formatCurrency(tok.tokenPrice)}/tkn •{' '}
+                              {tok.availableTokens > 0 ? `${tok.availableTokens.toLocaleString()} left` : 'Sold Out'}
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-800 border border-blue-200">
+                              Entire Property (100% Deed)
+                            </span>
+                          )}
+                        </div>
+                      </div>
                     </TableCell>
                     <TableCell>
                       <span className="text-xs font-medium text-slate-600">{prop.propertyType}</span>
@@ -673,12 +705,12 @@ export const PropertiesPage: React.FC = () => {
                             >
                               Inspect
                             </Link>
-                            {isBuyer && !ownerOfProp && isVerified && (
+                            {isBuyer && !ownerOfProp && isVerified && !isTokenSoldOut && (
                               <Link
                                 to={`/transactions?propertyId=${prop.id || prop.propertyId}&initiate=true`}
                                 className="text-xs font-semibold text-blue-600 hover:text-blue-800"
                               >
-                                Make Offer
+                                {tok.isTokenized ? 'Buy Tokens / Offer' : 'Make Offer'}
                               </Link>
                             )}
                           </>

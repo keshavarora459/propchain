@@ -20,6 +20,7 @@ from app.models.property import Property
 from app.models.transaction import PropertyTransaction
 from app.models.user import User
 from app.models.user_activity import UserActivityLog
+from app.services.tokenization import compute_property_token_stats, parse_property_tokenomics, resolve_txn_token_meta
 
 router = APIRouter(prefix="/analytics", tags=["Analytics"])
 
@@ -144,9 +145,11 @@ def get_dashboard_metrics(
             "seller_name": t.seller.full_name if t.seller else "Seller",
             "purchase_price": float(t.proposed_amount) if t.proposed_amount else 0.0,
             "proposed_amount": float(t.proposed_amount) if t.proposed_amount else 0.0,
+            "amount": float(t.proposed_amount) if t.proposed_amount else 0.0,
             "currency": t.currency,
             "status": t.status,
             "created_at": t.created_at.isoformat() if t.created_at else None,
+            **resolve_txn_token_meta(t, t.property),
         }
         for t in seller_pending_txs
     ]
@@ -173,13 +176,17 @@ def get_dashboard_metrics(
             "id": str(t.id),
             "transaction_number": t.transaction_number,
             "property_id": str(t.property_id),
+            "property_number": t.property.property_number if t.property else None,
             "property_title": t.property.title if t.property else "Property Parcel",
             "purchase_price": float(t.proposed_amount) if t.proposed_amount else 0.0,
+            "amount": float(t.proposed_amount) if t.proposed_amount else 0.0,
+            "currency": t.currency,
             "status": t.status,
             "buyer_name": t.buyer.full_name if t.buyer else "Buyer",
             "seller_name": t.seller.full_name if t.seller else "Seller",
             "blockchain_tx_hash": t.blockchain_tx_hash,
             "created_at": t.created_at.isoformat() if t.created_at else None,
+            **resolve_txn_token_meta(t, t.property),
         }
         for t in recent_txs
     ]
@@ -240,7 +247,10 @@ def get_dashboard_metrics(
         buyer_txs = list(
             db.scalars(
                 select(PropertyTransaction)
-                .options(joinedload(PropertyTransaction.property))
+                .options(
+                    joinedload(PropertyTransaction.property),
+                    joinedload(PropertyTransaction.seller),
+                )
                 .where(PropertyTransaction.buyer_id == current_user.id)
                 .order_by(PropertyTransaction.created_at.desc())
             ).unique().all()
@@ -253,21 +263,67 @@ def get_dashboard_metrics(
                 .order_by(Property.created_at.desc())
             ).all()
         )
+        owned_prop_ids = {p.id for p in owned_props}
+
+        # Aggregate settled fractional token stakes across COMPLETED token purchases
+        token_holdings_map: Dict[str, Dict[str, Any]] = {}
+        for t in buyer_txs:
+            if t.status != "COMPLETED" or not t.property or t.property.id in owned_prop_ids:
+                continue
+            meta = resolve_txn_token_meta(t, t.property)
+            if meta["purchase_mode"] != "TOKEN_PURCHASE" or not meta["token_quantity"]:
+                continue
+            pid = str(t.property.id)
+            p_tok = parse_property_tokenomics(t.property)
+            if pid not in token_holdings_map:
+                token_holdings_map[pid] = {
+                    "property_id": pid,
+                    "property_number": t.property.property_number,
+                    "title": t.property.title,
+                    "city": t.property.city,
+                    "state": t.property.state,
+                    "token_symbol": meta["token_symbol"] or p_tok.get("token_symbol") or "PROP-TKN",
+                    "tokens_owned": 0,
+                    "total_tokens": p_tok.get("total_tokens"),
+                    "ownership_percentage": 0.0,
+                    "invested_amount": 0.0,
+                    "valuation": float(t.property.valuation) if t.property.valuation else 0.0,
+                    "projected_apy": p_tok.get("projected_apy"),
+                    "latest_tx_hash": t.blockchain_tx_hash,
+                }
+            entry = token_holdings_map[pid]
+            entry["tokens_owned"] += int(meta["token_quantity"] or 0)
+            entry["invested_amount"] += float(t.proposed_amount) if t.proposed_amount else 0.0
+            if entry["total_tokens"]:
+                entry["ownership_percentage"] = round(
+                    (entry["tokens_owned"] / int(entry["total_tokens"])) * 100.0, 4
+                )
+            else:
+                entry["ownership_percentage"] = round(
+                    entry["ownership_percentage"] + float(meta["ownership_percentage"] or 0), 4
+                )
 
         payload["buyer_metrics"] = {
             "my_offers_count": len([t for t in buyer_txs if t.status not in ["COMPLETED", "CANCELLED", "REJECTED"]]),
             "my_completed_transactions_count": len([t for t in buyer_txs if t.status == "COMPLETED"]),
             "my_properties_count": len(owned_props),
+            "my_token_holdings_count": len(token_holdings_map),
+            "my_token_holdings": list(token_holdings_map.values()),
             "my_transactions": [
                 {
                     "id": str(t.id),
                     "transaction_number": t.transaction_number,
                     "property_id": str(t.property_id),
+                    "property_number": t.property.property_number if t.property else None,
                     "property_title": t.property.title if t.property else "Parcel",
+                    "seller_name": t.seller.full_name if t.seller else "Seller",
                     "purchase_price": float(t.proposed_amount) if t.proposed_amount else 0.0,
+                    "amount": float(t.proposed_amount) if t.proposed_amount else 0.0,
+                    "currency": t.currency,
                     "status": t.status,
                     "blockchain_tx_hash": t.blockchain_tx_hash,
                     "created_at": t.created_at.isoformat() if t.created_at else None,
+                    **resolve_txn_token_meta(t, t.property),
                 }
                 for t in buyer_txs
             ],
@@ -277,6 +333,7 @@ def get_dashboard_metrics(
                     "property_number": p.property_number,
                     "title": p.title,
                     "city": p.city,
+                    "state": p.state,
                     "valuation": float(p.valuation) if p.valuation else 0.0,
                     "status": p.status,
                 }
@@ -378,6 +435,7 @@ def get_dashboard_metrics(
                     "anchor_tx_hash": p.blockchain_tx_hash,
                     "blockchain_block_number": p.blockchain_block_number,
                     "verified_at": p.verified_at.isoformat() if p.verified_at else None,
+                    **compute_property_token_stats(db, p),
                 }
                 for p in seller_props
             ],
@@ -390,9 +448,11 @@ def get_dashboard_metrics(
                     "buyer_name": t.buyer.full_name if t.buyer else "Buyer",
                     "purchase_price": float(t.proposed_amount) if t.proposed_amount else 0.0,
                     "amount": float(t.proposed_amount) if t.proposed_amount else 0.0,
+                    "currency": t.currency,
                     "status": t.status,
                     "blockchain_tx_hash": t.blockchain_tx_hash,
                     "created_at": t.created_at.isoformat() if t.created_at else None,
+                    **resolve_txn_token_meta(t, t.property),
                 }
                 for t in seller_txs
             ],
@@ -554,11 +614,14 @@ def get_dashboard_metrics(
                     "buyer_name": t.buyer.full_name if t.buyer else "Buyer",
                     "seller_name": t.seller.full_name if t.seller else "Seller",
                     "purchase_price": float(t.proposed_amount) if t.proposed_amount else 0.0,
+                    "amount": float(t.proposed_amount) if t.proposed_amount else 0.0,
+                    "currency": t.currency,
                     "status": t.status,
                     "blockchain_tx_hash": t.blockchain_tx_hash,
                     "blockchain_block_number": t.blockchain_block_number,
                     "blockchain_error": t.blockchain_error,
                     "created_at": t.created_at.isoformat() if t.created_at else None,
+                    **resolve_txn_token_meta(t, t.property),
                 }
                 for t in ready_for_legal_txs
             ],

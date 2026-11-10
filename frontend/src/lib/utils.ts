@@ -12,11 +12,13 @@ export function cn(...inputs: ClassValue[]): string {
  * Format currency in USD.
  */
 export function formatCurrency(amount: number): string {
+  const safe = Number.isFinite(Number(amount)) ? Number(amount) : 0
+  const hasCents = safe !== 0 && !Number.isInteger(safe) && Math.abs(safe) < 10000
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'USD',
-    maximumFractionDigits: 0,
-  }).format(amount)
+    maximumFractionDigits: hasCents ? 2 : 0,
+  }).format(safe)
 }
 
 /**
@@ -353,5 +355,135 @@ export function getTransactionLifecycleProgress(
     isCancelledOrRejected,
     hasBlockchainError,
     steps,
+  }
+}
+
+export interface PropertyTokenomics {
+  isTokenized: boolean
+  tokenSymbol: string
+  totalTokens: number
+  tokenPrice: number
+  minTokensPerBuyer: number
+  projectedApy: number | null
+  tokensSold: number
+  tokensPending: number
+  availableTokens: number
+  cleanDescription: string
+}
+
+export function stripPropertySaleTags(description?: string | null): string {
+  if (!description) return ''
+  return description
+    .replace(
+      /^\[TOKENIZED SALE\][^|]*(?:\|\s*(?:Symbol|Total\s+Supply|Token\s+Price|Min(?:imum)?\s+Purchase|Projected\s+APY):[^|]*)*\|\s*/i,
+      ''
+    )
+    .replace(/^\[TOKENIZED SALE\]\s*/i, '')
+    .replace(/^\[ENTIRE PROPERTY SALE\]\s*/i, '')
+    .trim()
+}
+
+export function getPropertyTokenomics(property?: any): PropertyTokenomics {
+  const desc = String(property?.description || '')
+  const cat = String(property?.property_category || '').toUpperCase().trim()
+  const isTokenized = Boolean(
+    property?.is_tokenized === true ||
+    cat === 'TOKENIZED' ||
+    /\[TOKENIZED/i.test(desc)
+  )
+
+  const valuation = Number(property?.valuation || 0) || 0
+
+  if (!isTokenized) {
+    return {
+      isTokenized: false,
+      tokenSymbol: '',
+      totalTokens: 0,
+      tokenPrice: valuation,
+      minTokensPerBuyer: 1,
+      projectedApy: null,
+      tokensSold: 0,
+      tokensPending: 0,
+      availableTokens: 0,
+      cleanDescription: stripPropertySaleTags(desc),
+    }
+  }
+
+  const symM = desc.match(/Symbol:\s*([A-Za-z0-9_-]+)/i)
+  const supM = desc.match(/Total\s+Supply:\s*([\d,]+)/i)
+  const prcM = desc.match(/Token\s+Price:\s*\$?([\d,]+(?:\.\d+)?)/i)
+  const minM = desc.match(/Min(?:imum)?\s+Purchase:\s*([\d,]+)/i)
+  const apyM = desc.match(/Projected\s+APY:\s*([\d.]+)%?/i)
+
+  const parsedSupply = Number(
+    property?.total_tokens ?? (supM ? Number(supM[1].replace(/,/g, '')) : 1000)
+  )
+  const totalTokens = parsedSupply > 0 ? Math.floor(parsedSupply) : 1000
+
+  const parsedPrice = Number(
+    property?.token_price ??
+    (prcM
+      ? Number(prcM[1].replace(/,/g, ''))
+      : (valuation > 0 ? Math.round((valuation / totalTokens) * 100) / 100 : 100))
+  )
+  const tokenPrice = parsedPrice > 0 ? parsedPrice : 100
+
+  const parsedMin = Number(
+    property?.min_tokens_per_buyer ?? (minM ? Number(minM[1].replace(/,/g, '')) : 1)
+  )
+  const minTokensPerBuyer = Math.min(Math.max(1, Number.isFinite(parsedMin) ? Math.floor(parsedMin) : 1), totalTokens)
+
+  const tokensSold = Math.max(0, Number(property?.tokens_sold ?? 0) || 0)
+  const tokensPending = Math.max(0, Number(property?.tokens_pending ?? 0) || 0)
+  const availableTokens =
+    property?.available_tokens !== undefined && property?.available_tokens !== null
+      ? Math.max(0, Number(property.available_tokens))
+      : Math.max(0, totalTokens - tokensSold)
+
+  const projectedApy =
+    property?.projected_apy !== undefined && property?.projected_apy !== null
+      ? Number(property.projected_apy)
+      : (apyM ? Number(apyM[1]) : null)
+
+  return {
+    isTokenized: true,
+    tokenSymbol: String(property?.token_symbol || (symM ? symM[1] : 'PROP-TKN')).toUpperCase(),
+    totalTokens,
+    tokenPrice,
+    minTokensPerBuyer,
+    projectedApy: projectedApy !== null && Number.isFinite(projectedApy) ? projectedApy : null,
+    tokensSold,
+    tokensPending,
+    availableTokens,
+    cleanDescription: stripPropertySaleTags(desc),
+  }
+}
+
+export function formatOfferAllocation(tx?: any): {
+  isFractional: boolean
+  badgeLabel: string
+  detailLabel: string
+} {
+  const mode = String(tx?.purchase_mode || tx?.purchaseMode || '').toUpperCase().trim()
+  const rawType = String(tx?.transaction_type || tx?.type || '').toUpperCase().trim()
+  const qty = Number(tx?.token_quantity ?? tx?.tokenQuantity ?? 0)
+  const pctRaw = Number(tx?.ownership_percentage ?? tx?.ownershipPercentage ?? 100)
+  const pct = Number.isFinite(pctRaw) ? pctRaw : 100
+  const sym = String(tx?.token_symbol || tx?.tokenSymbol || 'Tokens')
+  const isFractional = mode === 'TOKEN_PURCHASE' || rawType === 'TOKEN_PURCHASE'
+
+  if (isFractional && qty > 0) {
+    const pctText = pct < 0.01 ? pct.toFixed(4) : pct.toFixed(2)
+    return {
+      isFractional: true,
+      badgeLabel: `${qty.toLocaleString()} ${sym} (${pctText}%)`,
+      detailLabel: `Fractional Tokens: ${qty.toLocaleString()} ${sym} (${pctText}% Ownership Stake)`,
+    }
+  }
+
+  return {
+    isFractional: false,
+    badgeLabel: 'Entire Property (100%)',
+    detailLabel: 'Entire Property Buyout (100% Ownership Title)',
   }
 }

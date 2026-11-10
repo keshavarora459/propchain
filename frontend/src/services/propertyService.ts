@@ -70,6 +70,15 @@ export function normalizeProperty(p: any): Property {
     approved_documents_count: p.approved_documents_count ?? p.approvedDocsCount ?? 0,
     required_documents_count: p.required_documents_count ?? p.requiredCount ?? 4,
     allow_duplicate_override: Boolean(p.allow_duplicate_override ?? p.allowDuplicateOverride),
+    is_tokenized: Boolean(p.is_tokenized || p.property_category === 'TOKENIZED' || String(p.description || '').includes('[TOKENIZED')),
+    token_symbol: p.token_symbol ?? null,
+    total_tokens: p.total_tokens ?? null,
+    token_price: p.token_price ?? null,
+    min_tokens_per_buyer: p.min_tokens_per_buyer ?? null,
+    projected_apy: p.projected_apy ?? null,
+    tokens_sold: p.tokens_sold ?? 0,
+    tokens_pending: p.tokens_pending ?? 0,
+    available_tokens: p.available_tokens ?? null,
   }
 }
 

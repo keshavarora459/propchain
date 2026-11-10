@@ -350,6 +350,9 @@ class BlockchainService:
         previous_owner_address: str,
         new_owner_address: str,
         transaction_id_str: str,
+        is_fractional: bool = False,
+        token_quantity: Optional[int] = None,
+        ownership_percentage: Optional[float] = None,
     ) -> Tuple[bool, Optional[str], Optional[int], Optional[str]]:
         """
         Executes on-chain transfer in OwnershipRegistry and updates local ownership history.
@@ -367,8 +370,15 @@ class BlockchainService:
         if not new_owner_address or not str(new_owner_address).strip():
             new_owner_address = settings.PLATFORM_CUSTODY_WALLET
 
+        onchain_property_id = (
+            f"{prop.property_number}-TKN-{transaction_id_str}"
+            if is_fractional
+            else prop.property_number
+        )
+        transfer_event_type = "TOKEN_TRANSFER" if is_fractional else "TRANSFER"
+
         op = BlockchainOperation(
-            operation_type="TRANSFER_OWNERSHIP",
+            operation_type="TRANSFER_TOKEN_SHARE" if is_fractional else "TRANSFER_OWNERSHIP",
             entity_type="TRANSACTION",
             entity_id=prop.id,
             status="PENDING",
@@ -379,7 +389,7 @@ class BlockchainService:
         try:
             # Check recorded current owner on-chain to match registeredCurrent in contract
             try:
-                curr_owner = self.ownership_registry.functions.getCurrentOwner(prop.property_number).call()
+                curr_owner = self.ownership_registry.functions.getCurrentOwner(onchain_property_id).call()
                 if curr_owner and curr_owner != "0x0000000000000000000000000000000000000000":
                     prev_addr = curr_owner
                 else:
@@ -391,7 +401,7 @@ class BlockchainService:
 
             nonce = self.w3.eth.get_transaction_count(self.deployer_account.address, "pending")
             tx = self.ownership_registry.functions.recordOwnershipTransfer(
-                prop.property_number,
+                onchain_property_id,
                 prev_addr,
                 new_addr,
                 transaction_id_str,
@@ -440,7 +450,7 @@ class BlockchainService:
                 previous_owner_address=prev_addr,
                 new_owner_address=new_addr,
                 transaction_id=transaction_id_str,
-                event_type="TRANSFER",
+                event_type=transfer_event_type,
                 blockchain_tx_hash=tx_hash,
                 block_number=block_num,
                 confirmed_at=block_timestamp,
@@ -449,19 +459,27 @@ class BlockchainService:
 
             # Record blockchain event for explorer indexing
             reg_contract_addr = self.ownership_registry.address or self.get_contract_address() or "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512"
+            bc_payload = {
+                "property_id": prop.property_number,
+                "onchain_asset_id": onchain_property_id,
+                "previous_owner": prev_addr,
+                "new_owner": new_addr,
+                "transaction_id": transaction_id_str,
+                "transfer_mode": "FRACTIONAL_TOKEN" if is_fractional else "ENTIRE_PROPERTY",
+                "timestamp": int(block_timestamp.timestamp()),
+            }
+            if is_fractional and token_quantity is not None:
+                bc_payload["token_quantity"] = token_quantity
+                if ownership_percentage is not None:
+                    bc_payload["ownership_percentage"] = ownership_percentage
+
             bc_event = BlockchainEvent(
                 contract_address=reg_contract_addr,
                 event_name="OwnershipTransferred",
                 block_number=block_num,
                 tx_hash=tx_hash,
                 log_index=0,
-                payload={
-                    "property_id": prop.property_number,
-                    "previous_owner": prev_addr,
-                    "new_owner": new_addr,
-                    "transaction_id": transaction_id_str,
-                    "timestamp": int(block_timestamp.timestamp()),
-                },
+                payload=bc_payload,
             )
             self.db.add(bc_event)
             self.db.commit()

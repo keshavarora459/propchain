@@ -2,10 +2,11 @@ import React, { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Building2, Mail, Lock, User, Phone, AlertCircle, ArrowRight } from 'lucide-react'
+import { Mail, Lock, User, Phone, AlertCircle, ArrowRight } from 'lucide-react'
 import { registerSchema, type RegisterFormData } from '@/schemas/authSchema'
 import { useAuth } from '@/hooks/useAuth'
 import { Button } from '@/components/ui/Button'
+import { BrandLogo } from '@/components/common/BrandLogo'
 
 export const RegisterPage: React.FC = () => {
   const { register: registerUser } = useAuth()
@@ -54,13 +55,10 @@ export const RegisterPage: React.FC = () => {
       <div className="absolute bottom-10 left-10 w-80 h-80 bg-indigo-600/10 rounded-full blur-3xl pointer-events-none" />
 
       <div className="sm:mx-auto sm:w-full sm:max-w-md relative z-10">
-        <div className="flex items-center justify-center gap-2.5 mb-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 shadow-lg shadow-blue-500/20 text-white">
-            <Building2 className="h-5 w-5" />
-          </div>
-          <span className="font-mono text-xl font-bold tracking-tight text-white">
-            Prop<span className="text-blue-400">Chain</span>
-          </span>
+        <div className="flex items-center justify-center mb-4">
+          <Link to="/login" className="hover:opacity-95 transition-opacity">
+            <BrandLogo theme="dark" size="md" />
+          </Link>
         </div>
         <h2 className="text-center text-2xl font-bold tracking-tight text-white">
           Create Account

@@ -423,6 +423,7 @@ def get_blockchain_overview(
         transfer_list.append({
             "property_id": p_num,
             "property_title": p_title,
+            "event_type": ev.event_type,
             "from_owner": from_name,
             "from_address": ev.previous_owner_address or "",
             "to_owner": to_name,
@@ -560,7 +561,12 @@ def get_blockchain_overview(
                         prop_id = prop_tx_map.get(tx_h.lower()) or transfer_tx_map.get(tx_h.lower())
                         if decoded_args.get("propertyId"):
                             prop_id = str(decoded_args["propertyId"])
-                        prop_title = prop_title_map.get(prop_id, "")
+                        base_prop_id = (
+                            prop_id.split("-TKN-")[0]
+                            if prop_id and "-TKN-" in str(prop_id)
+                            else prop_id
+                        )
+                        prop_title = prop_title_map.get(base_prop_id, "") or prop_title_map.get(prop_id, "")
     
                         owner_wallet = ""
                         if decoded_args.get("ownerWallet"):
@@ -632,7 +638,7 @@ def get_blockchain_overview(
                         # Match property owner name if known
                         owner_name = ""
                         for rp in registered_properties_list:
-                            if rp["property_id"] == prop_id or (rp.get("property_uuid") and rp["property_uuid"] == prop_id):
+                            if rp["property_id"] == base_prop_id or rp["property_id"] == prop_id or (rp.get("property_uuid") and rp["property_uuid"] == prop_id):
                                 if not prop_title:
                                     prop_title = rp.get("title", "")
                                 if not doc_hash and rp.get("document_hashes"):
@@ -644,7 +650,7 @@ def get_blockchain_overview(
     
                         if not owner_name:
                             for tr in transfer_list:
-                                if tr["property_id"] == prop_id:
+                                if tr["property_id"] == base_prop_id or tr["property_id"] == prop_id:
                                     if not prop_title:
                                         prop_title = tr.get("property_title", "")
                                     if not owner_wallet:
@@ -814,7 +820,13 @@ def get_blockchain_overview(
         ]
         scoped_txs = [
             tx for tx in txs_list
-            if (tx.get("propertyId") and tx["propertyId"] in seller_prop_ids)
+            if (
+                tx.get("propertyId")
+                and (
+                    tx["propertyId"] in seller_prop_ids
+                    or str(tx["propertyId"]).split("-TKN-")[0] in seller_prop_ids
+                )
+            )
             or (tx["from"].lower() in user_wallet_addrs or tx["to"].lower() in user_wallet_addrs)
         ]
     elif user_role == "BUYER":
@@ -834,7 +846,13 @@ def get_blockchain_overview(
         scoped_txs = [
             tx for tx in txs_list
             if (tx["from"].lower() in user_wallet_addrs or tx["to"].lower() in user_wallet_addrs)
-            or (tx.get("propertyId") and tx["propertyId"] in buyer_prop_ids)
+            or (
+                tx.get("propertyId")
+                and (
+                    tx["propertyId"] in buyer_prop_ids
+                    or str(tx["propertyId"]).split("-TKN-")[0] in buyer_prop_ids
+                )
+            )
             or tx["event"] in {"Property Registered", "Ownership Transfer", "Ownership (Initial & Conveyance)"}
         ]
     elif user_role in {"REGISTRAR", "VERIFIER"}:

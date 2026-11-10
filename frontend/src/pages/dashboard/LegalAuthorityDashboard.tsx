@@ -18,7 +18,7 @@ import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { Input } from '@/components/ui/Input'
 import { Tabs } from '@/components/ui/Tabs'
-import { formatCurrency, formatDate, getPropertyLabel } from '@/lib/utils'
+import { formatCurrency, formatDate, getPropertyLabel, formatOfferAllocation, cn } from '@/lib/utils'
 import { useAuth } from '@/hooks/useAuth'
 import apiClient from '@/lib/axios'
 import { CONTRACT_ADDRESSES } from '@/contracts/contractConfig'
@@ -288,10 +288,24 @@ export const LegalAuthorityDashboard: React.FC = () => {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {pendingRequests.map((txn: any) => (
+                    {pendingRequests.map((txn: any) => {
+                      const allocation = formatOfferAllocation(txn)
+                      return (
                       <TableRow key={txn.id}>
                         <TableCell className="font-mono text-xs font-semibold text-[#657565]">{txn.transaction_number}</TableCell>
-                        <TableCell className="font-semibold text-[#252B28] text-xs">{getPropertyLabel(txn)}</TableCell>
+                        <TableCell>
+                          <p className="font-semibold text-[#252B28] text-xs">{getPropertyLabel(txn)}</p>
+                          <span
+                            className={cn(
+                              'inline-flex items-center mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold border',
+                              allocation.isFractional
+                                ? 'bg-purple-50 text-purple-800 border-purple-200'
+                                : 'bg-[#FAF8F3] text-[#6B726B] border-[#E8E2D5]'
+                            )}
+                          >
+                            {allocation.badgeLabel}
+                          </span>
+                        </TableCell>
                         <TableCell className="text-xs text-[#6B726B] font-normal">{txn.buyer_name}</TableCell>
                         <TableCell className="text-xs text-[#6B726B] font-normal">{txn.seller_name}</TableCell>
                         <TableCell className="font-mono text-xs font-semibold text-[#252B28]">{formatCurrency(txn.purchase_price)}</TableCell>
@@ -335,7 +349,7 @@ export const LegalAuthorityDashboard: React.FC = () => {
                           )}
                         </TableCell>
                       </TableRow>
-                    ))}
+                    )})}
                   </TableBody>
                 </Table>
               )}
@@ -372,10 +386,24 @@ export const LegalAuthorityDashboard: React.FC = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {pendingRequests.map((txn: any) => (
+                  {pendingRequests.map((txn: any) => {
+                    const allocation = formatOfferAllocation(txn)
+                    return (
                     <TableRow key={txn.id}>
                       <TableCell className="font-mono text-xs font-semibold text-[#657565]">{txn.transaction_number}</TableCell>
-                      <TableCell className="font-semibold text-[#252B28] text-xs">{getPropertyLabel(txn)}</TableCell>
+                      <TableCell>
+                        <p className="font-semibold text-[#252B28] text-xs">{getPropertyLabel(txn)}</p>
+                        <span
+                          className={cn(
+                            'inline-flex items-center mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold border',
+                            allocation.isFractional
+                              ? 'bg-purple-50 text-purple-800 border-purple-200'
+                              : 'bg-[#FAF8F3] text-[#6B726B] border-[#E8E2D5]'
+                          )}
+                        >
+                          {allocation.badgeLabel}
+                        </span>
+                      </TableCell>
                       <TableCell className="text-xs text-[#6B726B] font-normal">{txn.buyer_name}</TableCell>
                       <TableCell className="text-xs text-[#6B726B] font-normal">{txn.seller_name}</TableCell>
                       <TableCell className="font-mono text-xs font-semibold text-[#252B28]">{formatCurrency(txn.purchase_price)}</TableCell>
@@ -419,7 +447,7 @@ export const LegalAuthorityDashboard: React.FC = () => {
                         )}
                       </TableCell>
                     </TableRow>
-                  ))}
+                  )})}
                 </TableBody>
               </Table>
             )}
@@ -544,6 +572,9 @@ export const LegalAuthorityDashboard: React.FC = () => {
               <p className="font-semibold text-xs">Conveyance Transaction:</p>
               <p className="font-mono text-[11px] mt-0.5 text-[#657565]">
                 {selectedTxn?.transaction_number} — {getPropertyLabel(selectedTxn)}
+              </p>
+              <p className="text-[11px] text-[#252B28] font-semibold mt-1">
+                Scope: {formatOfferAllocation(selectedTxn).detailLabel}
               </p>
               <p className="text-[11px] text-[#6B726B] mt-1">
                 Buyer: <strong className="text-[#252B28]">{selectedTxn?.buyer_name}</strong> | Seller: <strong className="text-[#252B28]">{selectedTxn?.seller_name}</strong>

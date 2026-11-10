@@ -190,6 +190,22 @@ class PropertyService:
             _settings.ALLOW_DUPLICATE_DOCS_ON_VERIFY and _settings.APP_ENV == "development"
         )
 
+        # Tokenization specs and live supply telemetry
+        try:
+            from app.services.tokenization import compute_property_token_stats
+            token_stats = compute_property_token_stats(self.db, prop)
+            resp.is_tokenized = bool(token_stats.get("is_tokenized", False))
+            resp.token_symbol = token_stats.get("token_symbol")
+            resp.total_tokens = token_stats.get("total_tokens")
+            resp.token_price = token_stats.get("token_price")
+            resp.min_tokens_per_buyer = token_stats.get("min_tokens_per_buyer")
+            resp.projected_apy = token_stats.get("projected_apy")
+            resp.tokens_sold = int(token_stats.get("tokens_sold") or 0)
+            resp.tokens_pending = int(token_stats.get("tokens_pending") or 0)
+            resp.available_tokens = token_stats.get("available_tokens")
+        except Exception as tok_err:
+            logger.warning("Could not populate tokenization metrics for property %s: %s", prop.id, tok_err)
+
         return resp
 
     def register_property(self, data: PropertyCreate, current_user: User) -> PropertyResponse:
@@ -217,12 +233,37 @@ class PropertyService:
         while self.repo.get_by_property_number(property_number):
             property_number = _generate_property_number()
 
+        description_val = data.description
+        category_val = data.property_category.upper()
+        if (
+            (category_val == "TOKENIZED" or data.total_tokens is not None or data.token_symbol is not None)
+            and "[TOKENIZED" not in (description_val or "").upper()
+        ):
+            from app.services.tokenization import build_tokenized_description
+            category_val = "TOKENIZED"
+            t_supply = int(data.total_tokens or 1000)
+            t_symbol = (data.token_symbol or "PROP-TKN").upper()
+            val_num = float(data.valuation or 0)
+            t_price = float(data.token_price) if data.token_price is not None else (
+                round(val_num / t_supply, 2) if val_num > 0 else 100.0
+            )
+            t_min = int(data.min_tokens_per_buyer or 1)
+            t_apy = float(data.projected_apy) if data.projected_apy is not None else 0.0
+            description_val = build_tokenized_description(
+                base_description=description_val,
+                token_symbol=t_symbol,
+                total_tokens=t_supply,
+                token_price=t_price,
+                min_tokens_per_buyer=t_min,
+                projected_apy=t_apy,
+            )
+
         prop = Property(
             property_number=property_number,
             title=data.title,
-            description=data.description,
+            description=description_val,
             property_type=data.property_type.upper(),
-            property_category=data.property_category.upper(),
+            property_category=category_val,
             country=data.country,
             state=data.state,
             city=data.city,

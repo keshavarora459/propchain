@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
 import {
   UploadCloud,
@@ -68,6 +68,7 @@ export const DocumentVerificationPage: React.FC = () => {
     Record<string, { message: string; duplicateDoc?: DocumentRecord; duplicatePropName?: string }>
   >({})
   const [recentlyVerifiedIds, setRecentlyVerifiedIds] = useState<Set<string>>(new Set())
+  const [isRefreshingDocs, setIsRefreshingDocs] = useState(false)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -248,100 +249,111 @@ export const DocumentVerificationPage: React.FC = () => {
     }
   }
 
-  useEffect(() => {
-    propertyService
-      .getProperties({ page_size: 100, mine: isSeller ? true : undefined })
-      .then(async (res) => {
-        if (res && res.items) {
-          let sellerItems = res.items
-          if (isSeller && user?.id) {
-            const uid = String(user.id).toLowerCase()
-            sellerItems = sellerItems.filter((p: any) => {
-              const ownerId = p.current_owner_id ? String(p.current_owner_id).toLowerCase() : ''
-              const creatorId = p.creator_user_id ? String(p.creator_user_id).toLowerCase() : ''
-              return ownerId === uid || creatorId === uid
-            })
-          } else if (isVerifier) {
-            // Include submitted, needs correction, rejected, and verified properties
-            sellerItems = sellerItems.filter((p: any) => {
-              const s = (p.verification_status || p.verificationStatus || '').toString().toUpperCase()
-              return s === 'SUBMITTED' || s === 'CORRECTION_REQUESTED' || s === 'REQUIRES_CORRECTION' || s === 'REJECTED' || s === 'VERIFIED'
-            })
-          }
-          setProperties(sellerItems)
-          const queryPropId = searchParams.get('propertyId')
-          const initialTarget = queryPropId
-            ? sellerItems.find((p: any) => p.propertyId === queryPropId || p.id === queryPropId)
-            : null
-          if (initialTarget) {
-            setSelectedPropertyId(initialTarget.propertyId)
-          } else if (sellerItems.length > 0) {
-            setSelectedPropertyId(sellerItems[0].propertyId)
-          } else {
-            setSelectedPropertyId('')
-          }
-
-          if (sellerItems.length === 0) {
-            setDocuments([])
-          } else {
-            const propDocPromises = sellerItems.map((prop: any) =>
-              apiClient
-                .get<any[]>(`/properties/${prop.id}/documents`, { timeout: 8000 })
-                .then((res) => ({ prop, data: Array.isArray(res.data) ? res.data : [] }))
-                .catch((err) => {
-                  console.warn(`Could not load docs for ${prop.id}:`, err)
-                  return { prop, data: [] }
-                })
-            )
-
-            const settled = await Promise.allSettled(propDocPromises)
-            const allDocs: DocumentRecord[] = []
-            for (const item of settled) {
-              if (item.status === 'fulfilled') {
-                const { prop, data } = item.value
-                data.forEach((d: any) => {
-                  allDocs.push({
-                    id: String(d.id),
-                    propertyId: prop.propertyId,
-                    property_id: prop.id,
-                    propertyTitle: prop.title,
-                    documentName: d.title || d.original_filename || 'Property Deed',
-                    documentType:
-                      d.document_type === 'SALE_DEED' || d.document_type === 'TITLE_DEED'
-                        ? 'Title Deed'
-                        : d.document_type === 'SURVEY_PLAN' || d.document_type === 'CADASTRAL_SURVEY'
-                        ? 'Cadastral Survey'
-                        : d.document_type === 'TAX_CLEARANCE' || d.document_type === 'TAX_RECEIPT'
-                        ? 'Tax Clearance'
-                        : d.document_type === 'ENCUMBRANCE_CERTIFICATE'
-                        ? 'Encumbrance Certificate'
-                        : d.document_type || 'Title Deed',
-                    fileSize: d.file_size ? `${Math.round(d.file_size / 1024)} KB` : '150 KB',
-                    uploadedAt: d.created_at || new Date().toISOString(),
-                    uploadedBy: isSeller ? (user?.full_name || 'Property Owner') : 'County Title Officer',
-                    status: d.status || 'PENDING_REVIEW',
-                    ocrConfidence: typeof (d.ocr_confidence ?? d.ocrConfidence) === 'number'
-                      ? Number(d.ocr_confidence ?? d.ocrConfidence)
-                      : null,
-                    documentHash: d.document_hash || '',
-                    reviewNotes: d.review_notes || undefined,
-                    is_cross_property_duplicate: Boolean(d.is_cross_property_duplicate),
-                    duplicate_property_name: d.duplicate_property_name || undefined,
-                    duplicate_warning: d.duplicate_warning || undefined,
-                  })
-                })
-              }
-            }
-            setDocuments(allDocs)
-          }
-        } else {
-          setProperties([])
-          setSelectedPropertyId('')
-          setDocuments([])
+  const loadDocumentsData = useCallback(async () => {
+    setIsRefreshingDocs(true)
+    try {
+      const res = await propertyService.getProperties({ page_size: 100, mine: isSeller ? true : undefined })
+      if (res && res.items) {
+        let sellerItems = res.items
+        if (isSeller && user?.id) {
+          const uid = String(user.id).toLowerCase()
+          sellerItems = sellerItems.filter((p: any) => {
+            const ownerId = p.current_owner_id ? String(p.current_owner_id).toLowerCase() : ''
+            const creatorId = p.creator_user_id ? String(p.creator_user_id).toLowerCase() : ''
+            return ownerId === uid || creatorId === uid
+          })
+        } else if (isVerifier) {
+          // Include submitted, needs correction, rejected, and verified properties
+          sellerItems = sellerItems.filter((p: any) => {
+            const s = (p.verification_status || p.verificationStatus || '').toString().toUpperCase()
+            return s === 'SUBMITTED' || s === 'CORRECTION_REQUESTED' || s === 'REQUIRES_CORRECTION' || s === 'REJECTED' || s === 'VERIFIED'
+          })
         }
-      })
-      .catch(console.warn)
-  }, [isSeller, user?.id, user?.full_name, searchParams])
+        setProperties(sellerItems)
+        const queryPropId = searchParams.get('propertyId')
+        const initialTarget = queryPropId
+          ? sellerItems.find((p: any) => p.propertyId === queryPropId || p.id === queryPropId)
+          : null
+        if (initialTarget) {
+          setSelectedPropertyId(initialTarget.propertyId)
+        } else if (sellerItems.length > 0) {
+          setSelectedPropertyId((prev) =>
+            prev && sellerItems.some((p: any) => p.propertyId === prev || p.id === prev)
+              ? prev
+              : sellerItems[0].propertyId
+          )
+        } else {
+          setSelectedPropertyId('')
+        }
+
+        if (sellerItems.length === 0) {
+          setDocuments([])
+        } else {
+          const propDocPromises = sellerItems.map((prop: any) =>
+            apiClient
+              .get<any[]>(`/properties/${prop.id}/documents`, { timeout: 8000 })
+              .then((docRes) => ({ prop, data: Array.isArray(docRes.data) ? docRes.data : [] }))
+              .catch((err) => {
+                console.warn(`Could not load docs for ${prop.id}:`, err)
+                return { prop, data: [] }
+              })
+          )
+
+          const settled = await Promise.allSettled(propDocPromises)
+          const allDocs: DocumentRecord[] = []
+          for (const item of settled) {
+            if (item.status === 'fulfilled') {
+              const { prop, data } = item.value
+              data.forEach((d: any) => {
+                allDocs.push({
+                  id: String(d.id),
+                  propertyId: prop.propertyId,
+                  property_id: prop.id,
+                  propertyTitle: prop.title,
+                  documentName: d.title || d.original_filename || 'Property Deed',
+                  documentType:
+                    d.document_type === 'SALE_DEED' || d.document_type === 'TITLE_DEED'
+                      ? 'Title Deed'
+                      : d.document_type === 'SURVEY_PLAN' || d.document_type === 'CADASTRAL_SURVEY'
+                      ? 'Cadastral Survey'
+                      : d.document_type === 'TAX_CLEARANCE' || d.document_type === 'TAX_RECEIPT'
+                      ? 'Tax Clearance'
+                      : d.document_type === 'ENCUMBRANCE_CERTIFICATE'
+                      ? 'Encumbrance Certificate'
+                      : d.document_type || 'Title Deed',
+                  fileSize: d.file_size ? `${Math.round(d.file_size / 1024)} KB` : '150 KB',
+                  uploadedAt: d.created_at || new Date().toISOString(),
+                  uploadedBy: isSeller ? (user?.full_name || 'Property Owner') : 'County Title Officer',
+                  status: d.status || 'PENDING_REVIEW',
+                  ocrConfidence: typeof (d.ocr_confidence ?? d.ocrConfidence) === 'number'
+                    ? Number(d.ocr_confidence ?? d.ocrConfidence)
+                    : null,
+                  documentHash: d.document_hash || '',
+                  reviewNotes: d.review_notes || undefined,
+                  is_cross_property_duplicate: Boolean(d.is_cross_property_duplicate),
+                  duplicate_property_name: d.duplicate_property_name || undefined,
+                  duplicate_warning: d.duplicate_warning || undefined,
+                })
+              })
+            }
+          }
+          setDocuments(allDocs)
+        }
+      } else {
+        setProperties([])
+        setSelectedPropertyId('')
+        setDocuments([])
+      }
+    } catch (err) {
+      console.warn(err)
+    } finally {
+      setIsRefreshingDocs(false)
+    }
+  }, [isSeller, isVerifier, user?.id, user?.full_name, searchParams])
+
+  useEffect(() => {
+    loadDocumentsData()
+  }, [loadDocumentsData])
 
   // Synchronize deep-linked propertyId from query params
   useEffect(() => {
@@ -775,6 +787,17 @@ export const DocumentVerificationPage: React.FC = () => {
       <PageHeader
         title="Document Verification & Integrity"
         description="Ingestion, validation, and cryptographic hashing of property conveyance documents."
+        actions={
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={loadDocumentsData}
+            leftIcon={<RotateCw className={cn('h-3.5 w-3.5 text-[#657565]', isRefreshingDocs && 'animate-spin')} />}
+            title="Refresh properties and documents"
+          >
+            Refresh
+          </Button>
+        }
       />
 
       {/* Hidden File Input */}

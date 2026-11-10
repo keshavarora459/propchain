@@ -3,8 +3,9 @@ import { Link } from 'react-router-dom'
 import { MapPin, Maximize2, ShieldCheck, ArrowRight, FileCheck2, AlertCircle, Clock, Trash2 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/Card'
 import { StatusBadge } from './StatusBadge'
+import { PropertyEmblem } from './PropertyEmblem'
 import { HashDisplay } from '@/components/common/HashDisplay'
-import { formatCurrency, getPropertyLabel, getVerificationLabel } from '@/lib/utils'
+import { formatCurrency, getPropertyLabel, getVerificationLabel, getPropertyTokenomics } from '@/lib/utils'
 import type { Property } from '@/types/property'
 import { useAuth } from '@/hooks/useAuth'
 import { propertyService } from '@/services/propertyService'
@@ -26,10 +27,9 @@ export const PropertyCard: React.FC<PropertyCardProps> = ({ property, onDeleted 
     rawStatus === 'REQUIRES_CORRECTION'
   const isSubmitted = rawStatus === 'SUBMITTED'
 
-  const isTokenized = Boolean(
-    property.property_category === 'TOKENIZED' ||
-    property.description?.includes('[TOKENIZED')
-  )
+  const tokenomics = getPropertyTokenomics(property)
+  const isTokenized = tokenomics.isTokenized
+  const isTokenSoldOut = isTokenized && tokenomics.availableTokens <= 0
 
   const isOwner = Boolean(
     user?.id && (
@@ -85,24 +85,44 @@ export const PropertyCard: React.FC<PropertyCardProps> = ({ property, onDeleted 
           />
         </div>
 
-        <div className="relative z-10">
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs font-semibold text-blue-400 uppercase tracking-wider">
-              {property.propertyType}
-            </span>
+        <div className="relative z-10 flex items-end justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-xs font-semibold text-blue-400 uppercase tracking-wider">
+                {property.propertyType}
+              </span>
+              {isTokenized ? (
+                <span className="text-[10px] font-semibold text-purple-200 bg-purple-900/70 border border-purple-400/30 px-1.5 py-0.2 rounded">
+                  Tokenized • {tokenomics.tokenSymbol}
+                </span>
+              ) : (
+                <span className="text-[10px] font-semibold text-blue-200 bg-blue-900/70 border border-blue-400/30 px-1.5 py-0.2 rounded">
+                  Entire Property • 100% Deed
+                </span>
+              )}
+            </div>
+            <p className="text-xl font-bold text-white tracking-tight mt-0.5 truncate">
+              {formatCurrency(property.valuation)}
+            </p>
             {isTokenized ? (
-              <span className="text-[10px] font-semibold text-purple-200 bg-purple-900/70 border border-purple-400/30 px-1.5 py-0.2 rounded">
-                Tokenized
-              </span>
+              <p className="text-[11px] font-mono text-purple-200/90 mt-0.5 truncate">
+                {formatCurrency(tokenomics.tokenPrice)} / {tokenomics.tokenSymbol} •{' '}
+                {tokenomics.availableTokens > 0
+                  ? `${tokenomics.availableTokens.toLocaleString()} / ${tokenomics.totalTokens.toLocaleString()} left`
+                  : 'Sold Out'}
+              </p>
             ) : (
-              <span className="text-[10px] font-semibold text-blue-200 bg-blue-900/70 border border-blue-400/30 px-1.5 py-0.2 rounded">
-                Entire Sale
-              </span>
+              <p className="text-[11px] font-mono text-slate-300/80 mt-0.5 truncate">
+                Single Full-Parcel Conveyance
+              </p>
             )}
           </div>
-          <p className="text-xl font-bold text-white tracking-tight mt-0.5">
-            {formatCurrency(property.valuation)}
-          </p>
+          <PropertyEmblem
+            propertyType={property.propertyType}
+            isTokenized={isTokenized}
+            size={56}
+            className="transition-transform duration-300 group-hover:scale-105"
+          />
         </div>
       </div>
 
@@ -239,12 +259,18 @@ export const PropertyCard: React.FC<PropertyCardProps> = ({ property, onDeleted 
                 <ArrowRight className="h-3 w-3" />
               </Link>
               {canMakeOffer && isVerified && isActive && (
-                <Link
-                  to={`/transactions?propertyId=${property.id}&initiate=true`}
-                  className="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg bg-blue-600 hover:bg-blue-700 text-xs font-medium text-white transition-colors shadow-xs"
-                >
-                  <span>Make Offer</span>
-                </Link>
+                isTokenSoldOut ? (
+                  <span className="flex-1 flex items-center justify-center py-1.5 px-3 rounded-lg bg-slate-100 text-[11px] font-semibold text-slate-500 border border-slate-200">
+                    All Tokens Sold
+                  </span>
+                ) : (
+                  <Link
+                    to={`/transactions?propertyId=${property.id}&initiate=true`}
+                    className="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg bg-blue-600 hover:bg-blue-700 text-xs font-medium text-white transition-colors shadow-xs"
+                  >
+                    <span>{isTokenized ? 'Buy Tokens / Offer' : 'Make Offer'}</span>
+                  </Link>
+                )
               )}
             </>
           )}

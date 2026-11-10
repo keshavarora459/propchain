@@ -65,6 +65,15 @@ export interface Property {
   required_documents_count?: number
   allow_duplicate_override?: boolean
   allowDuplicateOverride?: boolean
+  is_tokenized?: boolean
+  token_symbol?: string | null
+  total_tokens?: number | null
+  token_price?: number | null
+  min_tokens_per_buyer?: number | null
+  projected_apy?: number | null
+  tokens_sold?: number
+  tokens_pending?: number
+  available_tokens?: number | null
 }
 
 export interface PropertyFilter {

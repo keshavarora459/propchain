@@ -6,7 +6,7 @@ import { Tabs } from '@/components/ui/Tabs'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
-import { formatDate, formatCurrency, getPropertyLabel } from '@/lib/utils'
+import { formatDate, formatCurrency, getPropertyLabel, formatOfferAllocation, cn } from '@/lib/utils'
 import type { ApprovalRequest } from '@/types/approval'
 import apiClient from '@/lib/axios'
 
@@ -30,6 +30,7 @@ export const ApprovalsPage: React.FC = () => {
             ? 'Property Purchase Offer (Seller Acceptance)'
             : a.approval_type ? a.approval_type.replace(/_/g, ' ') : 'CONVEYANCE_APPROVAL'
 
+          const allocation = formatOfferAllocation(a)
           return {
             id: a.id,
             approvalId: a.transaction_number || `APR-${(a.id || '').slice(0, 6).toUpperCase()}`,
@@ -42,7 +43,7 @@ export const ApprovalsPage: React.FC = () => {
             status: a.status === 'PENDING' ? 'Pending' : (a.status === 'APPROVED' ? 'Approved' : 'Rejected'),
             assignedApprover: a.seller_name ? `${a.seller_name} (Seller)` : (a.approver_user_id || 'Assigned Authority'),
             description: isSellerAcceptance
-              ? `Purchase offer of ${formatCurrency(Number(a.proposed_amount) || 0)} initiated by ${a.buyer_name || 'Buyer'} for property ${getPropertyLabel(a)}.`
+              ? `${allocation.detailLabel} of ${formatCurrency(Number(a.proposed_amount) || 0)} initiated by ${a.buyer_name || 'Buyer'} for ${getPropertyLabel(a)}.`
               : (a.comments || 'Stakeholder clearance workflow.'),
             transactionId: a.transaction_id,
             transactionNumber: a.transaction_number,
@@ -52,6 +53,11 @@ export const ApprovalsPage: React.FC = () => {
             sellerEmail: a.seller_email,
             amount: Number(a.proposed_amount) || 0,
             currency: a.currency || 'USD',
+            purchaseMode: a.purchase_mode,
+            tokenQuantity: a.token_quantity,
+            tokenSymbol: a.token_symbol,
+            ownershipPercentage: a.ownership_percentage,
+            propertyIsTokenized: a.property_is_tokenized,
           }
         })
         setApprovals(liveApprovals)
@@ -167,7 +173,9 @@ export const ApprovalsPage: React.FC = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredApprovals.map((apr) => (
+              {filteredApprovals.map((apr) => {
+                const allocation = formatOfferAllocation(apr)
+                return (
                 <TableRow key={apr.id}>
                   <TableCell className="font-mono text-xs font-semibold text-slate-900">
                     {apr.approvalId}
@@ -178,7 +186,19 @@ export const ApprovalsPage: React.FC = () => {
                   </TableCell>
                   <TableCell>
                     <p className="font-semibold text-slate-900">{getPropertyLabel(apr)}</p>
-                    <span className="text-[11px] font-mono text-slate-400">Parcel ID: {apr.propertyId}</span>
+                    <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+                      <span className="text-[11px] font-mono text-slate-400">Parcel ID: {apr.propertyId}</span>
+                      <span
+                        className={cn(
+                          'inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold border',
+                          allocation.isFractional
+                            ? 'bg-purple-50 text-purple-800 border-purple-200'
+                            : 'bg-slate-100 text-slate-700 border-slate-200'
+                        )}
+                      >
+                        {allocation.badgeLabel}
+                      </span>
+                    </div>
                   </TableCell>
                   <TableCell className="text-xs text-slate-800">
                     <p className="font-medium">{apr.submittedBy}</p>
@@ -225,7 +245,7 @@ export const ApprovalsPage: React.FC = () => {
                     </div>
                   </TableCell>
                 </TableRow>
-              ))}
+              )})}
             </TableBody>
           </Table>
         )}
@@ -256,6 +276,12 @@ export const ApprovalsPage: React.FC = () => {
                 <span className="text-slate-500 font-medium">Parcel ID:</span>
                 <span className="font-mono text-slate-600">
                   {selectedApproval.propertyId}
+                </span>
+              </div>
+              <div className="flex justify-between items-center pb-2 border-b border-slate-200/60">
+                <span className="text-slate-500 font-medium">Allocation Scope:</span>
+                <span className="font-semibold text-slate-900">
+                  {formatOfferAllocation(selectedApproval).detailLabel}
                 </span>
               </div>
               <div className="flex justify-between items-center pb-2 border-b border-slate-200/60">

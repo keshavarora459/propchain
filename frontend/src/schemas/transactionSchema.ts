@@ -14,6 +14,8 @@ export function normalizeWalletAddress(addr?: string): string {
 
 export const initiateTransactionSchema = z.object({
   propertyId: z.string().min(1, 'Please select a registered property'),
+  purchaseMode: z.enum(['TOKEN_PURCHASE', 'ENTIRE_PROPERTY']),
+  tokenQuantity: z.number().optional().nullable(),
   buyerName: z.string().min(1, 'Buyer legal name is required'),
   buyerWallet: z.string().min(1, 'Buyer Ethereum wallet address is required'),
   sellerName: z.string().min(1, 'Seller legal entity is required'),

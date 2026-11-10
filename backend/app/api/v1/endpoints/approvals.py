@@ -18,6 +18,7 @@ from app.models.property import Property
 from app.models.transaction import PropertyTransaction
 from app.models.user import User
 from app.schemas.transaction import TransactionApprovalResponse
+from app.services.tokenization import resolve_txn_token_meta
 from app.services.transaction_service import TransactionService
 
 router = APIRouter(prefix="/approvals", tags=["Approvals"])
@@ -37,6 +38,12 @@ def _enrich_approval(a: TransactionApproval) -> TransactionApprovalResponse:
         resp.proposed_amount = txn.proposed_amount
         resp.currency = txn.currency
         resp.transaction_status = txn.status
+        meta = resolve_txn_token_meta(txn, txn.property)
+        resp.purchase_mode = meta["purchase_mode"]
+        resp.token_quantity = meta["token_quantity"]
+        resp.token_symbol = meta["token_symbol"]
+        resp.ownership_percentage = meta["ownership_percentage"]
+        resp.property_is_tokenized = meta["property_is_tokenized"]
         if txn.property:
             resp.property_number = txn.property.property_number
             resp.property_title = txn.property.title

@@ -15,6 +15,8 @@ class TransactionCreate(BaseModel):
     purchase_price: Optional[Decimal] = Field(None, gt=0, description="Alternative field for purchase price")
     currency: str = Field(default="USD", max_length=10)
     transaction_type: str = Field(default="SALE", max_length=32)
+    purchase_mode: Optional[str] = Field(None, max_length=32, description="TOKEN_PURCHASE or ENTIRE_PROPERTY")
+    token_quantity: Optional[int] = Field(None, ge=1, description="Number of tokens for tokenized fractional offers")
     description: Optional[str] = Field(None, max_length=2000)
     buyer_name: Optional[str] = None
     buyer_wallet: Optional[str] = None
@@ -26,7 +28,7 @@ class TransactionCreate(BaseModel):
         if self.proposed_amount is None:
             if self.purchase_price is not None:
                 self.proposed_amount = self.purchase_price
-            else:
+            elif self.token_quantity is None:
                 raise ValueError("proposed_amount or purchase_price is required and must be greater than zero")
         return self
 
@@ -40,6 +42,11 @@ class TransactionResponse(BaseModel):
     proposed_amount: Decimal
     currency: str
     transaction_type: str
+    purchase_mode: str = "ENTIRE_PROPERTY"
+    token_quantity: Optional[int] = None
+    token_symbol: Optional[str] = None
+    ownership_percentage: Optional[float] = None
+    property_is_tokenized: bool = False
     description: Optional[str] = None
     status: str
     seller_accepted_at: Optional[datetime] = None
@@ -93,6 +100,11 @@ class TransactionApprovalResponse(BaseModel):
     proposed_amount: Optional[Decimal] = None
     currency: Optional[str] = None
     transaction_status: Optional[str] = None
+    purchase_mode: str = "ENTIRE_PROPERTY"
+    token_quantity: Optional[int] = None
+    token_symbol: Optional[str] = None
+    ownership_percentage: Optional[float] = None
+    property_is_tokenized: bool = False
 
     model_config = ConfigDict(from_attributes=True)
 

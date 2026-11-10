@@ -52,4 +52,13 @@ export interface Transaction {
   blockchain_error?: string
   property_number?: string
   propertyNumber?: string
+  purchase_mode?: 'TOKEN_PURCHASE' | 'ENTIRE_PROPERTY' | string
+  purchaseMode?: 'TOKEN_PURCHASE' | 'ENTIRE_PROPERTY' | string
+  token_quantity?: number | null
+  tokenQuantity?: number | null
+  token_symbol?: string | null
+  tokenSymbol?: string | null
+  ownership_percentage?: number | null
+  ownershipPercentage?: number | null
+  property_is_tokenized?: boolean
 }

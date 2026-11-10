@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
-import { Plus, Search, Eye, CheckCircle, XCircle, ShieldCheck } from 'lucide-react'
+import { Plus, Search, Eye, CheckCircle, XCircle, ShieldCheck, Coins, Building2, AlertCircle, Lock } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useSearchParams } from 'react-router-dom'
@@ -11,7 +11,7 @@ import { Modal } from '@/components/ui/Modal'
 import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { initiateTransactionSchema, type InitiateTransactionFormData, normalizeWalletAddress } from '@/schemas/transactionSchema'
-import { formatCurrency, formatDate, getPropertyLabel } from '@/lib/utils'
+import { formatCurrency, formatDate, getPropertyLabel, getPropertyTokenomics, formatOfferAllocation, cn } from '@/lib/utils'
 import { HashDisplay } from '@/components/common/HashDisplay'
 import { TransactionLifecycleTimeline } from '@/components/common/TransactionLifecycleTimeline'
 import type { Transaction } from '@/types/transaction'
@@ -19,29 +19,6 @@ import type { Property } from '@/types/property'
 import { propertyService } from '@/services/propertyService'
 import apiClient from '@/lib/axios'
 import { useAuth } from '@/hooks/useAuth'
-
-function createTransactionRecord(
-  data: InitiateTransactionFormData,
-  selectedProp: any
-): Transaction {
-  const timestamp = Date.now()
-  return {
-    id: `txn-${timestamp}`,
-    transactionId: `TXN-${Math.floor(1000 + Math.random() * 9000)}`,
-    propertyId: selectedProp ? (selectedProp.propertyId || selectedProp.id) : 'PROP-CUSTOM',
-    propertyTitle: selectedProp ? selectedProp.title : 'New Title Transfer',
-    buyerName: data.buyerName,
-    buyerWallet: data.buyerWallet,
-    sellerName: data.sellerName,
-    sellerWallet: data.sellerWallet,
-    amount: data.amount,
-    currency: data.currency,
-    status: 'Pending',
-    type: data.type,
-    escrowStatus: 'Awaiting Deposit',
-    initiatedAt: new Date(timestamp).toISOString(),
-  }
-}
 
 export const TransactionsPage: React.FC = () => {
   const { user } = useAuth()
@@ -55,6 +32,7 @@ export const TransactionsPage: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [submitSuccess, setSubmitSuccess] = useState<string | null>(null)
+  const [submitError, setSubmitError] = useState<string | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
   const [rejectModalOpen, setRejectModalOpen] = useState(false)
   const [rejectReason, setRejectReason] = useState('')
@@ -109,6 +87,7 @@ export const TransactionsPage: React.FC = () => {
             id: t.id,
             transactionId: t.transaction_number || `TXN-${t.id.slice(0, 6)}`,
             propertyId: propNum,
+            property_id: t.property_id,
             propertyTitle: propTitle,
             buyerName: bName,
             buyerWallet: bWallet,
@@ -118,6 +97,11 @@ export const TransactionsPage: React.FC = () => {
             currency: t.currency || 'USD',
             status: t.status,
             type: t.transaction_type || 'Sale',
+            purchase_mode: t.purchase_mode,
+            token_quantity: t.token_quantity,
+            token_symbol: t.token_symbol,
+            ownership_percentage: t.ownership_percentage,
+            property_is_tokenized: t.property_is_tokenized,
             escrowStatus: escrowStatusText,
             initiatedAt: t.created_at || new Date().toISOString(),
             blockchainTxHash: t.blockchain_tx_hash,
@@ -132,7 +116,7 @@ export const TransactionsPage: React.FC = () => {
     } catch (err) {
       console.error('Error loading live transactions:', err)
     }
-  }, [])
+  }, [user?.role, user?.id])
 
   useEffect(() => {
     loadData()
@@ -176,21 +160,82 @@ export const TransactionsPage: React.FC = () => {
     handleSubmit,
     reset,
     setValue,
+    getValues,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm<InitiateTransactionFormData>({
     resolver: zodResolver(initiateTransactionSchema),
     defaultValues: {
       propertyId: '',
+      purchaseMode: 'ENTIRE_PROPERTY',
+      tokenQuantity: undefined,
       currency: 'USD',
       type: 'Sale',
       buyerName: user?.full_name || '',
-      buyerWallet: (user as any)?.wallet_address || '',
+      buyerWallet: (user as any)?.wallet_address || 'Platform Custody Wallet',
       sellerName: '',
       sellerWallet: '',
       amount: 0,
       escrowReleaseConditions: 'Standard decentralized escrow purchase agreement',
     },
   })
+
+  const watchedPropertyId = watch('propertyId')
+  const watchedPurchaseMode = watch('purchaseMode')
+  const watchedTokenQuantity = watch('tokenQuantity')
+  const watchedAmount = watch('amount')
+
+  const selectedProperty = useMemo(
+    () => properties.find((p) => p.id === watchedPropertyId || p.propertyId === watchedPropertyId) || null,
+    [properties, watchedPropertyId]
+  )
+  const selectedTokenomics = useMemo(
+    () => getPropertyTokenomics(selectedProperty),
+    [selectedProperty]
+  )
+
+  const applyPropertyDefaults = useCallback(
+    (prop: Property) => {
+      const tok = getPropertyTokenomics(prop)
+      setValue('propertyId', prop.id || prop.propertyId)
+      setValue('sellerName', prop.currentOwner || (prop as any).owner_name || 'Registered Owner')
+      setValue(
+        'sellerWallet',
+        (prop as any).owner_wallet_address || (prop as any).ownerAddress || 'Platform Custody Wallet'
+      )
+      if (!getValues('buyerName') && user?.full_name) {
+        setValue('buyerName', user.full_name)
+      }
+      if (!getValues('buyerWallet')) {
+        setValue('buyerWallet', (user as any)?.wallet_address || 'Platform Custody Wallet')
+      }
+
+      if (tok.isTokenized && tok.availableTokens > 0) {
+        const initialQty = Math.min(tok.minTokensPerBuyer, tok.availableTokens)
+        const calcAmount = Math.round(initialQty * tok.tokenPrice * 100) / 100
+        const pct = ((initialQty / tok.totalTokens) * 100).toFixed(2)
+        setValue('purchaseMode', 'TOKEN_PURCHASE')
+        setValue('tokenQuantity', initialQty)
+        setValue('amount', calcAmount)
+        setValue('type', 'Token Purchase')
+        setValue(
+          'escrowReleaseConditions',
+          `Fractional token acquisition of ${initialQty.toLocaleString()} ${tok.tokenSymbol} (${pct}% ownership stake)`
+        )
+      } else {
+        setValue('purchaseMode', 'ENTIRE_PROPERTY')
+        setValue('tokenQuantity', undefined)
+        setValue('amount', prop.valuation || 100000)
+        setValue('type', 'Sale')
+        setValue(
+          'escrowReleaseConditions',
+          'Full 100% property title conveyance escrow purchase agreement'
+        )
+      }
+      setSubmitError(null)
+    },
+    [setValue, getValues, user]
+  )
 
   // Handle URL query parameter pre-selection and modal auto-opening
   useEffect(() => {
@@ -199,37 +244,140 @@ export const TransactionsPage: React.FC = () => {
         (p) => p.id === queryPropertyId || p.propertyId === queryPropertyId
       )
       if (matched) {
-        setValue('propertyId', matched.id || matched.propertyId)
-        setValue('amount', matched.valuation || 100000)
-        setValue('sellerName', matched.currentOwner || (matched as any).owner_name || 'Registered Owner')
-        setValue('sellerWallet', (matched as any).owner_wallet_address || (matched as any).ownerAddress || '')
+        applyPropertyDefaults(matched)
         if (queryAutoInitiate || queryPropertyId) {
           setIsModalOpen(true)
         }
       }
     }
-  }, [properties, queryPropertyId, queryAutoInitiate, setValue])
+  }, [properties, queryPropertyId, queryAutoInitiate, applyPropertyDefaults])
 
   const handlePropertyChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const propId = e.target.value
     setValue('propertyId', propId)
+    setSubmitError(null)
     const found = properties.find((p) => p.id === propId || p.propertyId === propId)
     if (found) {
-      setValue('amount', found.valuation || 100000)
-      setValue('sellerName', found.currentOwner || (found as any).owner_name || 'Registered Owner')
-      setValue('sellerWallet', (found as any).owner_wallet_address || (found as any).ownerAddress || '')
+      applyPropertyDefaults(found)
     }
   }
 
+  const handleModeSwitch = (mode: 'TOKEN_PURCHASE' | 'ENTIRE_PROPERTY') => {
+    if (!selectedProperty) return
+    if (mode === 'TOKEN_PURCHASE') {
+      if (!selectedTokenomics.isTokenized || selectedTokenomics.availableTokens <= 0) return
+      const initialQty = Math.min(selectedTokenomics.minTokensPerBuyer, selectedTokenomics.availableTokens)
+      const calcAmount = Math.round(initialQty * selectedTokenomics.tokenPrice * 100) / 100
+      const pct = ((initialQty / selectedTokenomics.totalTokens) * 100).toFixed(2)
+      setValue('purchaseMode', 'TOKEN_PURCHASE')
+      setValue('tokenQuantity', initialQty)
+      setValue('amount', calcAmount)
+      setValue('type', 'Token Purchase')
+      setValue(
+        'escrowReleaseConditions',
+        `Fractional token acquisition of ${initialQty.toLocaleString()} ${selectedTokenomics.tokenSymbol} (${pct}% ownership stake)`
+      )
+    } else {
+      if (selectedTokenomics.isTokenized && selectedTokenomics.tokensSold > 0) return
+      setValue('purchaseMode', 'ENTIRE_PROPERTY')
+      setValue('tokenQuantity', selectedTokenomics.isTokenized ? selectedTokenomics.totalTokens : undefined)
+      setValue('amount', selectedProperty.valuation || 100000)
+      setValue('type', 'Sale')
+      setValue(
+        'escrowReleaseConditions',
+        'Full 100% property title conveyance escrow purchase agreement'
+      )
+    }
+    setSubmitError(null)
+  }
+
+  const handleTokenQuantityUpdate = (rawQty: number) => {
+    if (!selectedTokenomics.isTokenized) return
+    const qty = Number.isFinite(rawQty) ? Math.max(0, Math.floor(rawQty)) : 0
+    setValue('tokenQuantity', qty)
+    if (qty > 0) {
+      const calcAmount = Math.round(qty * selectedTokenomics.tokenPrice * 100) / 100
+      const pct = ((qty / selectedTokenomics.totalTokens) * 100).toFixed(2)
+      setValue('amount', calcAmount)
+      setValue(
+        'escrowReleaseConditions',
+        `Fractional token acquisition of ${qty.toLocaleString()} ${selectedTokenomics.tokenSymbol} (${pct}% ownership stake)`
+      )
+    }
+    setSubmitError(null)
+  }
+
+  const tokenPresetQuantities = useMemo(() => {
+    if (!selectedTokenomics.isTokenized || selectedTokenomics.availableTokens <= 0) return []
+    const avail = selectedTokenomics.availableTokens
+    const min = selectedTokenomics.minTokensPerBuyer
+    const total = selectedTokenomics.totalTokens
+    const raw = [
+      { label: `Min (${Math.min(min, avail).toLocaleString()})`, qty: Math.min(min, avail) },
+      { label: '10', qty: 10 },
+      { label: '50', qty: 50 },
+      { label: '1%', qty: Math.max(min, Math.round(total * 0.01)) },
+      { label: '5%', qty: Math.max(min, Math.round(total * 0.05)) },
+      { label: `Max (${avail.toLocaleString()})`, qty: avail },
+    ]
+    const seen = new Set<number>()
+    return raw.filter((item) => {
+      if (item.qty < 1 || item.qty > avail) return false
+      if (item.qty < min && item.qty !== avail) return false
+      if (seen.has(item.qty)) return false
+      seen.add(item.qty)
+      return true
+    })
+  }, [selectedTokenomics])
+
+  const openInitiateModal = () => {
+    setSubmitError(null)
+    setSubmitSuccess(null)
+    if (!getValues('propertyId') && eligibleProperties.length > 0) {
+      applyPropertyDefaults(eligibleProperties[0])
+    }
+    setIsModalOpen(true)
+  }
+
   const onSubmitInitiate = async (data: InitiateTransactionFormData) => {
+    setSubmitError(null)
+    setSubmitSuccess(null)
+
+    const isTokenMode = selectedTokenomics.isTokenized && data.purchaseMode === 'TOKEN_PURCHASE'
+    const qty = Number(data.tokenQuantity || 0)
+
+    if (data.purchaseMode === 'TOKEN_PURCHASE' && !selectedTokenomics.isTokenized) {
+      setSubmitError('Fractional token offers are only available on tokenized properties.')
+      return
+    }
+    if (isTokenMode) {
+      if (!Number.isInteger(qty) || qty < 1) {
+        setSubmitError('Please enter a whole number of at least 1 token to bid on.')
+        return
+      }
+      if (qty > selectedTokenomics.availableTokens) {
+        setSubmitError(
+          `Requested ${qty.toLocaleString()} ${selectedTokenomics.tokenSymbol} exceeds available supply (${selectedTokenomics.availableTokens.toLocaleString()} left).`
+        )
+        return
+      }
+      if (qty < selectedTokenomics.minTokensPerBuyer && qty < selectedTokenomics.availableTokens) {
+        setSubmitError(
+          `Minimum token purchase is ${selectedTokenomics.minTokensPerBuyer} ${selectedTokenomics.tokenSymbol} tokens.`
+        )
+        return
+      }
+    }
+
     try {
-      setSubmitSuccess(null)
       await apiClient.post('/transactions', {
         property_id: data.propertyId,
+        purchase_mode: isTokenMode ? 'TOKEN_PURCHASE' : 'ENTIRE_PROPERTY',
+        token_quantity: isTokenMode ? qty : undefined,
         proposed_amount: Number(data.amount),
         purchase_price: Number(data.amount),
         currency: data.currency || 'USD',
-        transaction_type: (data.type || 'SALE').toUpperCase(),
+        transaction_type: isTokenMode ? 'TOKEN_PURCHASE' : (data.type || 'SALE').toUpperCase().replace(/\s+/g, '_'),
         description: data.escrowReleaseConditions || 'Standard purchase offer',
         buyer_name: data.buyerName,
         buyer_wallet: normalizeWalletAddress(data.buyerWallet),
@@ -237,23 +385,24 @@ export const TransactionsPage: React.FC = () => {
         seller_wallet: normalizeWalletAddress(data.sellerWallet),
       })
       await loadData()
-      setSubmitSuccess('Purchase offer and escrow initiated successfully on-chain!')
-      reset()
+      setSubmitSuccess(
+        isTokenMode
+          ? `Offer for ${qty.toLocaleString()} ${selectedTokenomics.tokenSymbol} tokens submitted to escrow!`
+          : 'Entire-property purchase offer and escrow initiated successfully!'
+      )
       setTimeout(() => {
+        reset()
         setIsModalOpen(false)
         setSubmitSuccess(null)
+        setSubmitError(null)
       }, 1500)
     } catch (err: any) {
-      console.warn('Backend transaction failed, fallback to local state:', err)
-      const selectedProp = properties.find((p) => p.id === data.propertyId || p.propertyId === data.propertyId)
-      const newTxn = createTransactionRecord(data, selectedProp)
-      setTransactions((prev) => [newTxn, ...prev])
-      setSubmitSuccess('Escrow contract proposal established!')
-      reset()
-      setTimeout(() => {
-        setIsModalOpen(false)
-        setSubmitSuccess(null)
-      }, 1500)
+      const msg =
+        err?.response?.data?.message ||
+        err?.response?.data?.detail ||
+        err?.message ||
+        'Unable to submit offer. Please review your offer details.'
+      setSubmitError(typeof msg === 'string' ? msg : JSON.stringify(msg))
     }
   }
 
@@ -310,6 +459,19 @@ export const TransactionsPage: React.FC = () => {
 
   // Item 1: Initiate Escrow / Make Offer ONLY for BUYER role
   const canInitiate = user?.role === 'BUYER'
+  const isSoldOut =
+    selectedTokenomics.isTokenized &&
+    selectedTokenomics.availableTokens <= 0 &&
+    selectedTokenomics.tokensSold > 0
+  const entireLocked =
+    selectedTokenomics.isTokenized && selectedTokenomics.tokensSold > 0
+  const fractionalDisabled =
+    !selectedTokenomics.isTokenized || selectedTokenomics.availableTokens <= 0
+  const qtyNum = Number(watchedTokenQuantity || 0)
+  const calculatedPct =
+    selectedTokenomics.isTokenized && selectedTokenomics.totalTokens > 0 && qtyNum > 0
+      ? (qtyNum / selectedTokenomics.totalTokens) * 100
+      : 0
 
   return (
     <div className="space-y-6">
@@ -318,12 +480,25 @@ export const TransactionsPage: React.FC = () => {
         description="Smart contract coordinated settlement engine governing atomic title transfers and fund clearances."
         actions={
           canInitiate ? (
-            <Button onClick={() => setIsModalOpen(true)} leftIcon={<Plus className="h-4 w-4" />}>
+            <Button onClick={openInitiateModal} leftIcon={<Plus className="h-4 w-4" />}>
               Initiate Escrow / Make Offer
             </Button>
           ) : undefined
         }
       />
+
+      {submitSuccess && !isModalOpen && (
+        <div className="flex items-center justify-between p-3.5 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs font-semibold">
+          <span>✓ {submitSuccess}</span>
+          <button
+            type="button"
+            onClick={() => setSubmitSuccess(null)}
+            className="text-emerald-700 hover:text-emerald-900 font-bold ml-3"
+          >
+            ×
+          </button>
+        </div>
+      )}
 
       <div className="flex flex-col sm:flex-row gap-4 justify-between items-center bg-white p-4 rounded-xl border border-slate-200/80 shadow-xs">
         <div className="w-full sm:w-96">
@@ -361,7 +536,9 @@ export const TransactionsPage: React.FC = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredTransactions.map((txn) => (
+              {filteredTransactions.map((txn) => {
+                const allocation = formatOfferAllocation(txn)
+                return (
                 <TableRow key={txn.id}>
                   <TableCell className="font-mono text-xs font-semibold text-slate-900">
                     <div>
@@ -375,7 +552,19 @@ export const TransactionsPage: React.FC = () => {
                   </TableCell>
                   <TableCell>
                     <p className="font-semibold text-slate-900">{getPropertyLabel(txn)}</p>
-                    <span className="font-mono text-[11px] text-slate-400">Parcel ID: {txn.propertyId}</span>
+                    <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+                      <span className="font-mono text-[11px] text-slate-400">Parcel ID: {txn.propertyId}</span>
+                      <span
+                        className={cn(
+                          'inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold border',
+                          allocation.isFractional
+                            ? 'bg-purple-50 text-purple-700 border-purple-200'
+                            : 'bg-slate-100 text-slate-700 border-slate-200'
+                        )}
+                      >
+                        {allocation.badgeLabel}
+                      </span>
+                    </div>
                   </TableCell>
                   <TableCell>
                     <p className="text-xs font-medium text-slate-800">
@@ -418,7 +607,7 @@ export const TransactionsPage: React.FC = () => {
                     </Button>
                   </TableCell>
                 </TableRow>
-              ))}
+              )})}
             </TableBody>
           </Table>
         )}
@@ -427,15 +616,25 @@ export const TransactionsPage: React.FC = () => {
       {/* Initiate Transaction Modal */}
       <Modal
         isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
+        onClose={() => {
+          setIsModalOpen(false)
+          setSubmitError(null)
+        }}
         title="Initiate Decentralized Escrow / Make Offer"
         description="Establish an Ethereum-compatible atomic settlement contract between buyer and seller."
-        maxWidth="lg"
+        maxWidth="xl"
       >
         <form onSubmit={handleSubmit(onSubmitInitiate)} className="space-y-4">
           {submitSuccess && (
             <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-lg text-xs font-semibold">
               ✓ {submitSuccess}
+            </div>
+          )}
+
+          {submitError && (
+            <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-lg text-xs font-medium flex items-start gap-2">
+              <AlertCircle className="h-4 w-4 text-rose-600 shrink-0 mt-0.5" />
+              <span>{submitError}</span>
             </div>
           )}
 
@@ -451,16 +650,250 @@ export const TransactionsPage: React.FC = () => {
                       : '-- Select Property --'
                     : '-- Select Property --',
               },
-              ...eligibleProperties.map((p) => ({
-                value: p.id || p.propertyId,
-                label: `${getPropertyLabel(p)} (${formatCurrency(p.valuation)})`,
-              })),
+              ...eligibleProperties.map((p) => {
+                const tok = getPropertyTokenomics(p)
+                return {
+                  value: p.id || p.propertyId,
+                  label: tok.isTokenized
+                    ? `${getPropertyLabel(p)} • Tokenized (${formatCurrency(tok.tokenPrice)}/${tok.tokenSymbol}, ${tok.availableTokens.toLocaleString()} left)`
+                    : `${getPropertyLabel(p)} • Entire Property (${formatCurrency(p.valuation)})`,
+                }
+              }),
             ]}
             disabled={eligibleProperties.length === 0}
             required
             error={errors.propertyId?.message}
             {...register('propertyId', { onChange: handlePropertyChange })}
           />
+
+          {/* Offering Structure & Adaptive Purchase Scope Selector */}
+          {selectedProperty && (
+            <div className="space-y-3">
+              {/* Offering Structure Banner */}
+              <div
+                className={cn(
+                  'rounded-xl border p-3.5 text-xs',
+                  selectedTokenomics.isTokenized
+                    ? 'bg-purple-50/70 border-purple-200'
+                    : 'bg-slate-50 border-slate-200'
+                )}
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    {selectedTokenomics.isTokenized ? (
+                      <Coins className="h-4 w-4 text-purple-600 shrink-0" />
+                    ) : (
+                      <Building2 className="h-4 w-4 text-blue-600 shrink-0" />
+                    )}
+                    <span className="font-semibold text-slate-900">
+                      {selectedTokenomics.isTokenized
+                        ? `Tokenized Fractional Property (${selectedTokenomics.tokenSymbol})`
+                        : 'Entire Property Listing (Single Deed Parcel)'}
+                    </span>
+                  </div>
+                  <span
+                    className={cn(
+                      'px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border',
+                      selectedTokenomics.isTokenized
+                        ? 'bg-purple-100 text-purple-800 border-purple-300'
+                        : 'bg-blue-100 text-blue-800 border-blue-300'
+                    )}
+                  >
+                    {selectedTokenomics.isTokenized ? 'Fractional + Buyout Eligible' : '100% Deed Only'}
+                  </span>
+                </div>
+
+                {selectedTokenomics.isTokenized ? (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-2.5 pt-2.5 border-t border-purple-200/70 text-[11px]">
+                    <div>
+                      <span className="text-slate-500 block">Token Price</span>
+                      <strong className="font-mono text-slate-900">{formatCurrency(selectedTokenomics.tokenPrice)}</strong>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 block">Available Supply</span>
+                      <strong className="font-mono text-purple-800">
+                        {selectedTokenomics.availableTokens.toLocaleString()} / {selectedTokenomics.totalTokens.toLocaleString()}
+                      </strong>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 block">Min Purchase</span>
+                      <strong className="font-mono text-slate-900">
+                        {selectedTokenomics.minTokensPerBuyer.toLocaleString()} {selectedTokenomics.tokenSymbol}
+                      </strong>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 block">Full Valuation</span>
+                      <strong className="font-mono text-slate-900">
+                        {formatCurrency(selectedProperty.valuation)}
+                        {selectedTokenomics.projectedApy ? ` • ${selectedTokenomics.projectedApy}% APY` : ''}
+                      </strong>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-slate-600 mt-1.5">
+                    This asset is listed for whole-parcel conveyance ({formatCurrency(selectedProperty.valuation)} valuation). Fractional token purchases are disabled for non-tokenized properties.
+                  </p>
+                )}
+              </div>
+
+              {/* Purchase Mode Selector (2 Cards) */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-medium text-slate-700">
+                  Offer Type <span className="text-rose-500">*</span>
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <button
+                    type="button"
+                    disabled={fractionalDisabled}
+                    onClick={() => handleModeSwitch('TOKEN_PURCHASE')}
+                    className={cn(
+                      'text-left p-3 rounded-xl border transition-all flex items-start gap-2.5',
+                      watchedPurchaseMode === 'TOKEN_PURCHASE' && !fractionalDisabled
+                        ? 'border-purple-600 bg-purple-50/80 ring-1 ring-purple-600 shadow-xs'
+                        : fractionalDisabled
+                        ? 'border-slate-200 bg-slate-50 text-slate-400 cursor-not-allowed opacity-70'
+                        : 'border-slate-200 bg-white hover:border-purple-300 hover:bg-purple-50/30 cursor-pointer'
+                    )}
+                  >
+                    <div className="mt-0.5 shrink-0">
+                      {fractionalDisabled ? (
+                        <Lock className="h-4 w-4 text-slate-400" />
+                      ) : (
+                        <Coins className="h-4 w-4 text-purple-600" />
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-slate-900 flex items-center gap-1.5">
+                        <span>Buy Fractional Tokens</span>
+                        {selectedTokenomics.isTokenized && watchedPurchaseMode === 'TOKEN_PURCHASE' && !fractionalDisabled && (
+                          <span className="text-[10px] font-bold text-purple-700 bg-purple-100 px-1.5 py-0.2 rounded">Selected</span>
+                        )}
+                      </p>
+                      <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">
+                        {!selectedTokenomics.isTokenized
+                          ? 'Unavailable — property is not tokenized'
+                          : selectedTokenomics.availableTokens <= 0
+                          ? 'All tokens sold or reserved in active escrow'
+                          : `Acquire ${selectedTokenomics.minTokensPerBuyer}+ ${selectedTokenomics.tokenSymbol} fractional shares`}
+                      </p>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={entireLocked}
+                    onClick={() => handleModeSwitch('ENTIRE_PROPERTY')}
+                    className={cn(
+                      'text-left p-3 rounded-xl border transition-all flex items-start gap-2.5',
+                      watchedPurchaseMode === 'ENTIRE_PROPERTY' && !entireLocked
+                        ? 'border-blue-600 bg-blue-50/80 ring-1 ring-blue-600 shadow-xs'
+                        : entireLocked
+                        ? 'border-slate-200 bg-slate-50 text-slate-400 cursor-not-allowed opacity-70'
+                        : 'border-slate-200 bg-white hover:border-blue-300 hover:bg-blue-50/30 cursor-pointer'
+                    )}
+                  >
+                    <div className="mt-0.5 shrink-0">
+                      {entireLocked ? (
+                        <Lock className="h-4 w-4 text-slate-400" />
+                      ) : (
+                        <Building2 className="h-4 w-4 text-blue-600" />
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-slate-900 flex items-center gap-1.5">
+                        <span>Buy Entire Property (100%)</span>
+                        {watchedPurchaseMode === 'ENTIRE_PROPERTY' && !entireLocked && (
+                          <span className="text-[10px] font-bold text-blue-700 bg-blue-100 px-1.5 py-0.2 rounded">Selected</span>
+                        )}
+                      </p>
+                      <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">
+                        {entireLocked
+                          ? `Locked — ${selectedTokenomics.tokensSold.toLocaleString()} tokens already settled to buyers`
+                          : selectedTokenomics.isTokenized
+                          ? `100% buyout of all ${selectedTokenomics.totalTokens.toLocaleString()} ${selectedTokenomics.tokenSymbol} & deed`
+                          : `Whole-parcel title deed acquisition (${formatCurrency(selectedProperty.valuation)})`}
+                      </p>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Fractional Token Quantity Calculator */}
+              {selectedTokenomics.isTokenized && watchedPurchaseMode === 'TOKEN_PURCHASE' && selectedTokenomics.availableTokens > 0 && (
+                <div className="rounded-xl border border-purple-200 bg-white p-3.5 space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-start">
+                    <div>
+                      <Input
+                        type="number"
+                        label={`Token Quantity (${selectedTokenomics.tokenSymbol})`}
+                        min={1}
+                        max={selectedTokenomics.availableTokens}
+                        value={watchedTokenQuantity ?? ''}
+                        onChange={(e) => handleTokenQuantityUpdate(Number(e.target.value))}
+                        placeholder={`Min ${Math.min(selectedTokenomics.minTokensPerBuyer, selectedTokenomics.availableTokens)}`}
+                        required
+                      />
+                      <p className="text-[11px] text-slate-500 mt-1">
+                        {selectedTokenomics.availableTokens < selectedTokenomics.minTokensPerBuyer
+                          ? `Remnant lot available: up to ${selectedTokenomics.availableTokens.toLocaleString()} tokens`
+                          : `Enter ${selectedTokenomics.minTokensPerBuyer.toLocaleString()} to ${selectedTokenomics.availableTokens.toLocaleString()} tokens`}
+                      </p>
+                    </div>
+
+                    <div className="p-2.5 rounded-lg bg-purple-50/70 border border-purple-100 space-y-1 text-xs">
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Ownership Stake:</span>
+                        <span className="font-mono font-bold text-purple-800">
+                          {calculatedPct > 0 && calculatedPct < 0.01 ? calculatedPct.toFixed(4) : calculatedPct.toFixed(2)}%
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Listed Value @ {formatCurrency(selectedTokenomics.tokenPrice)}:</span>
+                        <span className="font-mono font-semibold text-slate-900">
+                          {formatCurrency(qtyNum * selectedTokenomics.tokenPrice)}
+                        </span>
+                      </div>
+                      {selectedTokenomics.projectedApy && qtyNum > 0 && (
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">Est. Annual Yield ({selectedTokenomics.projectedApy}%):</span>
+                          <span className="font-mono font-medium text-emerald-700">
+                            {formatCurrency((qtyNum * selectedTokenomics.tokenPrice * selectedTokenomics.projectedApy) / 100)}/yr
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {tokenPresetQuantities.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-slate-100">
+                      <span className="text-[11px] font-medium text-slate-500 mr-1">Quick select:</span>
+                      {tokenPresetQuantities.map((preset) => (
+                        <button
+                          key={preset.qty}
+                          type="button"
+                          onClick={() => handleTokenQuantityUpdate(preset.qty)}
+                          className={cn(
+                            'px-2.5 py-1 rounded-md text-[11px] font-semibold border transition-colors cursor-pointer',
+                            qtyNum === preset.qty
+                              ? 'bg-purple-600 text-white border-purple-600'
+                              : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-purple-50 hover:border-purple-300'
+                          )}
+                        >
+                          {preset.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {isSoldOut && (
+                <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-xs font-medium">
+                  All fractional tokens on this property have already been allocated. Select another property to make an offer.
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Input
@@ -499,9 +932,21 @@ export const TransactionsPage: React.FC = () => {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Input
               type="number"
-              label="Proposed Offer / Purchase Price ($ USD)"
+              step="0.01"
+              label={
+                selectedTokenomics.isTokenized && watchedPurchaseMode === 'TOKEN_PURCHASE'
+                  ? `Total Offer Price for ${qtyNum > 0 ? qtyNum.toLocaleString() : '0'} ${selectedTokenomics.tokenSymbol} ($ USD)`
+                  : 'Proposed Offer / Purchase Price ($ USD)'
+              }
               placeholder="1250000"
               required
+              helperText={
+                selectedProperty
+                  ? selectedTokenomics.isTokenized && watchedPurchaseMode === 'TOKEN_PURCHASE' && qtyNum > 0
+                    ? `Implied offer: ${formatCurrency((Number(watchedAmount) || 0) / qtyNum)} / ${selectedTokenomics.tokenSymbol} (listed ${formatCurrency(selectedTokenomics.tokenPrice)})`
+                    : `Listed property valuation: ${formatCurrency(selectedProperty.valuation)}`
+                  : undefined
+              }
               error={errors.amount?.message}
               {...register('amount', { valueAsNumber: true })}
             />
@@ -521,11 +966,20 @@ export const TransactionsPage: React.FC = () => {
           />
 
           <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
-            <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setIsModalOpen(false)
+                setSubmitError(null)
+              }}
+            >
               Cancel
             </Button>
-            <Button type="submit" isLoading={isSubmitting}>
-              Establish Escrow / Submit Offer
+            <Button type="submit" isLoading={isSubmitting} disabled={isSoldOut}>
+              {selectedTokenomics.isTokenized && watchedPurchaseMode === 'TOKEN_PURCHASE'
+                ? 'Submit Fractional Token Offer'
+                : 'Establish Escrow / Submit Offer'}
             </Button>
           </div>
         </form>
@@ -560,6 +1014,12 @@ export const TransactionsPage: React.FC = () => {
                   <span className="font-semibold text-slate-800 block">{getPropertyLabel(selectedTxn)}</span>
                   <span className="font-mono text-[11px] text-slate-400">Parcel ID: {selectedTxn.propertyId}</span>
                 </div>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-400">Allocation Scope:</span>
+                <span className="font-semibold text-slate-800">
+                  {formatOfferAllocation(selectedTxn).detailLabel}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-400">Escrow Value:</span>

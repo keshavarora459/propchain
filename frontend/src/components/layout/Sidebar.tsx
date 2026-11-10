@@ -25,6 +25,7 @@ import { useUI } from '@/hooks/useUI'
 import { useAuth } from '@/hooks/useAuth'
 import { getNavigationForRole, type NavItem } from '@/constants/navigation'
 import { cn, getRoleLabel } from '@/lib/utils'
+import { BrandLogo, PropChainMark } from '@/components/common/BrandLogo'
 
 export const Sidebar: React.FC = () => {
   const { sidebarCollapsed, toggleSidebar, mobileSidebarOpen, setMobileSidebarOpen } = useUI()
@@ -152,17 +153,7 @@ export const Sidebar: React.FC = () => {
         )}
       >
         <div className="flex h-16 items-center justify-between border-b border-[#363E3A] px-5">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#657565] text-white shadow-xs font-bold text-base">
-              P
-            </div>
-            <div>
-              <span className="text-sm font-bold tracking-wider text-white">PROPCHAIN</span>
-              <span className="block text-[9px] text-[#B49A70] tracking-[0.18em] uppercase font-semibold">
-                Luxury Real Estate
-              </span>
-            </div>
-          </div>
+          <BrandLogo theme="dark" size="sm" />
           <button
             onClick={() => setMobileSidebarOpen(false)}
             className="rounded-lg p-1.5 text-[#FAF8F3]/60 hover:bg-[#FAF8F3]/10 hover:text-white"
@@ -206,28 +197,18 @@ export const Sidebar: React.FC = () => {
           {sidebarCollapsed ? (
             <button
               onClick={toggleSidebar}
-              className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#657565] text-white shadow-xs hover:bg-[#526152] transition-all cursor-pointer relative group"
+              className="relative flex items-center justify-center rounded-xl transition-transform hover:scale-105 cursor-pointer group"
               title="Expand Sidebar"
               aria-label="Expand Sidebar"
             >
-              <span className="font-bold text-base">P</span>
+              <PropChainMark variant="sage" size={38} />
               <span className="absolute -bottom-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-[#252B28] border border-[#363E3A] text-[#B49A70] shadow-xs">
                 <ChevronRight className="h-2.5 w-2.5" />
               </span>
             </button>
           ) : (
             <>
-              <div className="flex items-center gap-3 overflow-hidden">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#657565] text-white shadow-xs font-bold text-base">
-                  P
-                </div>
-                <div className="truncate">
-                  <span className="text-sm font-bold tracking-wider text-white block">PROPCHAIN</span>
-                  <span className="block text-[9px] text-[#B49A70] tracking-[0.18em] uppercase font-semibold">
-                    Luxury Real Estate
-                  </span>
-                </div>
-              </div>
+              <BrandLogo theme="dark" size="md" className="overflow-hidden" />
               <button
                 onClick={toggleSidebar}
                 className="rounded-lg p-1.5 text-[#FAF8F3]/60 hover:bg-[#FAF8F3]/10 hover:text-white transition-colors cursor-pointer shrink-0"

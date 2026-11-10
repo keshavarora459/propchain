@@ -19,6 +19,7 @@ import {
 import { loginSchema, type LoginFormData } from '@/schemas/authSchema'
 import { useAuth } from '@/hooks/useAuth'
 import { Button } from '@/components/ui/Button'
+import { BrandLogo } from '@/components/common/BrandLogo'
 
 export const LoginPage: React.FC = () => {
   const { login } = useAuth()
@@ -102,17 +103,13 @@ export const LoginPage: React.FC = () => {
 
         {/* Top Header in Hero panel */}
         <div className="relative z-10 flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-3 group">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#657565] text-white shadow-[0_4px_16px_rgba(101,117,101,0.35)] transition-transform duration-200 group-hover:scale-105">
-              <span className="font-bold text-lg tracking-wider">P</span>
-            </div>
-            <div>
-              <div className="flex items-center gap-1.5">
-                <span className="font-bold text-base tracking-[0.2em] uppercase text-white font-sans">PROPCHAIN</span>
-                <span className="h-1.5 w-1.5 rounded-full bg-[#B49A70]" />
-              </div>
-              <p className="text-[10px] uppercase tracking-[0.25em] text-[#FAF8F3]/70 font-medium">LUXURY REAL ESTATE</p>
-            </div>
+          <Link to="/" className="group inline-flex items-center">
+            <BrandLogo
+              theme="dark"
+              size="lg"
+              markClassName="shadow-[0_4px_16px_rgba(101,117,101,0.35)] transition-transform duration-200 group-hover:scale-105"
+              className="group-hover:opacity-95 transition-opacity"
+            />
           </Link>
 
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 backdrop-blur-md border border-white/15 text-xs text-[#FAF8F3]">
@@ -170,14 +167,8 @@ export const LoginPage: React.FC = () => {
       <div className="flex-1 flex flex-col justify-between p-6 sm:p-10 lg:p-12 xl:p-16 overflow-y-auto">
         {/* Mobile Header (visible only on small screens) */}
         <div className="lg:hidden flex items-center justify-between mb-8 pb-4 border-b border-[#E8E2D5]">
-          <Link to="/" className="flex items-center gap-2.5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#657565] text-white shadow-xs font-bold text-base">
-              P
-            </div>
-            <div>
-              <span className="font-bold text-sm tracking-wider uppercase text-[#252B28] font-sans">PROPCHAIN</span>
-              <p className="text-[9px] uppercase tracking-widest text-[#6B726B] font-medium">LUXURY REAL ESTATE</p>
-            </div>
+          <Link to="/" className="inline-flex items-center">
+            <BrandLogo theme="light" markVariant="sage" size="sm" />
           </Link>
           <span className="text-[10px] font-mono font-medium px-2.5 py-0.5 rounded-full bg-[#EAE4D9] text-[#252B28] border border-[#D4CBBC]">
             SECURE PORTAL

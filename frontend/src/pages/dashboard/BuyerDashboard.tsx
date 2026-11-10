@@ -16,16 +16,28 @@ import {
   Clock,
   RefreshCw,
   Compass,
+  Coins,
 } from 'lucide-react'
 import { PageHeader } from '@/components/common/PageHeader'
 import { StatCard } from '@/components/common/StatCard'
 import { StatusBadge } from '@/components/common/StatusBadge'
+import { PropertyEmblem } from '@/components/common/PropertyEmblem'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import { Button } from '@/components/ui/Button'
 import { Tabs } from '@/components/ui/Tabs'
 import { Input } from '@/components/ui/Input'
-import { formatCurrency, formatDate, truncateHash, getPropertyLabel, getRoleLabel, getVerificationLabel } from '@/lib/utils'
+import {
+  formatCurrency,
+  formatDate,
+  truncateHash,
+  getPropertyLabel,
+  getRoleLabel,
+  getVerificationLabel,
+  getPropertyTokenomics,
+  formatOfferAllocation,
+  cn,
+} from '@/lib/utils'
 import { useAuth } from '@/hooks/useAuth'
 import { useWallet } from '@/context/WalletContext'
 import apiClient from '@/lib/axios'
@@ -92,9 +104,11 @@ export const BuyerDashboard: React.FC = () => {
   }
 
   const buyerMetrics = dashboardData?.buyer_metrics || {}
-  const myOffers = buyerMetrics?.my_transactions?.filter((t: any) => t.status !== 'COMPLETED' && t.status !== 'CANCELLED') || []
+  const myOffers = buyerMetrics?.my_transactions?.filter((t: any) => t.status !== 'COMPLETED' && t.status !== 'CANCELLED' && t.status !== 'REJECTED') || []
   const myTransactions = buyerMetrics?.my_transactions || []
   const myOwnedProperties = buyerMetrics?.my_properties || []
+  const myTokenHoldings = buyerMetrics?.my_token_holdings || []
+  const totalAcquiredCount = (buyerMetrics?.my_properties_count ?? myOwnedProperties.length) + myTokenHoldings.length
   const savedPropsList = browseProperties.filter((p) => savedPropertyIds.includes(p.id) || savedPropertyIds.includes(p.propertyId))
 
   const filteredBrowse = browseProperties.filter((p) =>
@@ -132,15 +146,19 @@ export const BuyerDashboard: React.FC = () => {
         />
         <StatCard
           title="Active Proposals"
-          value={(buyerMetrics?.active_offers_count ?? myOffers.length).toString()}
+          value={(buyerMetrics?.my_offers_count ?? myOffers.length).toString()}
           subtitle={myOffers.length > 0 ? 'Awaiting titleholder response' : 'No pending offers'}
           icon={<ArrowLeftRight className="h-5 w-5 text-[#B49A70]" />}
           iconBg="bg-[#FAF8F3]"
         />
         <StatCard
-          title="Acquired Estates"
-          value={(buyerMetrics?.owned_properties_count ?? myOwnedProperties.length).toString()}
-          subtitle="Deeds inscribed to your identity"
+          title="Acquired Deeds & Stakes"
+          value={totalAcquiredCount.toString()}
+          subtitle={
+            myTokenHoldings.length > 0
+              ? `${myOwnedProperties.length} full deeds · ${myTokenHoldings.length} token stakes`
+              : 'Deeds inscribed to your identity'
+          }
           icon={<FileBadge className="h-5 w-5 text-[#657565]" />}
           iconBg="bg-[#EAE4D9]/60"
         />
@@ -160,7 +178,7 @@ export const BuyerDashboard: React.FC = () => {
           { id: 'saved', label: 'Saved Collection', count: savedPropertyIds.length },
           { id: 'offers', label: 'My Proposals', count: myOffers.length },
           { id: 'transactions', label: 'Escrow Transactions', count: myTransactions.length },
-          { id: 'properties', label: 'Acquired Deeds', count: myOwnedProperties.length },
+          { id: 'properties', label: 'Acquired Deeds', count: myOwnedProperties.length + myTokenHoldings.length },
           { id: 'wallet', label: 'Web3 Settlement Wallet' },
           { id: 'blockchain', label: 'Consensus Proofs' },
         ]}
@@ -197,18 +215,40 @@ export const BuyerDashboard: React.FC = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
               {filteredBrowse.map((prop) => {
                 const isSaved = savedPropertyIds.includes(prop.id) || savedPropertyIds.includes(prop.propertyId)
+                const tok = getPropertyTokenomics(prop)
+                const isTokenSoldOut = tok.isTokenized && tok.availableTokens <= 0
                 return (
                   <Card key={prop.id} className="overflow-hidden group hover:border-[#B49A70]/70 hover:-translate-y-0.5 hover:shadow-[0_6px_20px_rgba(37,43,40,0.06)] transition-all duration-200">
                     <div className="p-4 sm:p-5 space-y-3.5">
                       <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <span className="text-[10px] font-medium tracking-wider uppercase px-2.5 py-0.5 rounded-full bg-[#EAE4D9] text-[#252B28] border border-[#D4CBBC]">
-                            {prop.propertyType}
-                          </span>
-                          <h4 className="font-semibold text-[#252B28] mt-1.5 text-base line-clamp-1 group-hover:text-[#657565] transition-colors">
-                            {getPropertyLabel(prop)}
-                          </h4>
-                          <p className="text-xs text-[#6B726B] font-normal">{prop.city}, {prop.state || 'District'}</p>
+                        <div className="flex items-start gap-3 min-w-0">
+                          <PropertyEmblem
+                            propertyType={prop.propertyType}
+                            isTokenized={tok.isTokenized}
+                            size={44}
+                            className="mt-0.5 transition-transform duration-200 group-hover:scale-105"
+                          />
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <span className="text-[10px] font-medium tracking-wider uppercase px-2.5 py-0.5 rounded-full bg-[#EAE4D9] text-[#252B28] border border-[#D4CBBC]">
+                                {prop.propertyType}
+                              </span>
+                              <span
+                                className={cn(
+                                  'text-[10px] font-semibold px-2 py-0.5 rounded-full border',
+                                  tok.isTokenized
+                                    ? 'bg-purple-50 text-purple-800 border-purple-200'
+                                    : 'bg-blue-50 text-blue-800 border-blue-200'
+                                )}
+                              >
+                                {tok.isTokenized ? `Tokenized (${tok.tokenSymbol})` : 'Entire Property'}
+                              </span>
+                            </div>
+                            <h4 className="font-semibold text-[#252B28] mt-1.5 text-base line-clamp-1 group-hover:text-[#657565] transition-colors">
+                              {getPropertyLabel(prop)}
+                            </h4>
+                            <p className="text-xs text-[#6B726B] font-normal">{prop.city}, {prop.state || 'District'}</p>
+                          </div>
                         </div>
                         <button
                           onClick={() => toggleSaveProperty(prop.id)}
@@ -223,10 +263,16 @@ export const BuyerDashboard: React.FC = () => {
                         </button>
                       </div>
 
-                      <div className="pt-2.5 border-t border-[#F4F1EA] flex items-center justify-between">
+                      <div className="pt-2.5 border-t border-[#F4F1EA] flex items-center justify-between gap-2">
                         <div>
                           <p className="text-[10px] uppercase tracking-wider text-[#6B726B] font-semibold">Valuation</p>
                           <p className="text-base font-bold text-[#252B28]">{formatCurrency(prop.valuation)}</p>
+                          {tok.isTokenized && (
+                            <p className="text-[11px] font-mono text-purple-700 mt-0.5">
+                              {formatCurrency(tok.tokenPrice)}/{tok.tokenSymbol} •{' '}
+                              {tok.availableTokens > 0 ? `${tok.availableTokens.toLocaleString()} left` : 'Sold out'}
+                            </p>
+                          )}
                         </div>
                         <StatusBadge status={prop.verificationStatus} label={getVerificationLabel(prop, user?.role)} />
                       </div>
@@ -246,13 +292,19 @@ export const BuyerDashboard: React.FC = () => {
                             String(prop.creator_user_id || '').toLowerCase() === String(user.id).toLowerCase()
                           )
                         ) && (
-                          <Button
-                            size="sm"
-                            onClick={() => navigate(`/transactions?propertyId=${prop.id}&initiate=true`)}
-                            className="flex-1 text-xs"
-                          >
-                            Make Offer
-                          </Button>
+                          isTokenSoldOut ? (
+                            <span className="flex-1 text-center py-1.5 px-2 rounded-lg bg-[#F4F1EA] text-[11px] font-semibold text-[#6B726B] border border-[#E8E2D5]">
+                              Sold Out
+                            </span>
+                          ) : (
+                            <Button
+                              size="sm"
+                              onClick={() => navigate(`/transactions?propertyId=${prop.id}&initiate=true`)}
+                              className="flex-1 text-xs"
+                            >
+                              {tok.isTokenized ? 'Buy Tokens / Offer' : 'Make Offer'}
+                            </Button>
+                          )
                         )}
                       </div>
                     </div>
@@ -278,13 +330,28 @@ export const BuyerDashboard: React.FC = () => {
             </Card>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {savedPropsList.map((prop) => (
+              {savedPropsList.map((prop) => {
+                const tok = getPropertyTokenomics(prop)
+                const isTokenSoldOut = tok.isTokenized && tok.availableTokens <= 0
+                return (
                 <Card key={prop.id} className="p-4 sm:p-5 space-y-3.5 hover:border-[#B49A70]/70 hover:-translate-y-0.5 hover:shadow-[0_6px_20px_rgba(37,43,40,0.06)] transition-all duration-200">
                   <div className="flex items-start justify-between">
                     <div>
-                      <span className="text-[10px] font-medium tracking-wider uppercase px-2.5 py-0.5 rounded-full bg-[#EAE4D9] text-[#252B28] border border-[#D4CBBC]">
-                        {prop.propertyType}
-                      </span>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="text-[10px] font-medium tracking-wider uppercase px-2.5 py-0.5 rounded-full bg-[#EAE4D9] text-[#252B28] border border-[#D4CBBC]">
+                          {prop.propertyType}
+                        </span>
+                        <span
+                          className={cn(
+                            'text-[10px] font-semibold px-2 py-0.5 rounded-full border',
+                            tok.isTokenized
+                              ? 'bg-purple-50 text-purple-800 border-purple-200'
+                              : 'bg-blue-50 text-blue-800 border-blue-200'
+                          )}
+                        >
+                          {tok.isTokenized ? `Tokenized (${tok.tokenSymbol})` : 'Entire Property'}
+                        </span>
+                      </div>
                       <h4 className="font-semibold text-[#252B28] mt-1.5 text-base">{getPropertyLabel(prop)}</h4>
                       <p className="text-xs text-[#6B726B] font-normal">{prop.city}, {prop.state}</p>
                     </div>
@@ -296,8 +363,15 @@ export const BuyerDashboard: React.FC = () => {
                       <BookmarkCheck className="h-4.5 w-4.5 fill-[#B49A70]" />
                     </button>
                   </div>
-                  <div className="pt-2.5 border-t border-[#F4F1EA] flex items-center justify-between">
-                    <span className="text-base font-bold text-[#252B28]">{formatCurrency(prop.valuation)}</span>
+                  <div className="pt-2.5 border-t border-[#F4F1EA] flex items-center justify-between gap-2">
+                    <div>
+                      <span className="text-base font-bold text-[#252B28] block">{formatCurrency(prop.valuation)}</span>
+                      {tok.isTokenized && (
+                        <span className="text-[11px] font-mono text-purple-700">
+                          {formatCurrency(tok.tokenPrice)}/{tok.tokenSymbol} • {tok.availableTokens > 0 ? `${tok.availableTokens.toLocaleString()} left` : 'Sold out'}
+                        </span>
+                      )}
+                    </div>
                     <StatusBadge status={prop.verificationStatus} />
                   </div>
                   <div className="flex items-center gap-2 pt-2">
@@ -309,16 +383,23 @@ export const BuyerDashboard: React.FC = () => {
                     >
                       View Details
                     </Button>
-                    <Button
-                      size="sm"
-                      onClick={() => navigate(`/transactions?propertyId=${prop.id}&initiate=true`)}
-                      className="flex-1 text-xs"
-                    >
-                      Make Offer
-                    </Button>
+                    {isTokenSoldOut ? (
+                      <span className="flex-1 text-center py-1.5 px-2 rounded-lg bg-[#F4F1EA] text-[11px] font-semibold text-[#6B726B] border border-[#E8E2D5]">
+                        Sold Out
+                      </span>
+                    ) : (
+                      <Button
+                        size="sm"
+                        onClick={() => navigate(`/transactions?propertyId=${prop.id}&initiate=true`)}
+                        className="flex-1 text-xs"
+                      >
+                        {tok.isTokenized ? 'Buy Tokens / Offer' : 'Make Offer'}
+                      </Button>
+                    )}
                   </div>
                 </Card>
-              ))}
+                )
+              })}
             </div>
           )}
         </div>
@@ -355,12 +436,28 @@ export const BuyerDashboard: React.FC = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {myOffers.map((offer: any) => (
+                  {myOffers.map((offer: any) => {
+                    const allocation = formatOfferAllocation(offer)
+                    return (
                     <TableRow key={offer.id}>
                       <TableCell className="font-mono text-xs font-semibold text-[#657565]">{offer.transaction_number}</TableCell>
-                      <TableCell className="font-semibold text-[#252B28] text-xs">{getPropertyLabel(offer)}</TableCell>
-                      <TableCell className="text-xs text-[#6B726B] font-normal">{offer.seller_name}</TableCell>
-                      <TableCell className="font-mono text-xs font-semibold text-[#252B28]">{formatCurrency(offer.amount)}</TableCell>
+                      <TableCell>
+                        <p className="font-semibold text-[#252B28] text-xs">{getPropertyLabel(offer)}</p>
+                        <span
+                          className={cn(
+                            'inline-flex items-center mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold border',
+                            allocation.isFractional
+                              ? 'bg-purple-50 text-purple-800 border-purple-200'
+                              : 'bg-[#FAF8F3] text-[#6B726B] border-[#E8E2D5]'
+                          )}
+                        >
+                          {allocation.badgeLabel}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-xs text-[#6B726B] font-normal">{offer.seller_name || 'Seller'}</TableCell>
+                      <TableCell className="font-mono text-xs font-semibold text-[#252B28]">
+                        {formatCurrency(offer.amount ?? offer.purchase_price ?? 0)}
+                      </TableCell>
                       <TableCell><StatusBadge status={offer.status} /></TableCell>
                       <TableCell className="text-xs text-[#6B726B]">{formatDate(offer.created_at)}</TableCell>
                       <TableCell className="text-right">
@@ -374,7 +471,7 @@ export const BuyerDashboard: React.FC = () => {
                         </Button>
                       </TableCell>
                     </TableRow>
-                  ))}
+                  )})}
                 </TableBody>
               </Table>
             )}
@@ -409,11 +506,27 @@ export const BuyerDashboard: React.FC = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {myTransactions.map((tx: any) => (
+                  {myTransactions.map((tx: any) => {
+                    const allocation = formatOfferAllocation(tx)
+                    return (
                     <TableRow key={tx.id}>
                       <TableCell className="font-mono text-xs font-semibold text-[#657565]">{tx.transaction_number}</TableCell>
-                      <TableCell className="font-semibold text-[#252B28] text-xs">{getPropertyLabel(tx)}</TableCell>
-                      <TableCell className="font-mono text-xs font-semibold text-[#252B28]">{formatCurrency(tx.amount)}</TableCell>
+                      <TableCell>
+                        <p className="font-semibold text-[#252B28] text-xs">{getPropertyLabel(tx)}</p>
+                        <span
+                          className={cn(
+                            'inline-flex items-center mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold border',
+                            allocation.isFractional
+                              ? 'bg-purple-50 text-purple-800 border-purple-200'
+                              : 'bg-[#FAF8F3] text-[#6B726B] border-[#E8E2D5]'
+                          )}
+                        >
+                          {allocation.badgeLabel}
+                        </span>
+                      </TableCell>
+                      <TableCell className="font-mono text-xs font-semibold text-[#252B28]">
+                        {formatCurrency(tx.amount ?? tx.purchase_price ?? 0)}
+                      </TableCell>
                       <TableCell><StatusBadge status={tx.status} /></TableCell>
                       <TableCell className="font-mono text-xs text-[#6B726B]">
                         {tx.blockchain_tx_hash ? (
@@ -429,7 +542,7 @@ export const BuyerDashboard: React.FC = () => {
                       </TableCell>
                       <TableCell className="text-xs text-[#6B726B]">{formatDate(tx.created_at)}</TableCell>
                     </TableRow>
-                  ))}
+                  )})}
                 </TableBody>
               </Table>
             )}
@@ -437,47 +550,106 @@ export const BuyerDashboard: React.FC = () => {
         </Card>
       )}
 
-      {/* Tab 5: Acquired Deeds */}
+      {/* Tab 5: Acquired Deeds & Token Stakes */}
       {activeTab === 'properties' && (
-        <div className="space-y-4">
-          {myOwnedProperties.length === 0 ? (
+        <div className="space-y-6">
+          {myOwnedProperties.length === 0 && myTokenHoldings.length === 0 ? (
             <Card className="p-12 text-center">
               <ShieldCheck className="h-10 w-10 text-[#D4CBBC] mx-auto mb-2" />
-              <p className="text-sm font-semibold text-[#252B28]">No acquired residences yet</p>
-              <p className="text-xs text-[#6B726B] font-normal mt-1">Once your purchase transaction completes statutory legal confirmation, legal title deeds will appear here.</p>
+              <p className="text-sm font-semibold text-[#252B28]">No acquired residences or token stakes yet</p>
+              <p className="text-xs text-[#6B726B] font-normal mt-1">Once your full buyout or fractional token offer completes statutory confirmation, your deeds and equity shares will appear here.</p>
               <Button size="sm" onClick={() => setActiveTab('browse')} className="mt-4">
                 Explore Residences to Acquire
               </Button>
             </Card>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {myOwnedProperties.map((p: any) => (
-                <Card key={p.id} className="p-5 space-y-4 border-[#657565]/30 bg-[#FAF8F3]/60">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <span className="text-[10px] font-mono font-medium px-2.5 py-0.5 rounded-full bg-[#657565]/15 text-[#3F4B3F] border border-[#657565]/30">
-                        Title Registered
-                      </span>
-                      <h4 className="font-semibold text-[#252B28] mt-2 text-base">{getPropertyLabel(p)}</h4>
-                      <p className="text-xs text-[#6B726B] font-normal">{p.city}, {p.state}</p>
-                    </div>
-                    <CheckCircle2 className="h-5 w-5 text-[#657565]" />
+            <>
+              {myOwnedProperties.length > 0 && (
+                <div className="space-y-3">
+                  <h3 className="text-sm font-semibold text-[#252B28]">Full Title Deeds (100% Ownership)</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {myOwnedProperties.map((p: any) => (
+                      <Card key={p.id} className="p-5 space-y-4 border-[#657565]/30 bg-[#FAF8F3]/60">
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <span className="text-[10px] font-mono font-medium px-2.5 py-0.5 rounded-full bg-[#657565]/15 text-[#3F4B3F] border border-[#657565]/30">
+                              Title Registered (100%)
+                            </span>
+                            <h4 className="font-semibold text-[#252B28] mt-2 text-base">{getPropertyLabel(p)}</h4>
+                            <p className="text-xs text-[#6B726B] font-normal">{p.city}, {p.state}</p>
+                          </div>
+                          <CheckCircle2 className="h-5 w-5 text-[#657565]" />
+                        </div>
+                        <div className="pt-3 border-t border-[#E8E2D5] flex items-center justify-between text-xs">
+                          <span className="font-mono text-[#6B726B]">Parcel: {p.property_number}</span>
+                          <span className="font-bold text-[#252B28]">{formatCurrency(p.valuation)}</span>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => navigate(`/properties/${p.id}`)}
+                          className="w-full text-xs mt-2"
+                        >
+                          View Official Title & Deeds
+                        </Button>
+                      </Card>
+                    ))}
                   </div>
-                  <div className="pt-3 border-t border-[#E8E2D5] flex items-center justify-between text-xs">
-                    <span className="font-mono text-[#6B726B]">Parcel: {p.property_number}</span>
-                    <span className="font-bold text-[#252B28]">{formatCurrency(p.valuation)}</span>
+                </div>
+              )}
+
+              {myTokenHoldings.length > 0 && (
+                <div className="space-y-3">
+                  <h3 className="text-sm font-semibold text-[#252B28] flex items-center gap-2">
+                    <Coins className="h-4 w-4 text-purple-600" />
+                    <span>Fractional Property Token Holdings</span>
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {myTokenHoldings.map((h: any) => (
+                      <Card key={h.property_id} className="p-5 space-y-4 border-purple-200 bg-purple-50/30">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <span className="text-[10px] font-mono font-semibold px-2.5 py-0.5 rounded-full bg-purple-100 text-purple-800 border border-purple-200">
+                              {Number(h.ownership_percentage || 0).toFixed(2)}% Equity Share
+                            </span>
+                            <h4 className="font-semibold text-[#252B28] mt-2 text-base">{getPropertyLabel(h)}</h4>
+                            <p className="text-xs text-[#6B726B] font-normal">{h.city}, {h.state}</p>
+                          </div>
+                          <Coins className="h-5 w-5 text-purple-600 shrink-0" />
+                        </div>
+                        <div className="p-3 rounded-xl bg-white border border-purple-100 space-y-1.5 text-xs">
+                          <div className="flex justify-between">
+                            <span className="text-[#6B726B]">Tokens Owned:</span>
+                            <strong className="font-mono text-purple-900">
+                              {Number(h.tokens_owned || 0).toLocaleString()} {h.token_symbol}
+                              {h.total_tokens ? ` / ${Number(h.total_tokens).toLocaleString()}` : ''}
+                            </strong>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-[#6B726B]">Invested Capital:</span>
+                            <strong className="font-mono text-[#252B28]">{formatCurrency(h.invested_amount || 0)}</strong>
+                          </div>
+                          {h.projected_apy !== null && h.projected_apy !== undefined && (
+                            <div className="flex justify-between">
+                              <span className="text-[#6B726B]">Projected Yield:</span>
+                              <strong className="font-mono text-emerald-700">{h.projected_apy}% APY</strong>
+                            </div>
+                          )}
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => navigate(`/properties/${h.property_id}`)}
+                          className="w-full text-xs"
+                        >
+                          Inspect Fractional Asset
+                        </Button>
+                      </Card>
+                    ))}
                   </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => navigate(`/properties/${p.id}`)}
-                    className="w-full text-xs mt-2"
-                  >
-                    View Official Title & Deeds
-                  </Button>
-                </Card>
-              ))}
-            </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       )}

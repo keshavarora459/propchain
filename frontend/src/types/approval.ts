@@ -32,4 +32,9 @@ export interface ApprovalRequest {
   sellerEmail?: string
   amount?: number
   currency?: string
+  purchaseMode?: string
+  tokenQuantity?: number | null
+  tokenSymbol?: string | null
+  ownershipPercentage?: number | null
+  propertyIsTokenized?: boolean
 }

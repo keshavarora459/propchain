@@ -44,6 +44,9 @@ class PropertyTransaction(BaseModel):
     proposed_amount: Mapped[Decimal] = mapped_column(Numeric(15, 2), nullable=False)
     currency: Mapped[str] = mapped_column(String(10), nullable=False, default="INR")
     transaction_type: Mapped[str] = mapped_column(String(32), nullable=False, default="SALE")
+    purchase_mode: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    token_quantity: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    ownership_percentage: Mapped[Optional[Decimal]] = mapped_column(Numeric(7, 4), nullable=True)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # 13-state lifecycle

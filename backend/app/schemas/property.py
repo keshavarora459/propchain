@@ -46,7 +46,11 @@ class PropertyBase(BaseModel):
 
 class PropertyCreate(PropertyBase):
     """Schema for property registration request."""
-    pass
+    token_symbol: Optional[str] = Field(None, min_length=2, max_length=20)
+    total_tokens: Optional[int] = Field(None, ge=1)
+    token_price: Optional[Decimal] = Field(None, gt=0)
+    min_tokens_per_buyer: Optional[int] = Field(None, ge=1)
+    projected_apy: Optional[Decimal] = Field(None, ge=0, le=100)
 
 
 class PropertyUpdate(BaseModel):
@@ -122,6 +126,17 @@ class PropertyResponse(PropertyBase):
 
     # Dev override for cross-property duplicate documents
     allow_duplicate_override: bool = False
+
+    # Tokenization metadata and live supply telemetry
+    is_tokenized: bool = False
+    token_symbol: Optional[str] = None
+    total_tokens: Optional[int] = None
+    token_price: Optional[float] = None
+    min_tokens_per_buyer: Optional[int] = None
+    projected_apy: Optional[float] = None
+    tokens_sold: int = 0
+    tokens_pending: int = 0
+    available_tokens: Optional[int] = None
 
     model_config = ConfigDict(from_attributes=True)
 
